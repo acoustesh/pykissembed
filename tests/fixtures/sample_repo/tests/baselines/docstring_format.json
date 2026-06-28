@@ -1,7 +1,7 @@
 {
   "data": {
     "per_file": {
-      "/home/alvaro/pyqtest/tests/fixtures/sample_repo/src/example_pkg/core.py": 1
+      "/home/alvaro/pykissembed/tests/fixtures/sample_repo/src/example_pkg/core.py": 1
     }
   },
   "kind": "docstring_format",

@@ -22,9 +22,9 @@ naming pattern (`code_*.py`, `comment_*.py`, `docstring_*.py`,
 ## Step 1 — Install pykissembed
 
 ```text
-$ uv pip install -e /home/alvaro/pyqtest
+$ uv pip install -e /home/alvaro/pykissembed
 Installed 1 package in 1ms
- ~ pykissembed==0.1.0 (from file:///home/alvaro/pyqtest)
+ ~ pykissembed==0.1.0 (from file:///home/alvaro/pykissembed)
 ```
 
 ## Step 2 — Confirm `[tool.pykissembed]` is present
@@ -62,7 +62,7 @@ files in this repo.
 
 ```text
 $ cd tests/fixtures/sample_repo
-$ /home/alvaro/pyqtest/.venv/bin/pytest tests/ --update-baselines
+$ /home/alvaro/pykissembed/.venv/bin/pytest tests/ --update-baselines
 …
 ======================== 1 passed, 10 skipped in 0.41s =========================
 ```
@@ -72,7 +72,7 @@ The 10 skips are pykissembed's own gate tests, each emitting
 update-mode behaviour).
 
 ```text
-$ /home/alvaro/pyqtest/.venv/bin/pytest tests/
+$ /home/alvaro/pykissembed/.venv/bin/pytest tests/
 …
 ======================== 10 passed, 1 skipped in 0.39s =========================
 ```
@@ -111,7 +111,7 @@ direct pytest run.
   parent venv by default. To enable it:
 
   ```text
-  uv pip install -e /home/alvaro/pyqtest/pykissembed_local
+  uv pip install -e /home/alvaro/pykissembed/pykissembed_local
   pykissembed populate-embeddings --provider local
   pytest -m similarity
   ```
