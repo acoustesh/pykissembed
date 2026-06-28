@@ -9,6 +9,7 @@ from __future__ import annotations
 
 import ast
 import importlib
+from collections.abc import Callable
 from pathlib import Path
 from typing import TYPE_CHECKING, TypedDict, cast
 
@@ -39,13 +40,15 @@ class _BaselineConfig(TypedDict, total=False):
 # ---------------------------------------------------------------------------
 
 
-def _load_callable(module_name: str, attribute: str) -> object | None:
+def _load_callable(module_name: str, attribute: str) -> Callable[..., object] | None:
     try:
         module = importlib.import_module(module_name)
     except ImportError:
         return None
     value = getattr(module, attribute, None)
-    return value if callable(value) else None
+    if not callable(value):
+        return None
+    return cast("Callable[..., object]", value)
 
 
 def _iter_py_files(base_dir: Path) -> Iterator[Path]:
@@ -98,13 +101,14 @@ def _get_cc(file_path: Path) -> list[tuple[str, int, int]]:
         return []
     source = file_path.read_text(encoding="utf-8")
     try:
-        raw_blocks = cast("object", cc_visit_fn(source))
+        raw_blocks_raw = cc_visit_fn(source)
     except SyntaxError:
         return []
-    if not isinstance(raw_blocks, list):
+    if not isinstance(raw_blocks_raw, list):
         return []
+    raw_blocks = cast("list[object]", raw_blocks_raw)
     out: list[tuple[str, int, int]] = []
-    for block in cast("list[object]", raw_blocks):
+    for block in raw_blocks:
         name = getattr(block, "name", None)
         lineno = getattr(block, "lineno", None)
         complexity = getattr(block, "complexity", None)
@@ -116,16 +120,24 @@ def _get_cc(file_path: Path) -> list[tuple[str, int, int]]:
 def _get_cog(file_path: Path) -> list[tuple[str, int, int]]:
     """Return ``[(name, lineno, cognitive_complexity), ...]`` using complexipy."""
     try:
-        from complexipy import file_complexity  # type: ignore[import-untyped]
+        from complexipy import file_complexity as _fc  # type: ignore[import-untyped]
     except ImportError:
         return []
     try:
-        result = file_complexity(str(file_path))
+        result = _fc(str(file_path))
     except Exception:  # pragma: no cover
         return []
     if not hasattr(result, "functions"):
         return []
-    return [(f.name, f.line_start, f.complexity) for f in result.functions]
+    fn_list = cast("list[object]", result.functions)
+    out: list[tuple[str, int, int]] = []
+    for f in fn_list:
+        name = getattr(f, "name", None)
+        line = getattr(f, "line_start", None)
+        complexity = getattr(f, "complexity", None)
+        if isinstance(name, str) and isinstance(line, int) and isinstance(complexity, int):
+            out.append((name, line, complexity))
+    return out
 
 
 def _get_mi(file_path: Path) -> float:
@@ -135,7 +147,7 @@ def _get_mi(file_path: Path) -> float:
         return 0.0
     source = file_path.read_text(encoding="utf-8")
     try:
-        score = cast("object", mi_visit_fn(source, multi=False))
+        score = mi_visit_fn(source, multi=False)
     except Exception:
         return 0.0
     if isinstance(score, (int, float)):

@@ -8,7 +8,7 @@ from textwrap import dedent
 import pytest
 from typer.testing import CliRunner
 
-from pyqtest.cli import app
+from pykissembed.cli import app
 
 runner = CliRunner()
 
@@ -18,17 +18,17 @@ class TestVersion:
 
     @staticmethod
     def test_version_prints() -> None:
-        """--version prints the pyqtest version."""
+        """--version prints the pykissembed version."""
         result = runner.invoke(app, ["--version"])
         # typer exits with 0 when --version is handled; output contains the version
-        assert "pyqtest" in (result.stdout + (result.stderr or ""))
+        assert "pykissembed" in (result.stdout + (result.stderr or ""))
         # exit code can be 0 (handled) or 2 (typer exits before callback runs);
         # in either case the version string must appear
         assert result.exit_code in {0, 2}
 
 
 class TestProvidersList:
-    """Tests for ``pyqtest providers list``."""
+    """Tests for ``pykissembed.providers list``."""
 
     @staticmethod
     def test_providers_list_exits_zero() -> None:
@@ -39,11 +39,11 @@ class TestProvidersList:
 
 
 class TestInit:
-    """Tests for ``pyqtest init``."""
+    """Tests for ``pykissembed init``."""
 
     @staticmethod
     def test_init_appends_block(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
-        """Init adds a [tool.pyqtest] block to pyproject.toml."""
+        """Init adds a [tool.pykissembed] block to pyproject.toml."""
         pyproject = tmp_path / "pyproject.toml"
         pyproject.write_text(
             dedent(
@@ -59,7 +59,7 @@ class TestInit:
         result = runner.invoke(app, ["init"])
         assert result.exit_code == 0
         text = pyproject.read_text()
-        assert "[tool.pyqtest]" in text
+        assert "[tool.pykissembed]" in text
         assert "paths" in text
 
     @staticmethod
@@ -73,7 +73,7 @@ class TestInit:
                 name = "demo"
                 version = "0.1.0"
 
-                [tool.pyqtest]
+                [tool.pykissembed]
                 paths = ["lib"]
                 """,
             ),
@@ -97,7 +97,7 @@ class TestInit:
                 name = "demo"
                 version = "0.1.0"
 
-                [tool.pyqtest]
+                [tool.pykissembed]
                 paths = ["lib"]
                 """,
             ),
@@ -134,6 +134,6 @@ class TestPopulateEmbeddingsMissingProvider:
 @pytest.fixture
 def reset_config_cache() -> None:
     """Reset the config cache before/after CLI tests that change cwd."""
-    from pyqtest import config as config_mod
+    from pykissembed import config as config_mod
 
     config_mod.reset_config_cache()

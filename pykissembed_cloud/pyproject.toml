@@ -1,0 +1,100 @@
+# pykissembed-cloud — cloud embedding providers for pykissembed
+#
+# All three providers (openai, gemini, qwen) are routed through OpenRouter
+# using the OpenAI-compatible API surface. A single `OPENROUTER_API_KEY`
+# is therefore enough to enable any of them.
+#
+# Install alongside the core package:
+#
+#     pip install pykissembed-cloud
+#     export OPENROUTER_API_KEY=sk-or-...
+#     pykissembed.providers list
+#     pykissembed populate-embeddings --provider gemini
+
+[build-system]
+requires = ["hatchling>=1.27"]
+build-backend = "hatchling.build"
+
+[project]
+name = "pykissembed-cloud"
+version = "0.1.0"
+description = "Cloud embedding providers for pykissembed (OpenRouter-routed: openai, gemini, qwen)."
+readme = "README.md"
+license = "MIT"
+license-files = ["LICENSE"]
+requires-python = ">=3.12"
+keywords = ["pykissembed", "openrouter", "openai", "gemini", "qwen", "embeddings"]
+authors = [{ name = "Alvaro" }]
+classifiers = [
+    "Development Status :: 4 - Beta",
+    "Intended Audience :: Developers",
+    "License :: OSI Approved :: MIT License",
+    "Operating System :: OS Independent",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.12",
+    "Programming Language :: Python :: 3.13",
+    "Programming Language :: Python :: 3.14",
+    "Topic :: Software Development :: Quality Assurance",
+    "Topic :: Software Development :: Testing",
+    "Typing :: Typed",
+]
+dependencies = [
+    "openai>=1.50",
+]
+
+[project.entry-points."pykissembed.providers"]
+openai = "pykissembed_cloud.providers.openai:OpenAIProvider"
+gemini = "pykissembed_cloud.providers.gemini:GeminiProvider"
+qwen = "pykissembed_cloud.providers.qwen:QwenProvider"
+
+[tool.hatch.build.targets.wheel]
+packages = ["pykissembed_cloud"]
+
+[tool.ruff]
+line-length = 100
+target-version = "py312"
+
+[tool.ruff.lint]
+select = ["ALL"]
+ignore = [
+    "E501",    # formatter's job
+    "CPY001",  # copyright header
+    "PLR2004", # magic numbers in tooling
+    "PLR0911", "PLR0912", "PLR0913", "PLR0914", "PLR0915", "PLR0916", "PLR0917",
+    "COM812", "D203", "D213", "ERA001",
+    "G004", "S101", "S603", "TRY300", "TRY401",
+    "FBT001", "FBT003",
+    "PLC0415",
+    "TC003",
+    "BLE001",
+    "D401",
+    "D102", "D103", "D105", "D107",
+    "INP001",
+    "B008",
+    "ANN201", "ANN401",
+    "EM102", "S112", "PERF403", "PLW0603", "UP036",
+    "SLF001",
+    "PLR6301", # Protocol-bound methods don't need self
+    "C901",
+    "PYI049",
+    "F841",
+    "ARG002", "ARG005",
+]
+
+[tool.ruff.lint.pydocstyle]
+convention = "numpy"
+
+[tool.ruff.lint.per-file-ignores]
+"tests/**" = ["ANN001", "ANN201", "ANN202", "S101", "PLR2004", "PLR6301"]
+
+[tool.pytest.ini_options]
+minversion = "8.0"
+testpaths = ["tests"]
+markers = [
+    "live: live network tests (skipped by default; enable with -m live)",
+]
+addopts = ["-ra", "--strict-markers"]
+
+[tool.pyright]
+include = ["pykissembed_cloud", "tests"]
+pythonVersion = "3.12"

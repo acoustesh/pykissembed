@@ -6,9 +6,9 @@ from typing import cast
 
 import pytest
 
-from pyqtest.providers import REGISTRY, Provider
-from pyqtest.providers.local import LocalProvider
-from pyqtest.providers.registry import cache_key, discover_all
+from pykissembed.providers import REGISTRY, Provider
+from pykissembed.providers.local import LocalProvider
+from pykissembed.providers.registry import cache_key, discover_all
 
 
 class TestLocalProviderStub:
@@ -31,21 +31,21 @@ class TestLocalProviderStub:
 
     @staticmethod
     def test_stub_embed_raises_when_local_missing(monkeypatch: pytest.MonkeyPatch) -> None:
-        """embed() must raise a clear RuntimeError when pyqtest-local is missing."""
-        # Hide pyqtest_local from the import system
+        """embed() must raise a clear RuntimeError when pykissembed-local is missing."""
+        # Hide pykissembed_local from the import system
         import sys
 
-        monkeypatch.setitem(sys.modules, "pyqtest_local", None)
+        monkeypatch.setitem(sys.modules, "pykissembed_local", None)
         p = LocalProvider()
-        with pytest.raises(RuntimeError, match="pyqtest-local"):
+        with pytest.raises(RuntimeError, match="pykissembed-local"):
             p.embed(["hello"])
 
     @staticmethod
     def test_is_configured_false_when_missing(monkeypatch: pytest.MonkeyPatch) -> None:
-        """is_configured() returns False when pyqtest_local isn't installed."""
+        """is_configured() returns False when pykissembed_local isn't installed."""
         import sys
 
-        monkeypatch.setitem(sys.modules, "pyqtest_local", None)
+        monkeypatch.setitem(sys.modules, "pykissembed_local", None)
         assert LocalProvider().is_configured() is False
 
 
@@ -100,7 +100,7 @@ class TestRegistry:
 
         eps = [_BrokenEP()]
 
-        import pyqtest.providers.registry as reg_mod
+        import pykissembed.providers.registry as reg_mod
 
         monkeypatch.setattr(reg_mod.metadata, "entry_points", lambda group=None: eps)
         registry = reg_mod.discover_all()
@@ -114,7 +114,7 @@ class TestRegistry:
     ) -> None:
         """When two entry points share a name, the first-listed one wins.
 
-        This matches the user-override semantics: ``pyqtest-local`` should
+        This matches the user-override semantics: ``pykissembed-local`` should
         override the core stub because its entry point is listed first
         in the metadata. ``discover()`` iterates entry points in
         **reverse** so the first one (override) is registered last,
@@ -151,7 +151,7 @@ class TestRegistry:
             def __init__(self, name: str, value: object) -> None:
                 self.name = name
                 self.value = value
-                self.group = "pyqtest.providers"
+                self.group = "pykissembed.providers"
 
             def load(self) -> object:
                 # Return the instance directly so ``isinstance(instance, Provider)`` works
@@ -162,7 +162,7 @@ class TestRegistry:
             _EP("local", _StubProvider()),
         ]
 
-        import pyqtest.providers.registry as reg_mod
+        import pykissembed.providers.registry as reg_mod
 
         REGISTRY._providers.clear()
         monkeypatch.setattr(reg_mod.metadata, "entry_points", lambda group=None: eps)

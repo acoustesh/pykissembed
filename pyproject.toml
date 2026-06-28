@@ -1,9 +1,9 @@
-# pyqtest — generic Python code-quality test library (pytest plugin)
+# pykissembed — generic Python code-quality test library (pytest plugin)
 #
 # Distribution model:
-#   pyqtest          — slim core (lint + type + complexity + docstring + comment density)
-#   pyqtest[local]   — adds sentence-transformers (recommended default for similarity)
-#   pyqtest-cloud    — adds openai / voyage / codestral / gemini embedding providers
+#   pykissembed              — slim core (lint + type + complexity + docstring + comment density)
+#   pykissembed-local        — adds sentence-transformers (recommended default for similarity)
+#   pykissembed-cloud        — adds OpenRouter-routed openai / gemini / qwen providers
 #
 # Default mode is "baseline-and-ratchet" — see README.md.
 
@@ -12,7 +12,7 @@ requires = ["hatchling>=1.27"]
 build-backend = "hatchling.build"
 
 [project]
-name = "pyqtest"
+name = "pykissembed"
 version = "0.1.0"
 description = "Generic Python code-quality test library: lint, type, complexity, docstring, comment density, and embedding-based similarity (pytest plugin)."
 readme = "README.md"
@@ -53,27 +53,27 @@ dependencies = [
 [project.optional-dependencies]
 # Local embedding provider (sentence-transformers). Recommended default for similarity.
 local = [
-    "pyqtest-local",
+    "pykissembed-local",
 ]
 # Cloud embedding providers (openai / voyage / codestral / gemini) — separate subpackage.
 cloud = [
-    "pyqtest-cloud",
+    "pykissembed-cloud",
 ]
 
 [project.scripts]
-pyqtest = "pyqtest.cli:app"
+pykissembed = "pykissembed.cli:app"
 
 [project.entry-points.pytest11]
-pyqtest = "pyqtest.plugin"
+pykissembed = "pykissembed.plugin"
 
 # Built-in provider entry point: local sentence-transformers.
-# Cloud providers are registered by the pyqtest-cloud subpackage.
-[project.entry-points."pyqtest.providers"]
-local = "pyqtest.providers.local:LocalProvider"
+# Cloud providers are registered by the pykissembed-cloud subpackage.
+[project.entry-points."pykissembed.providers"]
+local = "pykissembed.providers.local:LocalProvider"
 
 [tool.hatch.build.targets.wheel]
-packages = ["pyqtest", "src/pyqtest"]
-include = ["pyqtest/schemas/*.json"]
+packages = ["pykissembed", "src/pykissembed"]
+include = ["pykissembed/schemas/*.json"]
 
 [tool.pytest.ini_options]
 minversion = "8.0"
@@ -124,9 +124,9 @@ convention = "numpy"
 
 [tool.ruff.lint.per-file-ignores]
 "tests/**" = ["ANN001", "ANN201", "ANN202", "S101", "PLR2004"]
-"pyqtest/tests/fixtures/**" = ["ALL"]
+"pykissembed/tests/fixtures/**" = ["ALL"]
 
 [tool.pyright]
-include = ["pyqtest", "src/pyqtest", "tests"]
+include = ["pykissembed", "src/pykissembed", "tests"]
 pythonVersion = "3.12"
 extraPaths = ["src"]

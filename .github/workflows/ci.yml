@@ -1,6 +1,6 @@
-# pyqtest CI — runs the library's own checks against itself.
+# pykissembed CI — runs the library's own checks against itself.
 #
-# Triggered on push to main and on pull requests. Uses pyqtest's own
+# Triggered on push to main and on pull requests. Uses pykissembed's own
 # reusable workflow (defined below) to validate that the library still
 # works on a clean tree.
 name: CI
@@ -14,8 +14,8 @@ permissions:
   contents: read
 
 jobs:
-  pyqtest:
-    uses: ./.github/workflows/pyqtest.yml
+  pykissembed:
+    uses: ./.github/workflows/pykissembed.yml
     with:
       python-version: "3.12"
       mode: strict

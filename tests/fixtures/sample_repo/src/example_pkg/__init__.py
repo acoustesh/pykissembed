@@ -1,4 +1,4 @@
-"""Example package used to test pyqtest end-to-end."""
+"""Example package used to test pykissembed end-to-end."""
 
 from __future__ import annotations
 

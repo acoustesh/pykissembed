@@ -15,27 +15,27 @@ docstring_format.json
 ```
 
 The fixture's [pyproject.toml](pyproject.toml) already declares
-`[tool.pyqtest]`, and the test files in `tests/` use the v1 file
+`[tool.pykissembed]`, and the test files in `tests/` use the v1 file
 naming pattern (`code_*.py`, `comment_*.py`, `docstring_*.py`,
 `lint_*.py`, `code_*.py`).
 
-## Step 1 — Install pyqtest
+## Step 1 — Install pykissembed
 
 ```text
 $ uv pip install -e /home/alvaro/pyqtest
 Installed 1 package in 1ms
- ~ pyqtest==0.1.0 (from file:///home/alvaro/pyqtest)
+ ~ pykissembed==0.1.0 (from file:///home/alvaro/pyqtest)
 ```
 
-## Step 2 — Confirm `[tool.pyqtest]` is present
+## Step 2 — Confirm `[tool.pykissembed]` is present
 
 ```text
-$ grep -A4 tool.pyqtest pyproject.toml
-[tool.pyqtest]
+$ grep -A4 tool.pykissembed pyproject.toml
+[tool.pykissembed]
 paths = ["src"]
 mode = "ratchet"
 baseline_dir = "tests/baselines"
-cache_dir = "tests/.pyqtest_cache"
+cache_dir = "tests/.pykissembed_cache"
 ```
 
 ## Step 3 — Confirm v1 envelopes
@@ -67,7 +67,7 @@ $ /home/alvaro/pyqtest/.venv/bin/pytest tests/ --update-baselines
 ======================== 1 passed, 10 skipped in 0.41s =========================
 ```
 
-The 10 skips are pyqtest's own gate tests, each emitting
+The 10 skips are pykissembed's own gate tests, each emitting
 "Updated … baselines" and then `pytest.skip`-ing (the documented
 update-mode behaviour).
 
@@ -77,13 +77,13 @@ $ /home/alvaro/pyqtest/.venv/bin/pytest tests/
 ======================== 10 passed, 1 skipped in 0.39s =========================
 ```
 
-The 1 skip is the similarity test, which needs `pyqtest-local` and a
+The 1 skip is the similarity test, which needs `pykissembed-local` and a
 populated embedding cache.
 
-## Step 7 — `pyqtest ratchet` and `pyqtest check`
+## Step 7 — `pykissembed ratchet` and `pykissembed check`
 
 ```text
-$ pyqtest ratchet
+$ pykissembed ratchet
   skip comment_density.json: no current-diagnostics computer implemented
   skip complexity.json: no current-diagnostics computer implemented
   skip docstring_format.json: no current-diagnostics computer implemented
@@ -96,31 +96,31 @@ Done. 0 baseline file(s) lowered.
 > diagnostics, so ratcheting them would lower to the same value.
 
 ```text
-$ pyqtest check
+$ pykissembed check
 …
 ======================== 10 passed, 1 skipped in 0.36s =========================
 ```
 
-`pyqtest check` runs the same gate as `pytest` and matches the
+`pykissembed check` runs the same gate as `pytest` and matches the
 direct pytest run.
 
 ## Notes
 
 - **Similarity is intentionally skipped.** The fixture has no
-  `tests/.pyqtest_cache/` and no `pyqtest-local` installed in the
+  `tests/.pykissembed_cache/` and no `pykissembed-local` installed in the
   parent venv by default. To enable it:
 
   ```text
-  uv pip install -e /home/alvaro/pyqtest/pyqtest_local
-  pyqtest populate-embeddings --provider local
+  uv pip install -e /home/alvaro/pyqtest/pykissembed_local
+  pykissembed populate-embeddings --provider local
   pytest -m similarity
   ```
 - **Cloud providers are not exercised here.** With
-  `pyqtest-cloud` installed and an `OPENROUTER_API_KEY` set, the
+  `pykissembed-cloud` installed and an `OPENROUTER_API_KEY` set, the
   `test_providers_parallel` test will run all four cloud providers
   against `src/`.
-- **`pyqtest ratchet` only computes current diagnostics for
+- **`pykissembed ratchet` only computes current diagnostics for
   `lint_typecheck.json`.** The other three baselines (`complexity`,
   `density`, `docstring_format`) would need additional computers in
-  `pyqtest/cli.py:_compute_current_for` before ratcheting would
+  `pykissembed/cli.py:_compute_current_for` before ratcheting would
   lower them automatically.

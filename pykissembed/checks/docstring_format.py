@@ -32,8 +32,21 @@ class DocstringViolation:
         return f"{self.file}:{self.line}:{self.column} {self.code} {self.message}"
 
 
-def _run_ruff_docstring_check(target_dir: Path) -> list[DocstringViolation]:
-    """Run ``ruff check --select=D --output-format=json`` on *target_dir*."""
+def _run_ruff_docstring_check(target_dir: Path, *, root: Path) -> list[DocstringViolation]:
+    """Run ``ruff check --select=D --output-format=json`` on *target_dir*.
+
+    Parameters
+    ----------
+    target_dir : Path
+        Directory to check.
+    root : Path
+        Project root used to make filenames relative.
+
+    Returns
+    -------
+    list[DocstringViolation]
+        Detected violations, with filenames relative to *root* where possible.
+    """
     ruff = shutil.which("ruff")
     if ruff is None:
         return []
@@ -72,9 +85,13 @@ def _run_ruff_docstring_check(target_dir: Path) -> list[DocstringViolation]:
         col_obj = loc.get("column")
         if not isinstance(row_obj, int) or not isinstance(col_obj, int):
             continue
+        try:
+            rel = str(Path(filename).resolve().relative_to(root.resolve()))
+        except ValueError:
+            rel = filename
         violations.append(
             DocstringViolation(
-                file=filename,
+                file=rel,
                 line=row_obj,
                 column=col_obj,
                 code=code,
@@ -103,7 +120,7 @@ class TestDocstringFormat:
 
         all_violations: list[DocstringViolation] = []
         for path in pykissembed_paths:
-            all_violations.extend(_run_ruff_docstring_check(path))
+            all_violations.extend(_run_ruff_docstring_check(path, root=get_config().root))
 
         by_file: dict[str, list[DocstringViolation]] = {}
         for v in all_violations:

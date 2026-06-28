@@ -1,4 +1,4 @@
-"""Tests for pyqtest config loading."""
+"""Tests for pykissembed config loading."""
 
 from __future__ import annotations
 
@@ -7,7 +7,7 @@ from textwrap import dedent
 
 import pytest
 
-from pyqtest.config import _auto_detect, _coerce_str_list, load_config
+from pykissembed.config import _auto_detect, _coerce_str_list, load_config
 
 
 class TestCoerceStrList:
@@ -41,15 +41,15 @@ class TestLoadConfig:
 
     @staticmethod
     def test_loads_from_pyproject(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
-        """A pyproject.toml with [tool.pyqtest] loads correctly."""
+        """A pyproject.toml with [tool.pykissembed] loads correctly."""
         (tmp_path / "pyproject.toml").write_text(
             dedent(
                 """
-                [tool.pyqtest]
+                [tool.pykissembed]
                 paths = ["src", "lib"]
                 mode = "strict"
                 baseline_dir = "tests/baselines"
-                cache_dir = "tests/.pyqtest_cache"
+                cache_dir = "tests/.pykissembed_cache"
                 """,
             ),
             encoding="utf-8",
@@ -64,7 +64,7 @@ class TestLoadConfig:
 
     @staticmethod
     def test_defaults_when_no_block(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
-        """A pyproject.toml without [tool.pyqtest] gives sensible defaults."""
+        """A pyproject.toml without [tool.pykissembed] gives sensible defaults."""
         (tmp_path / "pyproject.toml").write_text(
             dedent(
                 """
@@ -90,7 +90,7 @@ class TestLoadConfig:
         (tmp_path / "pyproject.toml").write_text(
             dedent(
                 """
-                [tool.pyqtest]
+                [tool.pykissembed]
                 paths = ["src"]
                 mode = "i-am-not-a-real-mode"
                 """,

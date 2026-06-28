@@ -1,0 +1,94 @@
+# Publish the three pykissembed packages to TestPyPI via trusted publishing.
+#
+# Triggered on `v*` tag push (e.g. `v0.1.0`, `v0.1.0-rc.1`). Builds
+# sdist + wheel for each package and uploads via PyPI trusted
+# publishing (OIDC — no API token is required).
+#
+# Before the first run, the trusted publisher must be registered on
+# TestPyPI for each of the three packages:
+#
+#   https://test.pypi.org/manage/account/publishing/
+#
+# For each package (pykissembed, pykissembed-local, pykissembed-cloud),
+# add a "pending publisher" with:
+#
+#   Owner:        acoustesh
+#   Repository:   pykissembed          (or whatever the GitHub repo is called)
+#   Workflow:     publish-testpypi.yml
+#   Environment:  testpypi
+#
+# When production PyPI is set up, repeat the same steps against
+# https://pypi.org/manage/account/publishing/ and switch the
+# `repository-url` below to https://upload.pypi.org/legacy/.
+
+name: publish-testpypi
+
+on:
+  push:
+    tags:
+      - "v*.*.*"
+      - "v*.*.*-*"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    name: Build ${{ matrix.package.name }} ${{ matrix.package.version }}
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        package:
+          - { name: "pykissembed",       path: ".",                 version: "0.1.0" }
+          - { name: "pykissembed-local", path: "pykissembed-local",  version: "0.1.0" }
+          - { name: "pykissembed-cloud", path: "pykissembed-cloud",  version: "0.1.0" }
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install build
+        run: python -m pip install --upgrade build
+
+      - name: Build sdist + wheel
+        working-directory: ${{ matrix.package.path }}
+        run: python -m build --sdist --wheel
+
+      - name: Upload artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: dist-${{ matrix.package.name }}
+          path: ${{ matrix.package.path }}/dist/
+
+  publish:
+    name: Publish ${{ matrix.package.name }} to TestPyPI
+    needs: build
+    runs-on: ubuntu-latest
+    environment: testpypi
+    strategy:
+      fail-fast: false
+      matrix:
+        package:
+          - { name: "pykissembed",       path: "." }
+          - { name: "pykissembed-local", path: "pykissembed-local" }
+          - { name: "pykissembed-cloud", path: "pykissembed-cloud" }
+    permissions:
+      # Required for PyPI trusted publishing (OIDC).
+      id-token: write
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          name: dist-${{ matrix.package.name }}
+          path: ${{ matrix.package.path }}/dist/
+
+      - uses: pypa/gh-action-pypi-publish@release/v1
+        with:
+          packages-dir: ${{ matrix.package.path }}/dist/
+          repository-url: https://test.pypi.org/legacy/
+          # skip-existing avoids spurious failures when the same tag
+          # is re-pushed; the version is still monotonic across tags.
+          skip-existing: true

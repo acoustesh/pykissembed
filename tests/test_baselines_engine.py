@@ -7,7 +7,7 @@ from pathlib import Path
 import pytest
 from jsonschema import ValidationError
 
-from pyqtest.baselines_engine import (
+from pykissembed.baselines_engine import (
     SCHEMA_VERSION,
     BaselineEnvelope,
     is_v1_envelope,

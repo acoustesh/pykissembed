@@ -1,4 +1,4 @@
-# pyqtest
+# pykissembed
 
 Generic Python code-quality test library — a pytest plugin that bundles lint,
 type, complexity, docstring, comment density, and embedding-based similarity
@@ -6,7 +6,7 @@ checks behind a single config block.
 
 > **Default mode is baseline-and-ratchet**, not strict zero-tolerance. A
 > diagnostic at or below the baseline passes; above baseline fails; a missing
-> baseline also fails until you seed it. Use `pyqtest ratchet` to lower
+> baseline also fails until you seed it. Use `pykissembed ratchet` to lower
 > baselines as you fix code.
 
 ---
@@ -14,13 +14,13 @@ checks behind a single config block.
 ## Quick start (lint + type + complexity + docstrings — out of the box)
 
 ```bash
-pip install pyqtest
+pip install pykissembed
 ```
 
-Add a single `[tool.pyqtest]` block to your `pyproject.toml`:
+Add a single `[tool.pykissembed]` block to your `pyproject.toml`:
 
 ```toml
-[tool.pyqtest]
+[tool.pykissembed]
 paths = ["src", "scripts", "tests"]   # directories to scan
 mode = "ratchet"                       # default; alternative: "strict"
 ```
@@ -38,7 +38,7 @@ anything):
 
 ```bash
 pytest --update-baselines   # write baselines = current diagnostics
-git add tests/baselines && git commit -m "seed pyqtest baselines"
+git add tests/baselines && git commit -m "seed pykissembed baselines"
 ```
 
 ---
@@ -49,21 +49,21 @@ Recommended path: **local sentence-transformers provider** — no API key, no
 network, runs in CI:
 
 ```bash
-pip install pyqtest-local
-python -m pyqtest.similarity.populate_embeddings --provider local
+pip install pykissembed-local
+pykissembed populate-embeddings --provider local
 pytest -m similarity
 ```
 
-For cloud providers (OpenAI, Voyage, Codestral via OpenRouter, Gemini):
+For cloud providers (OpenAI / Gemini / Qwen via OpenRouter):
 
 ```bash
-pip install pyqtest-cloud
-export OPENAI_API_KEY=...
-export VOYAGE_API_KEY=...
-export OPENROUTER_API_KEY=...
-export GOOGLE_API_KEY=...
-python -m pyqtest.similarity.populate_embeddings --provider openai
-# ... repeat for voyage / codestral / gemini
+pip install pykissembed-cloud
+# A single key enables all three providers
+export OPENROUTER_API_KEY=sk-or-...
+# ... or drop the key into a .env file at the project root
+pykissembed populate-embeddings --provider openai
+pykissembed populate-embeddings --provider gemini
+pykissembed populate-embeddings --provider qwen
 ```
 
 ---
@@ -71,24 +71,24 @@ python -m pyqtest.similarity.populate_embeddings --provider openai
 ## CLI
 
 ```text
-pyqtest check                          # run the same gate pytest runs
-pyqtest ratchet                        # lower baselines; refuse to raise
-pyqtest providers list                 # show installed embedding providers
-pyqtest populate-embeddings --provider NAME
-pyqtest type-review --json REPORT.json # iterative type-fix helper
-pyqtest init                           # (opt-in) scaffold [tool.pyqtest]
+pykissembed check                          # run the same gate pytest runs
+pykissembed ratchet                        # lower baselines; refuse to raise
+pykissembed.providers list                 # show installed embedding providers
+pykissembed populate-embeddings --provider NAME
+pykissembed type-review --json REPORT.json # iterative type-fix helper
+pykissembed init                           # (opt-in) scaffold [tool.pykissembed]
 ```
 
 ---
 
 ## Custom providers
 
-Implement the `Provider` Protocol and register via the `pyqtest.providers`
-entry-point group — no patching pyqtest required:
+Implement the `Provider` Protocol and register via the `pykissembed.providers`
+entry-point group — no patching pykissembed required:
 
 ```toml
 # in your library's pyproject.toml
-[project.entry-points.pyqtest.providers]
+[project.entry-points.pykissembed.providers]
 my_embedder = "my_pkg.providers:MyProvider"
 ```
 
@@ -118,19 +118,19 @@ class MyProvider:
   the box" on any real codebase without forcing a "fix every diagnostic" PR.
 - **Versioned baseline envelope** — every baseline JSON file is wrapped in
   `{"schema_version": "1.0", "kind": "...", "data": {...}}` and validated
-  against `pyqtest/schemas/baselines.v1.json` on load.
+  against `pykissembed/schemas/baselines.v1.json` on load.
 - **Embedding cache keys** — `provider.name|model_id|schema_version|content_hash`.
   Mandatory `schema_version` prevents silent cache corruption.
 - **Sync provider Protocol** — providers are tiny CPU/IO wrappers.
 - **No telemetry.** The library runs offline.
-- **Slim default install** — `pip install pyqtest` is ~10 MB. ML features
-  live in `pyqtest-local` and `pyqtest-cloud` subpackages.
+- **Slim default install** — `pip install pykissembed` is ~10 MB. ML features
+  live in `pykissembed-local` and `pykissembed-cloud` subpackages.
 
 ---
 
 ## Migration from `mega-scrapper/tests/`
 
-pyqtest is the upstream successor of the code-quality tests in
+pykissembed is the upstream successor of the code-quality tests in
 `aa-ml/mega-scrapper/tests/`. The five attached tests
 (`test_code_complexity.py`, `test_comment_density.py`,
 `test_docstring_format.py`, `test_lint_typecheck.py`, `test_code_similarity.py`)
