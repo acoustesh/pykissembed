@@ -10,8 +10,26 @@ All three bundled providers (`openai`, `gemini`, `qwen`) are routed through
 
 ```bash
 pip install pyqtest-cloud
+```
+
+## Authentication
+
+Either export the key directly:
+
+```bash
 export OPENROUTER_API_KEY=sk-or-...
 ```
+
+or drop it into a `.env` file at the project root (or any ancestor
+directory — the loader walks up looking for one):
+
+```bash
+echo 'OPENROUTER_API_KEY=sk-or-...' > .env
+```
+
+The explicit environment variable always wins over the file. The
+loader runs lazily on the first `is_configured()` call, so importing
+`pyqtest_cloud` stays free of filesystem side effects.
 
 ## Providers
 

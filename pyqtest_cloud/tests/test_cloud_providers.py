@@ -9,14 +9,34 @@ from __future__ import annotations
 
 from collections.abc import Sequence
 from dataclasses import dataclass
+from pathlib import Path
 from typing import Any
 
 import pytest
 from pyqtest.providers import Provider
 
+from pyqtest_cloud import dotenv as _dotenv
+from pyqtest_cloud.dotenv import find_dotenv as _real_find_dotenv
 from pyqtest_cloud.providers.gemini import GeminiProvider
 from pyqtest_cloud.providers.openai import OpenAIProvider
 from pyqtest_cloud.providers.qwen import QwenProvider
+
+
+@pytest.fixture(autouse=True)
+def _isolate_dotenv(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Isolate every test from the real ``.env`` lookup.
+
+    The repo has a real ``.env`` file at the project root. Without
+    isolation, every test would trigger a filesystem walk that finds
+    it. The autouse fixture:
+
+    1. Resets the module-level "loaded once" cache.
+    2. Stubs ``find_dotenv`` to return ``None`` by default, so no
+       ``.env`` is found unless a test explicitly overrides the stub.
+    """
+    _dotenv.reset_cache()
+    monkeypatch.setattr(_dotenv, "find_dotenv", lambda start=None: None)
+
 
 ALL_PROVIDERS = (OpenAIProvider, GeminiProvider, QwenProvider)
 ALL_PROVIDER_INSTANCES = (OpenAIProvider(), GeminiProvider(), QwenProvider())
@@ -208,3 +228,118 @@ class TestEntryPoints:
         assert eps.get("qwen") == "pyqtest_cloud.providers.qwen:QwenProvider"
         # The core local stub is also in the group
         assert "local" in eps
+
+
+class TestDotenv:
+    """Tests for the lazy .env loader."""
+
+    @staticmethod
+    def test_parse_simple_key_value() -> None:
+        """A bare ``KEY=value`` line parses cleanly."""
+        assert _dotenv.parse_dotenv("FOO=bar") == {"FOO": "bar"}
+
+    @staticmethod
+    def test_parse_handles_quotes_and_comments() -> None:
+        """Surrounding quotes are stripped; comments and blanks are ignored."""
+        text = "# a comment\n\nFOO=\"bar\"\nBAZ='qux'\n  spaced = value  \nNOPE_no_equals\n"
+        assert _dotenv.parse_dotenv(text) == {
+            "FOO": "bar",
+            "BAZ": "qux",
+            "spaced": "value",
+        }
+
+    @staticmethod
+    def test_find_dotenv_walks_up(
+        tmp_path: Path,
+        monkeypatch: pytest.MonkeyPatch,
+    ) -> None:
+        """``find_dotenv`` walks up parent directories until it finds a ``.env``."""
+        # Note: the autouse ``_isolate_dotenv`` stub is *replaced* here
+        # with the real implementation so the walk actually happens.
+        monkeypatch.setattr(_dotenv, "find_dotenv", _real_find_dotenv)
+        (tmp_path / ".env").write_text("OPENROUTER_API_KEY=test", encoding="utf-8")
+        child = tmp_path / "child" / "grandchild"
+        child.mkdir(parents=True)
+        monkeypatch.chdir(child)
+        found = _dotenv.find_dotenv()
+        assert found == (tmp_path / ".env")
+
+    @staticmethod
+    def test_find_dotenv_returns_none_when_missing(
+        tmp_path: Path,
+        monkeypatch: pytest.MonkeyPatch,
+    ) -> None:
+        """``find_dotenv`` returns ``None`` when no ``.env`` exists on the walk."""
+        monkeypatch.setattr(_dotenv, "find_dotenv", _real_find_dotenv)
+        isolated = tmp_path / "no_env_here"
+        isolated.mkdir()
+        monkeypatch.chdir(isolated)
+        # Walk up to / which definitely has no .env
+        assert _dotenv.find_dotenv(isolated) is None
+
+    @staticmethod
+    def test_load_into_environ_picks_up_file(
+        tmp_path: Path,
+        monkeypatch: pytest.MonkeyPatch,
+    ) -> None:
+        """``load_into_environ`` populates the env from a .env file."""
+        dotenv = tmp_path / ".env"
+        dotenv.write_text("OPENROUTER_API_KEY=sk-from-file", encoding="utf-8")
+        monkeypatch.setattr(_dotenv, "find_dotenv", lambda start=None: dotenv)
+        monkeypatch.delenv("OPENROUTER_API_KEY", raising=False)
+        loaded = _dotenv.load_into_environ(("OPENROUTER_API_KEY",), start=tmp_path)
+        assert loaded == dotenv
+        import os
+
+        assert os.environ["OPENROUTER_API_KEY"] == "sk-from-file"
+
+    @staticmethod
+    def test_explicit_env_wins_over_file(
+        tmp_path: Path,
+        monkeypatch: pytest.MonkeyPatch,
+    ) -> None:
+        """An explicit env var is preserved when the file has a different value."""
+        dotenv = tmp_path / ".env"
+        dotenv.write_text("OPENROUTER_API_KEY=from-file", encoding="utf-8")
+        monkeypatch.setattr(_dotenv, "find_dotenv", lambda start=None: dotenv)
+        monkeypatch.setenv("OPENROUTER_API_KEY", "from-env")
+        _dotenv.load_into_environ(("OPENROUTER_API_KEY",), start=tmp_path)
+        import os
+
+        assert os.environ["OPENROUTER_API_KEY"] == "from-env"
+
+    @staticmethod
+    def test_ensure_loaded_is_idempotent(
+        tmp_path: Path,
+        monkeypatch: pytest.MonkeyPatch,
+    ) -> None:
+        """``ensure_loaded`` only loads the file once per process."""
+        dotenv = tmp_path / ".env"
+        dotenv.write_text("OPENROUTER_API_KEY=once", encoding="utf-8")
+        calls = {"n": 0}
+
+        def _spy(_start: Path | None = None) -> Path | None:
+            calls["n"] += 1
+            return dotenv
+
+        monkeypatch.setattr(_dotenv, "find_dotenv", _spy)
+        monkeypatch.delenv("OPENROUTER_API_KEY", raising=False)
+        _dotenv.ensure_loaded()
+        _dotenv.ensure_loaded()
+        _dotenv.ensure_loaded()
+        assert calls["n"] == 1
+
+    @staticmethod
+    def test_is_configured_loads_dotenv(
+        tmp_path: Path,
+        monkeypatch: pytest.MonkeyPatch,
+    ) -> None:
+        """``is_configured()`` triggers the lazy .env load."""
+        dotenv = tmp_path / ".env"
+        dotenv.write_text("OPENROUTER_API_KEY=sk-from-file", encoding="utf-8")
+        monkeypatch.setattr(_dotenv, "find_dotenv", lambda start=None: dotenv)
+        monkeypatch.delenv("OPENROUTER_API_KEY", raising=False)
+        assert OpenAIProvider().is_configured() is True
+        import os
+
+        assert os.environ["OPENROUTER_API_KEY"] == "sk-from-file"

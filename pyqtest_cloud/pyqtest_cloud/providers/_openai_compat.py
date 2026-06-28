@@ -96,11 +96,21 @@ class OpenAICompatProvider:
     def is_configured(self) -> bool:
         """Return True iff the OpenRouter API key is present in the environment.
 
+        Lazily walks up from cwd looking for a ``.env`` file on the
+        first call, so users can drop their key into ``.env`` instead
+        of exporting it. The explicit ``$OPENROUTER_API_KEY`` env var
+        always wins over the file.
+
         Returns
         -------
         bool
-            ``True`` if ``OPENROUTER_API_KEY`` is set in the environment.
+            ``True`` if ``OPENROUTER_API_KEY`` is set in the environment
+            (after the optional ``.env`` lookup).
         """
+        # Lazy import: avoid the filesystem touch on simple imports
+        from pyqtest_cloud.dotenv import ensure_loaded
+
+        ensure_loaded((_API_KEY_ENV,))
         return bool(os.environ.get(_API_KEY_ENV))
 
 
