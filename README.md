@@ -138,6 +138,9 @@ plus the `tests/similarity/` package are the v0 source. Migration preserves
 baseline values verbatim (the v1 envelope wraps them without changing
 semantics).
 
+See [docs/MIGRATING_FROM_MEGA_SCRAPPER.md](docs/MIGRATING_FROM_MEGA_SCRAPPER.md)
+for the step-by-step migration guide.
+
 ---
 
 ## License
