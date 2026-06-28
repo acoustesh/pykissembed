@@ -49,6 +49,31 @@ local = "pykissembed_local.provider:LocalProvider"
 [tool.hatch.build.targets.wheel]
 packages = ["pykissembed_local"]
 
+# Dev-only tooling. Install with: `uv sync --group dev`.
+[dependency-groups]
+dev = [
+    "pytest-cov>=5.0",
+    "pytest-xdist>=3.6",
+]
+
+[tool.coverage.run]
+branch = true
+source = ["pykissembed_local"]
+omit = [
+    "*/tests/*",
+    "*/__pycache__/*",
+]
+
+[tool.coverage.report]
+show_missing = true
+skip_covered = false
+exclude_lines = [
+    "pragma: no cover",
+    "raise NotImplementedError",
+    "if TYPE_CHECKING:",
+    "if __name__ == .__main__.:",
+]
+
 [tool.ruff]
 line-length = 100
 target-version = "py312"
@@ -91,10 +116,22 @@ convention = "numpy"
 [tool.pytest.ini_options]
 minversion = "8.0"
 testpaths = ["tests"]
+# Live = real model downloads (sentence-transformers). Default to skipping;
+# opt in with `pytest -m live`.
+addopts = [
+    "-ra",
+    "--strict-markers",
+    "--strict-config",
+    "-m", "not live",
+    "-n", "auto",
+]
 markers = [
     "live: live model-load tests (skipped by default; enable with -m live)",
+        "smoke: fast subset of live tests suitable for CI (e.g. -m live-and-smoke)",
 ]
-addopts = ["-ra", "--strict-markers"]
+python_files = ["test_*.py"]
+python_classes = ["Test*"]
+python_functions = ["test_*"]
 
 [tool.pyright]
 include = ["pykissembed_local", "tests"]

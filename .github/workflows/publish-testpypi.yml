@@ -1,21 +1,28 @@
-# Publish the three pykissembed packages to TestPyPI via trusted publishing.
+# Publish the **core** pykissembed package to TestPyPI via trusted
+# publishing.
 #
-# Triggered on `v*` tag push (e.g. `v0.1.0`, `v0.1.0-rc.1`). Builds
-# sdist + wheel for each package and uploads via PyPI trusted
-# publishing (OIDC — no API token is required).
+# The local and cloud subpackages are published by sibling workflow
+# files so each PyPI project gets a unique (Owner, Repository,
+# Workflow filename, Environment) tuple — PyPI rejects re-pointing an
+# existing tuple to a different project. See:
+#
+#   - publish-testpypi-local.yml  →  pykissembed-local  (env: testpypi-local)
+#   - publish-testpypi-cloud.yml  →  pykissembed-cloud  (env: testpypi-cloud)
 #
 # Before the first run, the trusted publisher must be registered on
-# TestPyPI for each of the three packages:
+# TestPyPI for **each** of the three packages:
 #
 #   https://test.pypi.org/manage/account/publishing/
 #
-# For each package (pykissembed, pykissembed-local, pykissembed-cloud),
-# add a "pending publisher" with:
+# For pykissembed (this workflow):
 #
 #   Owner:        acoustesh
 #   Repository:   pykissembed
 #   Workflow:     publish-testpypi.yml
 #   Environment:  testpypi
+#
+# For the sibling workflows, see the comment block at the top of
+# each file.
 #
 # When production PyPI is set up, repeat the same steps against
 # https://pypi.org/manage/account/publishing/ and switch the

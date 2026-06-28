@@ -47,12 +47,17 @@ pytestmark = [
 ]
 
 
+@pytest.mark.smoke
 @pytest.mark.parametrize(
     "provider",
     [OpenAIProvider(), GeminiProvider(), QwenProvider()],
 )
 def test_embed_returns_one_vector_per_input(provider: object) -> None:
-    """Each provider returns one vector per input text."""
+    """Each provider returns one vector per input text.
+
+    Tagged ``smoke`` (and ``live`` via the module-level ``pytestmark``)
+    so CI can run a fast subset with ``pytest -m "live and smoke"``.
+    """
     assert provider.is_configured()  # type: ignore[attr-defined]
     vectors = provider.embed(["hello world", "goodbye world"])  # type: ignore[attr-defined]
     assert len(vectors) == 2

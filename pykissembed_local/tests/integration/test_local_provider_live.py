@@ -23,8 +23,13 @@ pytestmark = [
 ]
 
 
+@pytest.mark.smoke
 def test_real_model_loads_and_embeds() -> None:
-    """End-to-end: load the model and embed two short inputs."""
+    """End-to-end: load the model and embed two short inputs.
+
+    Tagged ``smoke`` (and ``live`` via the module-level ``pytestmark``)
+    so CI can run a fast subset with ``pytest -m "live and smoke"``.
+    """
     provider = LocalProvider()
     vectors = provider.embed(["hello world", "goodbye world"])
     assert len(vectors) == 2

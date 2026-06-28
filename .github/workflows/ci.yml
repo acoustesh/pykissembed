@@ -19,6 +19,9 @@ jobs:
     with:
       python-version: "3.12"
       mode: strict
+      install-local: true
+      install-cloud: true
+      run-smoke: true
 
   build:
     name: Build sdist + wheel

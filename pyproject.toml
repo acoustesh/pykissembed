@@ -71,13 +71,38 @@ pykissembed = "pykissembed.plugin"
 [project.entry-points."pykissembed.providers"]
 local = "pykissembed.providers.local:LocalProvider"
 
+# Dev-only tooling. Install with: `uv sync --group dev`.
+[dependency-groups]
+dev = [
+    "pytest-cov>=5.0",
+    "pytest-xdist>=3.6",
+]
+
 [tool.hatch.build.targets.wheel]
 packages = ["pykissembed", "src/pykissembed"]
 include = ["pykissembed/schemas/*.json"]
 
+# The `[local]` / `[cloud]` extras reference sibling subpackages. They are
+# workspace members, so we mark them as such under `[tool.uv.sources]`.
+[tool.uv.sources]
+pykissembed-local = { workspace = true }
+pykissembed-cloud = { workspace = true }
+
+[tool.uv.workspace]
+members = ["pykissembed_local", "pykissembed_cloud"]
+
 [tool.pytest.ini_options]
 minversion = "8.0"
 testpaths = ["tests"]
+# Live = real network calls (cloud providers) or model downloads (local).
+# Default to skipping them; opt in with `pytest -m live`.
+addopts = [
+    "-ra",
+    "--strict-markers",
+    "--strict-config",
+    "-m", "not live",
+    "-n", "auto",
+]
 markers = [
     "lint: lint + type-check gate",
     "complexity: code complexity metrics (CC, COG, MI, line counts, docstrings)",
@@ -85,8 +110,31 @@ markers = [
     "docstring_format: NumPy docstring format (ruff D rules)",
     "similarity: embedding-based near-duplicate detection (requires cached embeddings)",
     "experimental: unstable APIs — refactor_index, file_split",
+    "live: live network / model-load tests (skipped by default; opt in with -m live)",
+        "smoke: fast subset of live tests suitable for CI (e.g. -m live-and-smoke)",
 ]
-addopts = ["-ra", "--strict-markers"]
+python_files = ["test_*.py"]
+python_classes = ["Test*"]
+python_functions = ["test_*"]
+
+[tool.coverage.run]
+branch = true
+source = ["pykissembed"]
+omit = [
+    "pykissembed/tests/*",
+    "tests/fixtures/*",
+    "*/__pycache__/*",
+]
+
+[tool.coverage.report]
+show_missing = true
+skip_covered = false
+exclude_lines = [
+    "pragma: no cover",
+    "raise NotImplementedError",
+    "if TYPE_CHECKING:",
+    "if __name__ == .__main__.:",
+]
 
 [tool.ruff]
 line-length = 100

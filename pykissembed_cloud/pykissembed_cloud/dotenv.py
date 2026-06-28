@@ -124,8 +124,24 @@ def load_into_environ(
     return dotenv
 
 
-# Module-level cache: the dotenv file is loaded at most once per process.
-_loaded: bool = False
+# Module-level cache: the dotenv file is loaded at most once per ``start``
+# Path per process. Keyed by the resolved start (or ``None`` for cwd) so a
+# test that switches cwd / passes a tmp ``.env`` can re-trigger the load
+# by calling ``reset_cache_for(start)`` or the global ``reset_cache()``.
+_loaded_for: dict[Path | None, bool] = {}
+
+
+def _cache_key(start: Path | None) -> Path | None:
+    """Resolve *start* to the key used for the load cache.
+
+    Returns
+    -------
+    Path | None
+        The resolved absolute path of *start*, or ``None`` for cwd.
+    """
+    if start is None:
+        return None
+    return start.resolve()
 
 
 def ensure_loaded(
@@ -133,9 +149,10 @@ def ensure_loaded(
     *,
     start: Path | None = None,
 ) -> Path | None:
-    """Load the ``.env`` file once and cache the result.
+    """Load the ``.env`` file once per *start* and cache the result.
 
-    Subsequent calls are no-ops.
+    Subsequent calls with the same ``start`` are no-ops. Calls with a
+    different ``start`` (or after ``reset_cache_for(start)``) re-walk.
 
     Returns
     -------
@@ -144,17 +161,28 @@ def ensure_loaded(
         found (or if the load has already happened — see the
         module-level cache).
     """
-    global _loaded
-    if _loaded:
+    key = _cache_key(start)
+    if _loaded_for.get(key, False):
         return None
-    _loaded = True
+    _loaded_for[key] = True
     return load_into_environ(keys, start=start)
 
 
 def reset_cache() -> None:
-    """Reset the module-level load cache. Used by tests."""
-    global _loaded
-    _loaded = False
+    """Reset the entire module-level load cache. Used by tests."""
+    _loaded_for.clear()
+
+
+def reset_cache_for(start: Path | None) -> None:
+    """Reset the cache entry for *start* only.
+
+    Parameters
+    ----------
+    start
+        The directory the cache was keyed on (must match what was
+        passed to ``ensure_loaded``). ``None`` clears the cwd entry.
+    """
+    _loaded_for.pop(_cache_key(start), None)
 
 
 __all__ = [
@@ -163,4 +191,5 @@ __all__ = [
     "load_into_environ",
     "parse_dotenv",
     "reset_cache",
+    "reset_cache_for",
 ]

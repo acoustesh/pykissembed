@@ -1,0 +1,75 @@
+{
+  "version": "0.2.0",
+  "configurations": [
+    {
+      "name": "Pytest: pykissembed (core)",
+      "type": "debugpy",
+      "request": "launch",
+      "module": "pytest",
+      "python": "${workspaceFolder}/.venv/bin/python",
+      "cwd": "${workspaceFolder}",
+      "args": ["-m", "pytest", "-m", "not live"],
+      "console": "integratedTerminal",
+      "justMyCode": false
+    },
+    {
+      "name": "Pytest: pykissembed (current file)",
+      "type": "debugpy",
+      "request": "launch",
+      "module": "pytest",
+      "python": "${workspaceFolder}/.venv/bin/python",
+      "cwd": "${workspaceFolder}",
+      "args": ["-m", "pytest", "-m", "not live", "${file}"],
+      "console": "integratedTerminal",
+      "justMyCode": false
+    },
+    {
+      "name": "Pytest: pykissembed_cloud",
+      "type": "debugpy",
+      "request": "launch",
+      "module": "pytest",
+      "python": "${workspaceFolder}/.venv/bin/python",
+      "cwd": "${workspaceFolder}/pykissembed_cloud",
+      "args": ["-m", "pytest", "-m", "not live"],
+      "console": "integratedTerminal",
+      "justMyCode": false
+    },
+    {
+      "name": "Pytest: pykissembed_local",
+      "type": "debugpy",
+      "request": "launch",
+      "module": "pytest",
+      "python": "${workspaceFolder}/.venv/bin/python",
+      "cwd": "${workspaceFolder}/pykissembed_local",
+      "args": ["-m", "pytest", "-m", "not live"],
+      "console": "integratedTerminal",
+      "justMyCode": false
+    },
+    {
+      "name": "Pytest: ALL (no live)",
+      "type": "debugpy",
+      "request": "launch",
+      "module": "pytest",
+      "python": "${workspaceFolder}/.venv/bin/python",
+      "cwd": "${workspaceFolder}",
+      "args": [
+        "-m", "pytest", "-m", "not live",
+        "${workspaceFolder}/tests",
+        "${workspaceFolder}/pykissembed_cloud/tests",
+        "${workspaceFolder}/pykissembed_local/tests"
+      ],
+      "console": "integratedTerminal",
+      "justMyCode": false
+    }
+  ],
+  "compounds": [
+    {
+      "name": "Pytest: full workspace",
+      "configurations": [
+        "Pytest: pykissembed (core)",
+        "Pytest: pykissembed_cloud",
+        "Pytest: pykissembed_local"
+      ]
+    }
+  ]
+}

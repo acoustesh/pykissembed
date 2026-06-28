@@ -313,7 +313,7 @@ class TestDotenv:
         tmp_path: Path,
         monkeypatch: pytest.MonkeyPatch,
     ) -> None:
-        """``ensure_loaded`` only loads the file once per process."""
+        """``ensure_loaded`` only loads the file once per start path."""
         dotenv = tmp_path / ".env"
         dotenv.write_text("OPENROUTER_API_KEY=once", encoding="utf-8")
         calls = {"n": 0}
@@ -324,10 +324,89 @@ class TestDotenv:
 
         monkeypatch.setattr(_dotenv, "find_dotenv", _spy)
         monkeypatch.delenv("OPENROUTER_API_KEY", raising=False)
-        _dotenv.ensure_loaded()
-        _dotenv.ensure_loaded()
-        _dotenv.ensure_loaded()
+        _dotenv.ensure_loaded(start=tmp_path)
+        _dotenv.ensure_loaded(start=tmp_path)
+        _dotenv.ensure_loaded(start=tmp_path)
         assert calls["n"] == 1
+
+    @staticmethod
+    def test_ensure_loaded_re_runs_after_reset_cache_for(
+        tmp_path: Path,
+        monkeypatch: pytest.MonkeyPatch,
+    ) -> None:
+        """``reset_cache_for(start)`` allows re-loading the same start path.
+
+        Regression test for the original bug: a single global ``_loaded``
+        bool meant tests could not exercise the .env lookup again with
+        a new tmp file at the same path. The cache must be keyed by
+        ``start`` so a targeted reset re-triggers the load.
+
+        Verifies the *call count* on the underlying ``find_dotenv`` spy
+        rather than the resolved path, which keeps the test independent
+        of cwd / monkeypatched walk behaviour.
+        """
+        dotenv = tmp_path / ".env"
+        dotenv.write_text("OPENROUTER_API_KEY=once", encoding="utf-8")
+        calls = {"n": 0}
+
+        def _spy(_start: Path | None = None) -> Path | None:
+            calls["n"] += 1
+            return dotenv
+
+        monkeypatch.setattr(_dotenv, "find_dotenv", _spy)
+        monkeypatch.delenv("OPENROUTER_API_KEY", raising=False)
+
+        start = tmp_path
+        # First call walks; subsequent calls with the same start are cached.
+        _dotenv.ensure_loaded(start=start)
+        _dotenv.ensure_loaded(start=start)
+        _dotenv.ensure_loaded(start=start)
+        assert calls["n"] == 1
+
+        # Resetting the cache for *start* should allow one more walk.
+        _dotenv.reset_cache_for(start)
+        _dotenv.ensure_loaded(start=start)
+        assert calls["n"] == 2
+
+        # Without a second reset, the new entry is cached again.
+        _dotenv.ensure_loaded(start=start)
+        assert calls["n"] == 2
+
+        # And a different start is cached independently — resetting one
+        # must not affect the other.
+        other_start = tmp_path / "other"
+        other_start.mkdir()
+        _dotenv.ensure_loaded(start=other_start)
+        _dotenv.ensure_loaded(start=other_start)
+        assert calls["n"] == 3
+        _dotenv.reset_cache_for(start)
+        _dotenv.ensure_loaded(start=start)  # walks again
+        _dotenv.ensure_loaded(start=other_start)  # still cached
+        assert calls["n"] == 4
+
+    @staticmethod
+    def test_reset_cache_wipes_everything(
+        tmp_path: Path,
+        monkeypatch: pytest.MonkeyPatch,
+    ) -> None:
+        """``reset_cache()`` (no arg) wipes every cached start."""
+        dotenv = tmp_path / ".env"
+        dotenv.write_text("OPENROUTER_API_KEY=initial", encoding="utf-8")
+        calls = {"n": 0}
+
+        def _spy(start: Path | None = None) -> Path | None:  # noqa: ARG001
+            calls["n"] += 1
+            return dotenv
+
+        monkeypatch.setattr(_dotenv, "find_dotenv", _spy)
+        monkeypatch.delenv("OPENROUTER_API_KEY", raising=False)
+
+        _dotenv.ensure_loaded(start=tmp_path)  # cached
+        _dotenv.ensure_loaded(start=tmp_path)  # cached
+        assert calls["n"] == 1
+        _dotenv.reset_cache()
+        _dotenv.ensure_loaded(start=tmp_path)  # re-walked
+        assert calls["n"] == 2
 
     @staticmethod
     def test_is_configured_loads_dotenv(

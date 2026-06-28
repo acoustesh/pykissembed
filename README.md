@@ -43,6 +43,49 @@ git add tests/baselines && git commit -m "seed pykissembed baselines"
 
 ---
 
+## Testing
+
+This repo is configured to work out of the box with the **VS Code Testing
+panel**. Open the workspace, install the recommended extensions
+(`ms-python.pytest`, `ms-python.python`, `charliermarsh.ruff`,
+`tamasfe.even-better-toml`), and the test tree appears in the left sidebar.
+
+### Test discovery
+
+| Package | Command | Count |
+| --- | --- | --- |
+| `pykissembed` (core) | `uv run pytest -m "not live"` | 39 |
+| `pykissembed_cloud` | `uv run pytest -m "not live"` | 27 |
+| `pykissembed_local` | `uv run pytest -m "not live"` | 19 |
+
+The panel respects the `[tool.pytest.ini_options]` block in each
+`pyproject.toml`. **Live tests (network calls, model downloads) are
+skipped by default.** To opt in:
+
+```bash
+# Run everything live (one cloud provider smoke + model load)
+uv run pytest -m "live and smoke"
+
+# Run only the model-load live test
+cd pykissembed_local && uv run pytest -m live
+```
+
+### Running / debugging a single test
+
+Right-click any test in the Testing panel → **Run Test** or **Debug
+Test**. The debug configurations in `.vscode/launch.json` set the right
+`cwd` per package automatically.
+
+### Markers
+
+| Marker | Meaning |
+| --- | --- |
+| `live` | Network calls or model downloads — skipped by default. |
+| `smoke` | Fast subset of `live`; suitable for CI fast-gate (`-m "live and smoke"`). |
+| `lint`, `complexity`, `density`, `docstring_format`, `similarity`, `experimental` | Project-specific gates provided by the pykissembed pytest plugin. |
+
+---
+
 ## Adding similarity (embedding-based near-duplicate detection)
 
 Recommended path: **local sentence-transformers provider** — no API key, no
