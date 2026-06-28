@@ -1,0 +1,15 @@
+{
+  "data": {
+    "cc_baselines": {},
+    "cog_baselines": {},
+    "line_baselines": {
+      "src/example_pkg/core.py": 73
+    },
+    "mi_baselines": {},
+    "per_dir": {
+      "src": 1
+    }
+  },
+  "kind": "complexity",
+  "schema_version": "1.0"
+}

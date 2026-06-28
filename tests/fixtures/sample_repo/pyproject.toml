@@ -1,0 +1,18 @@
+[build-system]
+requires = ["hatchling>=1.27"]
+build-backend = "hatchling.build"
+
+[project]
+name = "sample-pkg"
+version = "0.0.1"
+requires-python = ">=3.12"
+
+[tool.pyqtest]
+paths = ["src"]
+mode = "ratchet"
+baseline_dir = "tests/baselines"
+cache_dir = "tests/.pyqtest_cache"
+
+[tool.pytest.ini_options]
+python_files = ["test_*.py", "code_*.py", "comment_*.py", "docstring_*.py", "lint_*.py"]
+testpaths = ["tests"]

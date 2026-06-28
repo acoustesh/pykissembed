@@ -1,0 +1,132 @@
+# pyqtest — generic Python code-quality test library (pytest plugin)
+#
+# Distribution model:
+#   pyqtest          — slim core (lint + type + complexity + docstring + comment density)
+#   pyqtest[local]   — adds sentence-transformers (recommended default for similarity)
+#   pyqtest-cloud    — adds openai / voyage / codestral / gemini embedding providers
+#
+# Default mode is "baseline-and-ratchet" — see README.md.
+
+[build-system]
+requires = ["hatchling>=1.27"]
+build-backend = "hatchling.build"
+
+[project]
+name = "pyqtest"
+version = "0.1.0"
+description = "Generic Python code-quality test library: lint, type, complexity, docstring, comment density, and embedding-based similarity (pytest plugin)."
+readme = "README.md"
+license = "MIT"
+license-files = ["LICENSE"]
+requires-python = ">=3.12"
+keywords = ["pytest", "lint", "ruff", "pyright", "complexity", "docstring", "similarity"]
+authors = [{ name = "Alvaro" }]
+classifiers = [
+    "Development Status :: 4 - Beta",
+    "Framework :: Pytest",
+    "Intended Audience :: Developers",
+    "License :: OSI Approved :: MIT License",
+    "Operating System :: OS Independent",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.12",
+    "Programming Language :: Python :: 3.13",
+    "Programming Language :: Python :: 3.14",
+    "Topic :: Software Development :: Quality Assurance",
+    "Topic :: Software Development :: Testing",
+    "Typing :: Typed",
+]
+dependencies = [
+    "pytest>=8.0",
+    "pyyaml>=6.0",
+    "tomli>=2.0; python_version < '3.11'",
+    "rich>=13.0",
+    "typer>=0.21",
+    "click>=8.1",
+    "jsonschema>=4.21",
+    "ruff>=0.7",
+    "pyright[nodejs]>=1.1.390",
+    "radon>=6.0",
+    "complexipy>=0.5",
+    "numpy>=1.26",
+]
+
+[project.optional-dependencies]
+# Local embedding provider (sentence-transformers). Recommended default for similarity.
+local = [
+    "pyqtest-local",
+]
+# Cloud embedding providers (openai / voyage / codestral / gemini) — separate subpackage.
+cloud = [
+    "pyqtest-cloud",
+]
+
+[project.scripts]
+pyqtest = "pyqtest.cli:app"
+
+[project.entry-points.pytest11]
+pyqtest = "pyqtest.plugin"
+
+# Built-in provider entry point: local sentence-transformers.
+# Cloud providers are registered by the pyqtest-cloud subpackage.
+[project.entry-points."pyqtest.providers"]
+local = "pyqtest.providers.local:LocalProvider"
+
+[tool.hatch.build.targets.wheel]
+packages = ["pyqtest", "src/pyqtest"]
+include = ["pyqtest/schemas/*.json"]
+
+[tool.pytest.ini_options]
+minversion = "8.0"
+testpaths = ["tests"]
+markers = [
+    "lint: lint + type-check gate",
+    "complexity: code complexity metrics (CC, COG, MI, line counts, docstrings)",
+    "density: comment density checks",
+    "docstring_format: NumPy docstring format (ruff D rules)",
+    "similarity: embedding-based near-duplicate detection (requires cached embeddings)",
+    "experimental: unstable APIs — refactor_index, file_split",
+]
+addopts = ["-ra", "--strict-markers"]
+
+[tool.ruff]
+line-length = 100
+target-version = "py312"
+
+[tool.ruff.lint]
+select = ["ALL"]
+ignore = [
+    "E501",    # formatter's job
+    "CPY001",  # copyright header
+    "PLR2004", # magic numbers in tooling
+    "PLR0911", "PLR0912", "PLR0913", "PLR0914", "PLR0915", "PLR0916", "PLR0917",
+    "COM812", "D203", "D213", "ERA001",
+    "G004", "S101", "S603", "TRY300", "TRY401",
+    # Project-specific suppressions
+    "FBT001", "FBT003",   # boolean positional args are fine in Typer/Click apps
+    "PLC0415",            # lazy imports OK for optional providers
+    "TC003",              # TYPE_CHECKING import is fine; keeps runtime clean
+    "BLE001",             # broad except OK at CLI boundary
+    "D401",               # docstring mood — non-blocking
+    "D102", "D103", "D105", "D107",  # missing docstrings on test helpers / dunders
+    "INP001",             # implicit namespace package — fine in fixtures
+    "B008",               # call-in-default OK for module-level Path constants
+    "ANN201", "ANN401",   # return type annotations on helpers
+    "ARG002", "ARG005",   # unused args on test monkeypatch fixtures
+    "EM102", "S112", "PERF403", "PLW0603", "UP036",
+    "SLF001",             # private-member access for tests
+    "C901",               # complex structure — refactor separately
+    "PYI049",             # unused private TypedDict
+    "F841",               # unused variable in early-return paths
+]
+
+[tool.ruff.lint.pydocstyle]
+convention = "numpy"
+
+[tool.ruff.lint.per-file-ignores]
+"tests/**" = ["ANN001", "ANN201", "ANN202", "S101", "PLR2004"]
+"pyqtest/tests/fixtures/**" = ["ALL"]
+
+[tool.pyright]
+include = ["pyqtest", "src/pyqtest", "tests"]
+pythonVersion = "3.12"
+extraPaths = ["src"]
