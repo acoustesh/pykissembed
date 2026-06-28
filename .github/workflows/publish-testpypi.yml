@@ -13,7 +13,7 @@
 # add a "pending publisher" with:
 #
 #   Owner:        acoustesh
-#   Repository:   pykissembed          (or whatever the GitHub repo is called)
+#   Repository:   pykissembed
 #   Workflow:     publish-testpypi.yml
 #   Environment:  testpypi
 #

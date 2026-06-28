@@ -14,5 +14,5 @@ __pycache__/
 venv/
 
 # Embedding caches — never commit
-tests/.pyqtest_cache/
+tests/.pykissembed_cache/
 .env
