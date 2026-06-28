@@ -1,37 +1,26 @@
-# Publish the **core** pykissembed package to TestPyPI via trusted
-# publishing.
+# Publish the **core** pykissembed package to TestPyPI via API token.
 #
 # This workflow publishes **only** the core package. The local and
 # cloud subpackages are published by sibling workflows so each PyPI
-# project gets a unique (Owner, Repository, Workflow filename,
-# Environment) tuple — PyPI rejects re-pointing an existing tuple
-# to a different project. See:
+# project gets its own dedicated publish step (one artifact name,
+# one path, one token consumer). See:
 #
-#   - publish-testpypi-local.yml  →  pykissembed-local  (env: testpypi-local)
-#   - publish-testpypi-cloud.yml  →  pykissembed-cloud  (env: testpypi-cloud)
+#   - publish-testpypi-local.yml  →  pykissembed-local
+#   - publish-testpypi-cloud.yml  →  pykissembed-cloud
 #
 # All three workflows share the same tag triggers (``v*.*.*`` and
 # ``v*.*.*-*``), so a single ``git push --tags`` fans out to all
 # three uploads in parallel.
 #
-# Before the first run, the trusted publisher must be registered on
-# TestPyPI for **each** of the three packages:
+# Required GitHub secret: ``TESTPYPI_TOKEN`` — a TestPyPI API token
+# scoped to the entire ``acoustesh`` account. Generate one at
+# https://test.pypi.org/manage/account/token/ (scope: "Entire
+# account") and add it under
+# https://github.com/acoustesh/pykissembed/settings/secrets/actions.
 #
-#   https://test.pypi.org/manage/account/publishing/
-#
-# For pykissembed (this workflow):
-#
-#   Owner:        acoustesh
-#   Repository:   pykissembed
-#   Workflow:     publish-testpypi.yml
-#   Environment:  testpypi
-#
-# For the sibling workflows, see the comment block at the top of
-# each file.
-#
-# When production PyPI is set up, repeat the same steps against
-# https://pypi.org/manage/account/publishing/ and switch the
-# `repository-url` below to https://upload.pypi.org/legacy/.
+# When production PyPI is set up, switch the ``repository-url``
+# below to https://upload.pypi.org/legacy/ and add a parallel
+# ``PYPI_TOKEN`` secret.
 
 name: publish-testpypi
 
@@ -74,9 +63,6 @@ jobs:
     needs: build
     runs-on: ubuntu-latest
     environment: testpypi
-    permissions:
-      # Required for PyPI trusted publishing (OIDC).
-      id-token: write
     steps:
       - uses: actions/download-artifact@v4
         with:
@@ -86,6 +72,10 @@ jobs:
       - uses: pypa/gh-action-pypi-publish@release/v1
         with:
           packages-dir: dist/
+          repository-url: https://test.pypi.org/legacy/
           # skip-existing avoids spurious failures when the same tag
           # is re-pushed; the version is still monotonic across tags.
           skip-existing: true
+        env:
+          TWINE_USERNAME: __token__
+          TWINE_PASSWORD: ${{ secrets.TESTPYPI_TOKEN }}

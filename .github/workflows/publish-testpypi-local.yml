@@ -1,24 +1,16 @@
-# Publish pykissembed-local to TestPyPI via trusted publishing.
+# Publish pykissembed-local to TestPyPI via API token.
 #
-# Separate workflow file from publish-testpypi.yml so the
-# (Owner, Repo, Workflow filename, Environment) tuple is unique
-# per PyPI project — PyPI rejects re-pointing an existing tuple
-# to a different project. The core package stays on the legacy
-# workflow; this file handles the local subpackage.
+# Sibling workflow to publish-testpypi.yml — publishes the local
+# subpackage. Each project gets its own dedicated workflow so the
+# artifact name, package path, and trigger file stay unambiguous.
 #
-# Before the first run, register a "pending publisher" on
-# TestPyPI for pykissembed-local with:
+# Required GitHub secret: ``TESTPYPI_TOKEN`` (shared across all
+# three TestPyPI workflows). See the header in
+# publish-testpypi.yml for how to generate and store it.
 #
-#   Owner:        acoustesh
-#   Repository:   pykissembed
-#   Workflow:     publish-testpypi-local.yml
-#   Environment:  testpypi-local
-#
-# https://test.pypi.org/manage/account/publishing/
-#
-# When production PyPI is set up, repeat the same steps against
-# https://pypi.org/manage/account/publishing/ and switch the
-# `repository-url` below to https://upload.pypi.org/legacy/.
+# When production PyPI is set up, switch the ``repository-url``
+# below to https://upload.pypi.org/legacy/ and add a parallel
+# ``PYPI_TOKEN`` secret.
 
 name: publish-testpypi-local
 
@@ -61,9 +53,6 @@ jobs:
     needs: build
     runs-on: ubuntu-latest
     environment: testpypi-local
-    permissions:
-      # Required for PyPI trusted publishing (OIDC).
-      id-token: write
     steps:
       - uses: actions/download-artifact@v4
         with:
@@ -77,3 +66,6 @@ jobs:
           # skip-existing avoids spurious failures when the same tag
           # is re-pushed; the version is still monotonic across tags.
           skip-existing: true
+        env:
+          TWINE_USERNAME: __token__
+          TWINE_PASSWORD: ${{ secrets.TESTPYPI_TOKEN }}
