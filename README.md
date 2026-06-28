@@ -106,15 +106,12 @@ density gates. Embedding-based similarity is opt-in via extras:
 
 ### Installing from TestPyPI (current release channel)
 
-Until `pykissembed` reaches production PyPI, point `uv` at TestPyPI and pin
-the platform. Add the index to your consumer project's `pyproject.toml`:
+Until `pykissembed` reaches production PyPI, pass the TestPyPI index
+directly on the command line — the named-index form (`--index ./testpypi`)
+is unreliable in `uv 0.11.x`. Add the platform pin to your consumer
+project's `pyproject.toml`:
 
 ```toml
-[[tool.uv.index]]
-name = "testpypi"
-url = "https://test.pypi.org/simple/"
-explicit = true
-
 # Pin resolution to the platforms you actually ship. pykissembed is
 # published as `py3-none-any` wheels, but locking the resolver prevents
 # `uv` from probing for versions in marker combinations you don't use.
@@ -122,23 +119,18 @@ explicit = true
 environments = ["sys_platform == 'linux'"]
 ```
 
-Then add the package (the leading `./` disambiguates the index *name* from a relative *path*):
+Then add the package by passing the URL inline:
 
 ```bash
-uv add "pykissembed[all]==0.1.1" --index ./testpypi
+uv add "pykissembed[all]==0.1.1" --index https://test.pypi.org/simple/
 ```
 
-> **Why `explicit = true`?** It stops TestPyPI from shadowing production
-> PyPI for unrelated packages. With `explicit = true`, only the deps you
-> tag with `--index ./testpypi` resolve from TestPyPI; everything else
-> still uses pypi.org.
->
-> **Why the leading `./`?** `uv` accepts either an index URL or a relative
-> path under `--index`. The leading `./` forces name-mode, telling `uv`
-> to look up `testpypi` in the `[[tool.uv.index]]` table. Without it, `uv`
-> warns and (in a future release) will hard-fail, treating the value as a
-> path.
->
+> **Troubleshooting `No solution found when resolving dependencies for
+> split`**: this means `uv` queried TestPyPI successfully but found no
+> matching version. Check the GitHub Actions runs for the `v0.1.1` tag
+> to confirm all three packages actually published; if any failed, the
+> dependent package's `[all]` extra can't resolve.
+
 > **Why pin `environments`?** Without it, `uv` tries to resolve your
 > `uv.lock` for every `(python_version, sys_platform)` pair it can derive
 > — including combinations like `python_full_version >= '3.14' and
@@ -146,9 +138,8 @@ uv add "pykissembed[all]==0.1.1" --index ./testpypi
 > resolver to your real targets makes the lock fast and removes the
 > *"No solution found when resolving dependencies for split"* error.
 
-When production PyPI is set up, drop the `[tool.uv.index]` block and the
-`[tool.uv]` `environments` line, and use the plain `uv add "pykissembed[all]"`
-form from the table above.
+When production PyPI is set up, drop the `[tool.uv] environments` line and
+use the plain `uv add "pykissembed[all]"` form from the table above.
 
 After installing an extra, populate the cache and run the suite:
 
