@@ -3,7 +3,7 @@
     "cc_baselines": {},
     "cog_baselines": {},
     "line_baselines": {
-      "src/example_pkg/core.py": 73
+      "src/example_pkg/core.py": 72
     },
     "mi_baselines": {},
     "per_dir": {

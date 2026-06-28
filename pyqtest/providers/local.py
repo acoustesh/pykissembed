@@ -31,10 +31,7 @@ class LocalProvider:
     batch_size = 32
 
     def embed(self, texts: Sequence[str]) -> list[list[float]]:
-        msg = (
-            f"The local provider requires the pyqtest-local subpackage.\n"
-            f"  {_INSTALL_HINT}"
-        )
+        msg = f"The local provider requires the pyqtest-local subpackage.\n  {_INSTALL_HINT}"
         raise RuntimeError(msg)
 
     def is_configured(self) -> bool:

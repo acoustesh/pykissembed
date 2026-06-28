@@ -27,9 +27,17 @@ class ProviderRegistry:
         self._providers[provider.name] = provider
 
     def discover(self) -> None:
-        """Discover third-party providers via entry points and register them."""
-        eps = metadata.entry_points(group=_BUILTIN_GROUP)
-        for ep in eps:
+        """Discover third-party providers via entry points and register them.
+
+        Entry points are iterated in **reverse** order so that the
+        first-listed entry point (typically a user-installed override
+        like ``pyqtest-local``) wins over later ones. Built-in providers
+        (registered via :func:`discover_builtin`) are still loaded first
+        and are then overridden by whichever entry point appears first
+        in the metadata listing.
+        """
+        eps = list(metadata.entry_points(group=_BUILTIN_GROUP))
+        for ep in reversed(eps):
             try:
                 loaded = ep.load()
             except Exception:  # pragma: no cover — defensive

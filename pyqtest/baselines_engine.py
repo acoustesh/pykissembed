@@ -125,12 +125,7 @@ def load_envelope(path: Path, kind: str) -> BaselineEnvelope:
 
     # Looks like an envelope (has schema_version / kind / data keys) but
     # failed the discriminator — refuse rather than silently migrating.
-    if (
-        isinstance(raw, dict)
-        and "schema_version" in raw
-        and "kind" in raw
-        and "data" in raw
-    ):
+    if isinstance(raw, dict) and "schema_version" in raw and "kind" in raw and "data" in raw:
         _load_validator().validate(raw)  # raises ValidationError
 
     # Migrate v0 → v1

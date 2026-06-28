@@ -1,13 +1,13 @@
 {
   "data": {
-    "aggregate_current": 4.35,
+    "aggregate_current": 4.55,
     "aggregate_max_density": 100.0,
     "aggregate_min_density": 4.0,
     "per_file": {
       "src/example_pkg/core.py": {
-        "current": 2.5,
+        "current": 2.56,
         "max": 40.0,
-        "min": 2.5
+        "min": 2.56
       }
     }
   },

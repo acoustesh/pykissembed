@@ -108,6 +108,70 @@ class TestRegistry:
         assert "local" in registry
         assert "broken" not in registry
 
+    @staticmethod
+    def test_discover_lets_first_entry_point_override(
+        monkeypatch: pytest.MonkeyPatch,
+    ) -> None:
+        """When two entry points share a name, the first-listed one wins.
+
+        This matches the user-override semantics: ``pyqtest-local`` should
+        override the core stub because its entry point is listed first
+        in the metadata. ``discover()`` iterates entry points in
+        **reverse** so the first one (override) is registered last,
+        overwriting the second (stub).
+        """
+
+        class _StubProvider:
+            name = "local"
+            model_id = "stub-model"
+            schema_version = "1"
+            max_tokens = 256
+            batch_size = 32
+
+            def embed(self, texts):  # type: ignore[no-untyped-def]
+                return []
+
+            def is_configured(self) -> bool:
+                return True
+
+        class _OverrideProvider:
+            name = "local"
+            model_id = "override-model"
+            schema_version = "2"
+            max_tokens = 512
+            batch_size = 16
+
+            def embed(self, texts):  # type: ignore[no-untyped-def]
+                return []
+
+            def is_configured(self) -> bool:
+                return True
+
+        class _EP:
+            def __init__(self, name: str, value: object) -> None:
+                self.name = name
+                self.value = value
+                self.group = "pyqtest.providers"
+
+            def load(self) -> object:
+                # Return the instance directly so ``isinstance(instance, Provider)`` works
+                return self.value
+
+        eps = [
+            _EP("local", _OverrideProvider()),  # listed first → wins
+            _EP("local", _StubProvider()),
+        ]
+
+        import pyqtest.providers.registry as reg_mod
+
+        REGISTRY._providers.clear()
+        monkeypatch.setattr(reg_mod.metadata, "entry_points", lambda group=None: eps)
+        reg_mod.discover_all()
+        winner = REGISTRY.get("local")
+        assert winner is not None
+        assert cast("_OverrideProvider", winner).model_id == "override-model"
+        REGISTRY._providers.clear()
+
 
 class TestCacheKey:
     """Tests for the cache-key formatter."""

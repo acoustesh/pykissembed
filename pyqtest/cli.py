@@ -15,6 +15,7 @@ from __future__ import annotations
 import json
 import shutil
 import subprocess
+import sys
 from collections.abc import Callable
 from pathlib import Path
 from typing import Any, cast
@@ -55,8 +56,13 @@ def _main_callback(
 def check(
     pytest_args: list[str] | None = typer.Argument(None, help="Extra args forwarded to pytest."),
 ) -> None:
-    """Run the same gate that ``pytest`` runs (lint + type + complexity + ...)."""
-    cmd = ["pytest", *(pytest_args or [])]
+    """Run the same gate that ``pytest`` runs (lint + type + complexity + ...).
+
+    Uses ``sys.executable -m pytest`` so the current Python environment
+    (with ``pyqtest`` installed) is reused — bare ``pytest`` on PATH may
+    resolve to a different interpreter that lacks the plugin.
+    """
+    cmd = [sys.executable, "-m", "pytest", *(pytest_args or [])]
     typer.echo(f"$ {' '.join(cmd)}")
     raise typer.Exit(subprocess.call(cmd))
 
@@ -128,7 +134,9 @@ def _compute_current_for(baseline_name: str) -> dict[str, Any]:
             return {}
         root = get_config().root
         report = _build_report(_run_ruff(paths), _run_pyright(paths), root=root)
-        return {"per_file": {f: len(d["ruff"]) + len(d["pyright"]) for f, d in report["files"].items()}}
+        return {
+            "per_file": {f: len(d["ruff"]) + len(d["pyright"]) for f, d in report["files"].items()}
+        }
     raise NotImplementedError(f"No current-diagnostics computer for {baseline_name}")
 
 
@@ -179,9 +187,15 @@ app.add_typer(providers_app, name="providers")
 
 @app.command()
 def populate_embeddings(
-    provider_name: str = typer.Option(..., "--provider", help="Provider name (e.g. local, openai)."),
-    paths: list[Path] | None = typer.Option(None, "--path", help="Directories to scan (default: [tool.pyqtest].paths)."),
-    cached_only: bool = typer.Option(False, "--cached-only", help="Skip API calls; only read cache."),
+    provider_name: str = typer.Option(
+        ..., "--provider", help="Provider name (e.g. local, openai)."
+    ),
+    paths: list[Path] | None = typer.Option(
+        None, "--path", help="Directories to scan (default: [tool.pyqtest].paths)."
+    ),
+    cached_only: bool = typer.Option(
+        False, "--cached-only", help="Skip API calls; only read cache."
+    ),
 ) -> None:
     """Populate the embedding cache for *provider_name*."""
     from pyqtest.providers.registry import get as get_provider
@@ -194,14 +208,15 @@ def populate_embeddings(
         typer.echo("--cached-only: no embeddings will be computed.")
         return
     if not provider.is_configured():
-        typer.echo(f"Provider {provider_name!r} is not configured. Check API keys / install extras.")
+        typer.echo(
+            f"Provider {provider_name!r} is not configured. Check API keys / install extras."
+        )
         raise typer.Exit(1)
     try:
         import pyqtest_local.runner as _local_runner  # type: ignore[import-not-found]
     except ImportError:
         typer.echo(
-            "populate-embeddings requires pyqtest-local for now.\n"
-            "  pip install pyqtest-local",
+            "populate-embeddings requires pyqtest-local for now.\n  pip install pyqtest-local",
         )
         raise typer.Exit(1) from None
     local_populate = cast("Callable[..., object]", getattr(_local_runner, "populate", None))
@@ -221,7 +236,9 @@ def populate_embeddings(
 
 @app.command()
 def type_review(
-    report: Path = typer.Option(..., "--json", help="Path to a lint_typecheck_report.json produced by the lint gate."),
+    report: Path = typer.Option(
+        ..., "--json", help="Path to a lint_typecheck_report.json produced by the lint gate."
+    ),
 ) -> None:
     """Iterate type-fix-only the files mentioned in *report*.
 
@@ -231,7 +248,7 @@ def type_review(
     if not report.exists():
         typer.echo(f"Report not found: {report}")
         raise typer.Exit(1)
-    payload = json.loads(report.read_text())
+    payload = json.loads(report.read_text(encoding="utf-8"))
     files = payload.get("files", {})
     pyright_files = [f for f, d in files.items() if d.get("pyright")]
     if not pyright_files:

@@ -1,0 +1,9 @@
+{
+  "data": {
+    "per_file": {
+      "src/example_pkg/__init__.py": 4
+    }
+  },
+  "kind": "lint_typecheck",
+  "schema_version": "1.0"
+}

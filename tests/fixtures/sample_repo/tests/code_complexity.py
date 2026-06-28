@@ -71,7 +71,11 @@ def _extract_items_with_docstrings(
             # Skip @overload stubs
             if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef)):
                 decorators = [
-                    d.id if isinstance(d, ast.Name) else d.attr if isinstance(d, ast.Attribute) else ""
+                    d.id
+                    if isinstance(d, ast.Name)
+                    else d.attr
+                    if isinstance(d, ast.Attribute)
+                    else ""
                     for d in node.decorator_list
                 ]
                 if "overload" in decorators:
@@ -121,10 +125,7 @@ def _get_cog(file_path: Path) -> list[tuple[str, int, int]]:
         return []
     if not hasattr(result, "functions"):
         return []
-    return [
-        (f.name, f.line_start, f.complexity)
-        for f in result.functions
-    ]
+    return [(f.name, f.line_start, f.complexity) for f in result.functions]
 
 
 def _get_mi(file_path: Path) -> float:
@@ -197,7 +198,9 @@ class TestDocstringCoverage:
             detail = "\n".join(
                 f"{d}/:\n" + "\n".join(items) for d, items in sorted(all_missing.items())
             )
-            pytest.fail("Docstring coverage regression:\n" + "\n".join(violations) + "\n\n" + detail)
+            pytest.fail(
+                "Docstring coverage regression:\n" + "\n".join(violations) + "\n\n" + detail
+            )
 
 
 class TestLineCount:
@@ -267,7 +270,8 @@ class TestCyclomaticComplexity:
             pytest.skip("Updated CC baselines")
         if violations:
             pytest.fail(
-                f"Cyclomatic complexity violations (threshold {threshold}):\n" + "\n".join(violations),
+                f"Cyclomatic complexity violations (threshold {threshold}):\n"
+                + "\n".join(violations),
             )
 
 
@@ -308,7 +312,8 @@ class TestCognitiveComplexity:
             pytest.skip("Updated COG baselines")
         if violations:
             pytest.fail(
-                f"Cognitive complexity violations (threshold {threshold}):\n" + "\n".join(violations),
+                f"Cognitive complexity violations (threshold {threshold}):\n"
+                + "\n".join(violations),
             )
 
 

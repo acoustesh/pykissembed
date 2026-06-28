@@ -84,9 +84,7 @@ def _all_functions_short(file_path: Path, max_lines: int = SMALL_FUNCTION_THRESH
         tree = ast.parse(source, filename=str(file_path))
     except SyntaxError:
         return False
-    functions = [
-        n for n in ast.walk(tree) if isinstance(n, ast.FunctionDef | ast.AsyncFunctionDef)
-    ]
+    functions = [n for n in ast.walk(tree) if isinstance(n, ast.FunctionDef | ast.AsyncFunctionDef)]
     if not functions:
         return False
     return all(_code_body_lines(n) < max_lines for n in functions)

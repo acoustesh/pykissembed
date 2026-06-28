@@ -154,7 +154,9 @@ def test_no_lint_or_type_errors(
     envelope = load_envelope(baseline_file, kind="lint_typecheck")
 
     if update_baselines:
-        envelope.data = {"per_file": {f: len(d["ruff"]) + len(d["pyright"]) for f, d in report["files"].items()}}
+        envelope.data = {
+            "per_file": {f: len(d["ruff"]) + len(d["pyright"]) for f, d in report["files"].items()}
+        }
         save_envelope(baseline_file, envelope)
         pytest.skip("Updated lint/typecheck baselines")
 
@@ -165,9 +167,7 @@ def test_no_lint_or_type_errors(
         count = len(diags["ruff"]) + len(diags["pyright"])
         baseline = per_file_baseline.get(file_path, 0)
         if count > baseline:
-            detail = "\n".join(
-                f"    ruff:   {d['code']}: {d['message']}" for d in diags["ruff"]
-            )
+            detail = "\n".join(f"    ruff:   {d['code']}: {d['message']}" for d in diags["ruff"])
             detail += "\n" + "\n".join(
                 f"    pyright: {d['code']}: {d['message']}" for d in diags["pyright"]
             )

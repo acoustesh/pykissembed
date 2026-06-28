@@ -1,0 +1,42 @@
+{
+  "files": {
+    "src/example_pkg/__init__.py": {
+      "ruff": [
+        {
+          "code": "F822",
+          "message": "Undefined name `add` in `__all__`",
+          "line": 7,
+          "col": 27
+        },
+        {
+          "code": "F822",
+          "message": "Undefined name `greet` in `__all__`",
+          "line": 7,
+          "col": 34
+        },
+        {
+          "code": "F822",
+          "message": "Undefined name `no_docstring_func` in `__all__`",
+          "line": 7,
+          "col": 43
+        },
+        {
+          "code": "F822",
+          "message": "Undefined name `too_complex` in `__all__`",
+          "line": 7,
+          "col": 64
+        }
+      ],
+      "pyright": []
+    }
+  },
+  "summary": {
+    "total_files": 1,
+    "ruff_errors": 4,
+    "pyright_errors": 0,
+    "pyright_warnings": 0,
+    "pyright_information": 0,
+    "pyright_hints": 0,
+    "total": 4
+  }
+}
