@@ -55,9 +55,15 @@ dependencies = [
 local = [
     "pykissembed-local",
 ]
-# Cloud embedding providers (openai / voyage / codestral / gemini) — separate subpackage.
+# Cloud embedding providers (openai / gemini / qwen via OpenRouter) — separate subpackage.
 cloud = [
     "pykissembed-cloud",
+]
+# Convenience: install both extras in one go.
+#     uv add "pykissembed[all]"
+all = [
+    "pykissembed[local]",
+    "pykissembed[cloud]",
 ]
 
 [project.scripts]
@@ -112,6 +118,7 @@ markers = [
     "experimental: unstable APIs — refactor_index, file_split",
     "live: live network / model-load tests (skipped by default; opt in with -m live)",
         "smoke: fast subset of live tests suitable for CI (e.g. -m live-and-smoke)",
+        "slow: heavyweight tests (uv sync, wheel builds); opt in with -m slow",
 ]
 python_files = ["test_*.py"]
 python_classes = ["Test*"]

@@ -17,6 +17,12 @@ checks behind a single config block.
 pip install pykissembed
 ```
 
+Or with `uv`:
+
+```bash
+uv add pykissembed
+```
+
 Add a single `[tool.pykissembed]` block to your `pyproject.toml`:
 
 ```toml
@@ -86,28 +92,37 @@ Test**. The debug configurations in `.vscode/launch.json` set the right
 
 ---
 
-## Adding similarity (embedding-based near-duplicate detection)
+## Install extras
 
-Recommended path: **local sentence-transformers provider** — no API key, no
-network, runs in CI:
+The core package ships lint, type-check, complexity, docstring, and comment
+density gates. Embedding-based similarity is opt-in via extras:
+
+| Extras | Command | What you get |
+| --- | --- | --- |
+| *(none)* | `uv add pykissembed` | Lint, type-check, complexity, docstring, density |
+| `local` | `uv add "pykissembed[local]"` | Adds the `local` sentence-transformers provider |
+| `cloud` | `uv add "pykissembed[cloud]"` | Adds `openai`, `gemini`, `qwen` providers via OpenRouter |
+| `all` | `uv add "pykissembed[all]"` | Both `local` and `cloud` at once |
+
+After installing an extra, populate the cache and run the suite:
 
 ```bash
-pip install pykissembed-local
+# Local — no API key, runs offline once the model is downloaded
 pykissembed populate-embeddings --provider local
 pytest -m similarity
-```
 
-For cloud providers (OpenAI / Gemini / Qwen via OpenRouter):
-
-```bash
-pip install pykissembed-cloud
-# A single key enables all three providers
+# Cloud — one key enables all three providers
 export OPENROUTER_API_KEY=sk-or-...
 # ... or drop the key into a .env file at the project root
 pykissembed populate-embeddings --provider openai
 pykissembed populate-embeddings --provider gemini
 pykissembed populate-embeddings --provider qwen
+pytest -m similarity
 ```
+
+> **Why extras?** `pykissembed-local` pulls `sentence-transformers` (~hundreds
+> of MB) and `pykissembed-cloud` pulls the `openai` client. Keeping them
+> optional means slim projects don't pay for similarity they don't use.
 
 ---
 
