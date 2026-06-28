@@ -13,7 +13,10 @@
 # Workflow_call inputs (all optional except mode):
 name: pykissembed
 
-on:
+# `on:` must be quoted — YAML 1.1 treats `on` as a boolean alias for
+# `true`, which silently breaks the file and makes GitHub report
+# "Unable to find reusable workflow" when something tries to call it.
+"on":
   workflow_call:
     inputs:
       python-version:

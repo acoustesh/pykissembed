@@ -30,7 +30,7 @@
 
 name: publish-testpypi
 
-on:
+"on":
   push:
     tags:
       - "v*.*.*"

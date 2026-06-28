@@ -22,7 +22,7 @@
 
 name: publish-testpypi-cloud
 
-on:
+"on":
   push:
     tags:
       - "v*.*.*"

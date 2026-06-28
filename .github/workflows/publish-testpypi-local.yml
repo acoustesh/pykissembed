@@ -22,7 +22,7 @@
 
 name: publish-testpypi-local
 
-on:
+"on":
   push:
     tags:
       - "v*.*.*"

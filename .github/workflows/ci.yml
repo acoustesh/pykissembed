@@ -5,7 +5,7 @@
 # works on a clean tree.
 name: CI
 
-on:
+"on":
   push:
     branches: [main]
   pull_request:
