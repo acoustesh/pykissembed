@@ -63,10 +63,10 @@ jobs:
           python -m pip install --upgrade pip
           python -m pip install .
           if [ "${{ inputs.install-local }}" = "true" ]; then
-            pip install ./pykissembed-local
+            pip install ./pykissembed_local
           fi
           if [ "${{ inputs.install-cloud }}" = "true" ]; then
-            pip install ./pykissembed-cloud
+            pip install ./pykissembed_cloud
           fi
 
       - name: Init baselines (first run only)
