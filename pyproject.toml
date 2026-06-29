@@ -85,6 +85,7 @@ local = "pykissembed.providers.local:LocalProvider"
 dev = [
     "pytest-cov>=5.0",
     "pytest-xdist>=3.6",
+    "twine>=6.0",
 ]
 
 [tool.hatch.build.targets.wheel]
