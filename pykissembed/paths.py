@@ -11,11 +11,80 @@ Implements the layered discovery model from the design notes:
 
 from __future__ import annotations
 
+from collections.abc import Iterator
 from pathlib import Path
 
 from pykissembed.config import get_config
 
 _COMMON_DIRS = ("src", "scripts", "lib")
+
+# Directories that should never be scanned for Python source files.
+# These are either virtual environments, build artifacts, or dependency
+# caches that contain third-party code (which may include non-UTF-8 files).
+_IGNORED_DIRS = frozenset(
+    {
+        ".venv",
+        "venv",
+        ".env",
+        "env",
+        "__pycache__",
+        ".git",
+        ".hg",
+        ".svn",
+        "node_modules",
+        ".tox",
+        ".eggs",
+        ".mypy_cache",
+        ".pyright",
+        ".pytest_cache",
+        ".ruff_cache",
+        "build",
+        "dist",
+        ".pykissembed_cache",
+        "site-packages",
+    }
+)
+
+
+def _should_skip(path: Path) -> bool:
+    """Return True if *path* is inside an ignored directory.
+
+    Parameters
+    ----------
+    path : Path
+        File or directory path to check.
+
+    Returns
+    -------
+    bool
+        ``True`` if any component of *path* is in ``_IGNORED_DIRS``.
+    """
+    return any(part in _IGNORED_DIRS for part in path.parts)
+
+
+def iter_py_files(base_dir: Path) -> Iterator[Path]:
+    """Yield every ``.py`` file under *base_dir* (recursive), skipping ignored dirs.
+
+    Skips files whose names start with ``__`` and any file inside a
+    directory listed in ``_IGNORED_DIRS`` (e.g. ``.venv/``,
+    ``__pycache__/``, ``node_modules/``).
+
+    Parameters
+    ----------
+    base_dir : Path
+        Root directory to scan recursively.
+
+    Yields
+    ------
+    Path
+        Each Python file under *base_dir*, sorted for determinism.
+    """
+    for py_file in sorted(base_dir.rglob("*.py")):
+        if py_file.name.startswith("__"):
+            continue
+        if _should_skip(py_file):
+            continue
+        yield py_file
 
 
 def resolve_paths() -> list[Path]:

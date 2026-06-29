@@ -8,17 +8,14 @@ from __future__ import annotations
 import ast
 from dataclasses import dataclass
 from pathlib import Path
-from typing import TYPE_CHECKING, cast
+from typing import cast
 
 import pytest
 from radon.raw import analyze  # type: ignore[import-untyped]
 
 from pykissembed.baselines_engine import load_envelope, save_envelope
 from pykissembed.config import get_config
-
-if TYPE_CHECKING:
-    from collections.abc import Iterator
-
+from pykissembed.paths import iter_py_files as _iter_py_files
 
 DEFAULT_MIN_DENSITY = 5.0
 DEFAULT_MAX_DENSITY = 40.0
@@ -32,14 +29,6 @@ class CommentStats:
     sloc: int
     comments: int
     density_pct: float
-
-
-def _iter_py_files(base_dir: Path) -> Iterator[Path]:
-    """Yield every ``.py`` file under *base_dir* (recursive)."""
-    for py_file in sorted(base_dir.rglob("*.py")):
-        if py_file.name.startswith("__") or "__pycache__" in py_file.parts:
-            continue
-        yield py_file
 
 
 def _get_int_attr(obj: object, attr_name: str) -> int:
@@ -79,7 +68,10 @@ def _code_body_lines(node: ast.FunctionDef | ast.AsyncFunctionDef) -> int:
 
 def _all_functions_short(file_path: Path, max_lines: int = SMALL_FUNCTION_THRESHOLD) -> bool:
     """Return True if every function's code body is shorter than *max_lines*."""
-    source = file_path.read_text(encoding="utf-8")
+    try:
+        source = file_path.read_text(encoding="utf-8")
+    except (UnicodeDecodeError, OSError):
+        return False
     try:
         tree = ast.parse(source, filename=str(file_path))
     except SyntaxError:
@@ -91,7 +83,11 @@ def _all_functions_short(file_path: Path, max_lines: int = SMALL_FUNCTION_THRESH
 
 
 def _file_stats(file_path: Path) -> CommentStats:
-    return _comment_density_from_source(file_path.read_text(encoding="utf-8"))
+    try:
+        source = file_path.read_text(encoding="utf-8")
+    except (UnicodeDecodeError, OSError):
+        return CommentStats(sloc=0, comments=0, density_pct=0.0)
+    return _comment_density_from_source(source)
 
 
 class TestCommentDensity:

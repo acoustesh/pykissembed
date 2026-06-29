@@ -11,7 +11,7 @@ from importlib import import_module
 from typing import TYPE_CHECKING, cast
 
 from pykissembed.config import get_config
-from pykissembed.paths import resolve_paths
+from pykissembed.paths import _should_skip, resolve_paths
 
 if TYPE_CHECKING:
     from pathlib import Path
@@ -137,7 +137,7 @@ def _load_dir_complexity(
 
     glob_fn = directory.rglob if recursive else directory.glob
     for py_file in glob_fn("*.py"):
-        if "__pycache__" in py_file.parts or py_file.name.startswith("__"):
+        if py_file.name.startswith("__") or _should_skip(py_file):
             continue
         rel = py_file.relative_to(directory)
         key_prefix = f"{prefix}{rel}"

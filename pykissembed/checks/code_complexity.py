@@ -11,7 +11,7 @@ import ast
 import importlib
 from collections.abc import Callable
 from pathlib import Path
-from typing import TYPE_CHECKING, TypedDict, cast
+from typing import TypedDict, cast
 
 import pytest
 
@@ -21,9 +21,7 @@ from pykissembed.baselines_engine import (
     save_envelope,
 )
 from pykissembed.config import get_config
-
-if TYPE_CHECKING:
-    from collections.abc import Iterator
+from pykissembed.paths import iter_py_files as _iter_py_files
 
 
 class _BaselineConfig(TypedDict, total=False):
@@ -51,20 +49,15 @@ def _load_callable(module_name: str, attribute: str) -> Callable[..., object] | 
     return cast("Callable[..., object]", value)
 
 
-def _iter_py_files(base_dir: Path) -> Iterator[Path]:
-    """Yield every ``.py`` file under *base_dir* (recursive)."""
-    for py_file in sorted(base_dir.rglob("*.py")):
-        if py_file.name.startswith("__") or "__pycache__" in py_file.parts:
-            continue
-        yield py_file
-
-
 def _extract_items_with_docstrings(
     file_path: Path,
 ) -> list[tuple[str, int, bool, str]]:
     """Return ``[(name, line_no, has_docstring, kind), ...]`` for a file."""
     results: list[tuple[str, int, bool, str]] = []
-    source = file_path.read_text(encoding="utf-8")
+    try:
+        source = file_path.read_text(encoding="utf-8")
+    except (UnicodeDecodeError, OSError):
+        return results
     try:
         tree = ast.parse(source, filename=str(file_path))
     except SyntaxError:
@@ -99,7 +92,10 @@ def _get_cc(file_path: Path) -> list[tuple[str, int, int]]:
     cc_visit_fn = _load_callable("radon.complexity", "cc_visit")
     if cc_visit_fn is None:
         return []
-    source = file_path.read_text(encoding="utf-8")
+    try:
+        source = file_path.read_text(encoding="utf-8")
+    except (UnicodeDecodeError, OSError):
+        return []
     try:
         raw_blocks_raw = cc_visit_fn(source)
     except SyntaxError:
@@ -145,7 +141,10 @@ def _get_mi(file_path: Path) -> float:
     mi_visit_fn = _load_callable("radon.metrics", "mi_visit")
     if mi_visit_fn is None:
         return 0.0
-    source = file_path.read_text(encoding="utf-8")
+    try:
+        source = file_path.read_text(encoding="utf-8")
+    except (UnicodeDecodeError, OSError):
+        return 0.0
     try:
         score = mi_visit_fn(source, multi=False)
     except Exception:

@@ -14,7 +14,7 @@ import tokenize
 from typing import TYPE_CHECKING
 
 from pykissembed.config import get_config
-from pykissembed.paths import resolve_paths
+from pykissembed.paths import _should_skip, resolve_paths
 from pykissembed.similarity.types import FunctionInfo
 
 if TYPE_CHECKING:
@@ -301,7 +301,7 @@ def extract_function_infos(
         for p in glob_fn("*.py")
         if not p.name.startswith("__")
         and not any(p.name.startswith(ep) for ep in exclude_prefixes)
-        and "__pycache__" not in p.parts
+        and not _should_skip(p)
         for fn in _extract_functions_from_source(
             p.read_text(encoding="utf-8"),
             p,
