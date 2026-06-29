@@ -11,7 +11,7 @@ checks behind a single config block.
 
 ---
 
-## Quick start (lint + type + complexity + docstrings — out of the box)
+## Quick start
 
 ```bash
 pip install pykissembed
@@ -34,9 +34,12 @@ mode = "ratchet"                       # default; alternative: "strict"
 Then run:
 
 ```bash
-pytest                 # runs all installed checks
+pytest                 # runs all installed checks automatically
 pytest -m lint         # lint + type-check gate
 pytest -m complexity   # CC + COG + MI + line counts + docstrings
+pytest -m density      # comment density
+pytest -m docstring_format  # NumPy docstring format (ruff D rules)
+pytest -m similarity    # embedding-based near-duplicate detection
 ```
 
 Seed the baselines on a clean tree (so CI doesn't fail before you've fixed
@@ -46,6 +49,113 @@ anything):
 pytest --update-baselines   # write baselines = current diagnostics
 git add tests/baselines && git commit -m "seed pykissembed baselines"
 ```
+
+### How check modules are collected
+
+pykissembed's pytest plugin automatically injects the installed
+`pykissembed/checks/` directory into pytest's collection paths. This means
+the check modules (`code_complexity.py`, `code_similarity.py`,
+`comment_density.py`, `docstring_format.py`, `lint_typecheck.py`) are
+discovered and run in **any** consumer project — no need to copy test files
+or configure `testpaths`. The plugin's `pytest_collect_file` hook
+(registered with `tryfirst=True`) collects these modules before pytest's
+default `python_files` filter can reject them.
+
+---
+
+## Complexity tests
+
+The complexity gate (`pytest -m complexity`) enforces:
+
+- **Docstring coverage** — all functions, methods, and classes in configured
+  paths must have docstrings. Missing docstrings are counted per-directory
+  and fail if they exceed the baseline.
+- **File line counts** — per-file line count vs baseline.
+- **Cyclomatic complexity (CC)** — per-function CC via `radon`, fails if
+  above threshold (default 15) or per-function baseline.
+- **Cognitive complexity (COG)** — per-function cognitive complexity via
+  `complexipy`, fails if above threshold (default 15) or per-function baseline.
+- **Maintainability Index (MI)** — per-file MI via `radon`, fails if below
+  threshold (default 13) or per-file baseline.
+
+Baselines are stored in `tests/baselines/complexity.json` as a versioned
+envelope. Update with `pytest --update-baselines`.
+
+---
+
+## Similarity tests
+
+The similarity gate (`pytest -m similarity`) detects near-duplicate functions
+using embedding providers. It supports 9 providers:
+
+| Provider | Model | Hash type | Default pair threshold |
+| --- | --- | --- | --- |
+| OpenAI-Text | text-embedding-3-large | text_hash | 0.86 |
+| OpenAI-AST | text-embedding-3-large | ast_hash | 0.86 |
+| Codestral-Text | codestral-embed-2505 | text_hash | 0.97 |
+| Codestral-AST | codestral-embed-2505 | ast_hash | 0.97 |
+| Voyage-Text | voyage-code-3 | text_hash | 0.95 |
+| Voyage-AST | voyage-code-3 | ast_hash | 0.95 |
+| Gemini-Text | gemini-embedding-001 | text_hash | 0.90 |
+| Gemini-AST | gemini-embedding-001 | ast_hash | 0.90 |
+| Combined | 8-way concatenation | text_hash | 0.88 |
+
+Each provider detects:
+- **Pairwise similarity** — finds copy-paste code (similarity ≥ pair threshold)
+- **Neighbor clustering** — finds functions with ≥2 similar counterparts
+- **Refactor index** — combines complexity + similarity for priority ranking
+
+### Prerequisites
+
+Similarity requires embedding caches. Install an extra and populate the cache:
+
+```bash
+# Local — no API key, runs offline once the model is downloaded
+pip install "pykissembed[local]"
+pykissembed populate-embeddings --provider local
+
+# Cloud — requires API keys
+pip install "pykissembed[cloud]"
+export OPENAI_API_KEY=sk-...
+export OPENROUTER_API_KEY=sk-or-...
+export VOYAGE_API_KEY=pa-...
+export GOOGLE_API_KEY=...
+pykissembed populate-embeddings --provider openai-text
+pykissembed populate-embeddings --provider openai-ast
+# ... or populate all at once:
+python -m pykissembed.similarity.populate_embeddings
+```
+
+### Running similarity tests
+
+```bash
+# Run all similarity tests (uses cached embeddings; skips if missing)
+pytest -m similarity
+
+# Use only cached embeddings — skip if any are missing (no API calls)
+pytest -m similarity --cached-only
+
+# Update baselines (auto-populates missing embeddings via API)
+pytest -m similarity --update-baselines
+```
+
+### Similarity infrastructure
+
+The `pykissembed.similarity` sub-package provides:
+
+| Module | Purpose |
+| --- | --- |
+| `types.py` | `FunctionInfo` dataclass, `PCAModel` protocol |
+| `constants.py` | Config-driven path resolution |
+| `storage.py` | `EmbeddingRegistry`, compressed embedding cache, baselines I/O |
+| `ast_helpers.py` | Function extraction from Python AST |
+| `complexity.py` | CC/COG complexity map loaders |
+| `embeddings.py` | API clients (OpenAI, Codestral, Voyage, Gemini) with retry |
+| `pca.py` | PCA dimensionality reduction (GPU/cuML with CPU/sklearn fallback) |
+| `refactor_index.py` | Refactor index: `0.25*CC + 0.15*COG + 0.6*similarity_index` |
+| `file_split.py` | File split proposal via PCA + k-means clustering |
+| `checks.py` | Unified similarity check workflow |
+| `populate_embeddings.py` | CLI to fetch missing embeddings from APIs |
 
 ---
 
@@ -60,7 +170,7 @@ panel**. Open the workspace, install the recommended extensions
 
 | Package | Command | Count |
 | --- | --- | --- |
-| `pykissembed` (core) | `uv run pytest -m "not live"` | 39 |
+| `pykissembed` (core) | `uv run pytest -m "not live"` | 66 |
 | `pykissembed_cloud` | `uv run pytest -m "not live"` | 27 |
 | `pykissembed_local` | `uv run pytest -m "not live"` | 19 |
 
@@ -94,54 +204,48 @@ Test**. The debug configurations in `.vscode/launch.json` set the right
 
 ## Install extras
 
-The core package ships lint, type-check, complexity, docstring, and comment
-density gates. Embedding-based similarity is opt-in via extras:
+The core package ships lint, type-check, complexity, docstring, comment
+density, and the full similarity infrastructure (PCA, refactor index, file
+split). Embedding providers are opt-in via extras:
 
 | Extras | Command | What you get |
 | --- | --- | --- |
-| *(none)* | `uv add pykissembed` | Lint, type-check, complexity, docstring, density |
+| *(none)* | `uv add pykissembed` | Lint, type, complexity, docstring, density, similarity (skips without providers) |
 | `local` | `uv add "pykissembed[local]"` | Adds the `local` sentence-transformers provider |
 | `cloud` | `uv add "pykissembed[cloud]"` | Adds `openai`, `gemini`, `qwen` providers via OpenRouter |
 | `all` | `uv add "pykissembed[all]"` | Both `local` and `cloud` at once |
 
 ### Installing from TestPyPI (current release channel)
 
-Until `pykissembed` reaches production PyPI, pass the TestPyPI index
-directly on the command line — the named-index form (`--index ./testpypi`)
-is unreliable in `uv 0.11.x`. Add the platform pin to your consumer
-project's `pyproject.toml`:
+Until `pykissembed` reaches production PyPI, add TestPyPI as an explicit
+index in your consumer project's `pyproject.toml`:
 
 ```toml
-# Pin resolution to the platforms you actually ship. pykissembed is
-# published as `py3-none-any` wheels, but locking the resolver prevents
-# `uv` from probing for versions in marker combinations you don't use.
-[tool.uv]
-environments = ["sys_platform == 'linux'"]
+[[tool.uv.index]]
+name = "testpypi"
+url = "https://test.pypi.org/simple/"
+explicit = true
+
+[tool.uv.sources]
+pykissembed = { index = "testpypi" }
+pykissembed-local = { index = "testpypi" }
+pykissembed-cloud = { index = "testpypi" }
 ```
 
-Then add the package by passing the URL inline:
+Then:
 
 ```bash
-uv add "pykissembed[all]==0.1.1" --index https://test.pypi.org/simple/
+uv add "pykissembed[all]"
+uv lock --upgrade-package pykissembed --upgrade-package pykissembed-cloud --upgrade-package pykissembed-local
+uv sync
+uv run pykissembed --version    # should show 0.1.4
 ```
 
-> **Troubleshooting `No solution found when resolving dependencies for
-> split`**: this means `uv` queried TestPyPI successfully but found no
-> matching version. Check the GitHub Actions runs for the `v0.1.1` tag
-> to confirm all three packages actually published; if any failed, the
-> dependent package's `[all]` extra can't resolve.
+> **Important:** If `uv lock --upgrade-package` doesn't pick up the new
+> version, delete `uv.lock` and run `uv lock` fresh. This forces a full
+> re-resolution from TestPyPI.
 
-> **Why pin `environments`?** Without it, `uv` tries to resolve your
-> `uv.lock` for every `(python_version, sys_platform)` pair it can derive
-> — including combinations like `python_full_version >= '3.14' and
-> sys_platform == 'win32'` that no one on the team uses. Limiting the
-> resolver to your real targets makes the lock fast and removes the
-> *"No solution found when resolving dependencies for split"* error.
-
-When production PyPI is set up, drop the `[tool.uv] environments` line and
-use the plain `uv add "pykissembed[all]"` form from the table above.
-
-After installing an extra, populate the cache and run the suite:
+After installing, populate the cache and run the suite:
 
 ```bash
 # Local — no API key, runs offline once the model is downloaded
