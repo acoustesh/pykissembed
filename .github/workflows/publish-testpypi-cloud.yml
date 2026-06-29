@@ -39,14 +39,14 @@ jobs:
         run: python -m pip install --upgrade build
 
       - name: Build sdist + wheel
-        working-directory: pykissembed-cloud
+        working-directory: pykissembed_cloud
         run: python -m build --sdist --wheel
 
       - name: Upload artifacts
         uses: actions/upload-artifact@v4
         with:
           name: dist-pykissembed-cloud
-          path: pykissembed-cloud/dist/
+          path: pykissembed_cloud/dist/
 
   publish:
     name: Publish pykissembed-cloud to TestPyPI
@@ -57,11 +57,11 @@ jobs:
       - uses: actions/download-artifact@v4
         with:
           name: dist-pykissembed-cloud
-          path: pykissembed-cloud/dist/
+          path: pykissembed_cloud/dist/
 
       - uses: pypa/gh-action-pypi-publish@release/v1
         with:
-          packages-dir: pykissembed-cloud/dist/
+          packages-dir: pykissembed_cloud/dist/
           repository-url: https://test.pypi.org/legacy/
           # skip-existing avoids spurious failures when the same tag
           # is re-pushed; the version is still monotonic across tags.
