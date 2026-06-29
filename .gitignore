@@ -16,3 +16,4 @@ venv/
 # Embedding caches — never commit
 tests/.pykissembed_cache/
 .env
+.pypirc
