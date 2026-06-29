@@ -273,8 +273,9 @@ def init(
 ) -> None:
     """Scaffold a ``[tool.pykissembed]`` block in ``pyproject.toml``.
 
-    This is documented but disrecommended — the recommended path is to
-    add the block manually. Use ``--force`` to overwrite an existing block.
+    Auto-detects source directories from the project layout (``src/``,
+    ``[tool.setuptools]`` packages, or ``.`` as fallback). Use ``--force``
+    to overwrite an existing block.
     """
     config = get_config()
     pyproject = config.root / "pyproject.toml"
@@ -285,9 +286,14 @@ def init(
     if "[tool.pykissembed]" in text and not force:
         typer.echo("[tool.pykissembed] already present. Use --force to overwrite.")
         raise typer.Exit(1)
+
+    # Auto-detect source directories from the project layout
+    detected_paths = _auto_detect_paths(config.root, text)
+    paths_str = ", ".join(f'"{p}"' for p in detected_paths)
+
     block = (
         "\n[tool.pykissembed]\n"
-        'paths = ["src"]\n'
+        f"paths = [{paths_str}]\n"
         'mode = "ratchet"\n'
         'baseline_dir = "tests/baselines"\n'
         'cache_dir = "tests/.pykissembed_cache"\n'
@@ -300,7 +306,66 @@ def init(
     else:
         text = text.rstrip() + "\n" + block
     pyproject.write_text(text)
-    typer.echo(f"Added [tool.pykissembed] to {pyproject}.")
+    typer.echo(f"Added [tool.pykissembed] to {pyproject} (paths={detected_paths}).")
+
+
+def _auto_detect_paths(root: Path, pyproject_text: str) -> list[str]:
+    """Auto-detect source directories from the project layout.
+
+    Priority:
+    1. ``[tool.setuptools.packages.find]`` ``where`` field
+    2. ``[project]`` ``packages`` (hatchling ``packages`` list)
+    3. ``src/`` directory if it exists
+    4. ``.`` (current directory) as fallback
+    """
+    import tomllib
+
+    try:
+        data = tomllib.loads(pyproject_text)
+    except Exception:
+        data = {}
+
+    # 1. setuptools packages.find.where
+    tools = data.get("tool", {})
+    if isinstance(tools, dict):
+        setuptools = tools.get("setuptools", {})
+        if isinstance(setuptools, dict):
+            find = setuptools.get("packages", {})
+            if isinstance(find, dict):
+                where = find.get("where")
+                if isinstance(where, str):
+                    return [where]
+                if isinstance(where, list) and where:
+                    return [str(w) for w in where]
+
+    # 2. hatchling packages list
+    hatch = tools.get("hatch", {})
+    if isinstance(hatch, dict):
+        build_targets = hatch.get("build", {})
+        if isinstance(build_targets, dict):
+            targets = build_targets.get("targets", {})
+            if isinstance(targets, dict):
+                wheel = targets.get("wheel", {})
+                if isinstance(wheel, dict):
+                    packages = wheel.get("packages")
+                    if isinstance(packages, list) and packages:
+                        # Extract directory names from package paths
+                        dirs: list[str] = []
+                        for pkg in packages:
+                            if isinstance(pkg, str):
+                                # "src/pykissembed" → "src"
+                                parts = pkg.split("/")
+                                if parts[0] not in dirs:
+                                    dirs.append(parts[0])
+                        if dirs:
+                            return dirs
+
+    # 3. src/ directory
+    if (root / "src").is_dir():
+        return ["src"]
+
+    # 4. Fallback
+    return ["."]
 
 
 __all__ = ["app", "load_config"]

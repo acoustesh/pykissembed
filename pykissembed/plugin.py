@@ -7,7 +7,11 @@ Loaded automatically by pytest when pykissembed is installed (via the
   pykissembed's own check modules,
 * registers a ``pytest_configure`` hook that adds the project's source
   directories to ``sys.path`` (so pykissembed can import the user's code
-  for similarity and refactor-index computations).
+  for similarity and refactor-index computations),
+* **collects the check modules** (``pykissembed/checks/*.py``) as test
+  modules via :func:`pytest_collect_file`, so they run automatically in
+  any consumer project that has pykissembed installed — no need for the
+  consumer to copy test files or configure ``testpaths``.
 """
 
 from __future__ import annotations
@@ -16,6 +20,21 @@ import os
 from pathlib import Path
 
 import pytest
+
+# Modules inside pykissembed/checks/ that contain test classes/functions.
+# These are collected by the plugin and run in the consumer's pytest session.
+_CHECK_MODULES = [
+    "code_complexity",
+    "code_similarity",
+    "comment_density",
+    "docstring_format",
+    "lint_typecheck",
+]
+
+# Set of file stems that the plugin should collect as test modules.
+# Used by :func:`pytest_collect_file` to decide whether a .py file inside
+# the installed pykissembed package is a check module.
+_CHECK_STEMS = frozenset(_CHECK_MODULES)
 
 
 def pytest_addoption(parser: pytest.Parser) -> None:
@@ -102,3 +121,41 @@ def pytest_configure(config: pytest.Config) -> None:
         sp = str(p)
         if sp not in sys.path and p.exists():
             sys.path.insert(0, sp)
+
+
+def _checks_dir() -> Path | None:
+    """Return the path to the installed ``pykissembed/checks/`` directory."""
+    try:
+        import pykissembed.checks as checks_pkg
+    except ImportError:  # pragma: no cover — defensive
+        return None
+    # checks_pkg.__file__ is .../pykissembed/checks/__init__.py
+    if checks_pkg.__file__ is None:  # namespace package
+        return None
+    return Path(checks_pkg.__file__).parent
+
+
+@pytest.hookimpl(trylast=True)
+def pytest_collect_file(file_path: Path, parent: pytest.Collector) -> pytest.Module | None:
+    """Collect pykissembed's check modules as test modules.
+
+    This hook makes the check modules (``code_complexity.py``,
+    ``comment_density.py``, etc.) discoverable by pytest in *any* consumer
+    project — without the consumer needing to configure ``testpaths`` or
+    copy test files. The modules are collected only if they live inside
+    the installed ``pykissembed/checks/`` directory and their stem matches
+    a known check module name.
+    """
+    if file_path.suffix != ".py":
+        return None
+    if file_path.stem not in _CHECK_STEMS:
+        return None
+    checks = _checks_dir()
+    if checks is None:
+        return None
+    # Only collect if this file is inside pykissembed/checks/
+    try:
+        file_path.relative_to(checks)
+    except ValueError:
+        return None
+    return pytest.Module.from_parent(parent, path=file_path)

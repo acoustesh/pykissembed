@@ -107,7 +107,8 @@ class TestInit:
         result = runner.invoke(app, ["init", "--force"])
         assert result.exit_code == 0
         text = pyproject.read_text()
-        assert 'paths = ["src"]' in text
+        # Auto-detect: no src/ dir in the temp project → falls back to "."
+        assert 'paths = ["."]' in text
 
 
 class TestPopulateEmbeddingsMissingProvider:
