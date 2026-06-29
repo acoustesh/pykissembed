@@ -16,6 +16,7 @@ from radon.raw import analyze  # type: ignore[import-untyped]
 from pykissembed.baselines_engine import load_envelope, save_envelope
 from pykissembed.config import get_config
 from pykissembed.paths import iter_py_files as _iter_py_files
+from pykissembed.paths import warn_non_utf8
 
 DEFAULT_MIN_DENSITY = 5.0
 DEFAULT_MAX_DENSITY = 40.0
@@ -70,7 +71,8 @@ def _all_functions_short(file_path: Path, max_lines: int = SMALL_FUNCTION_THRESH
     """Return True if every function's code body is shorter than *max_lines*."""
     try:
         source = file_path.read_text(encoding="utf-8")
-    except (UnicodeDecodeError, OSError):
+    except (UnicodeDecodeError, OSError) as exc:
+        warn_non_utf8(file_path, exc)
         return False
     try:
         tree = ast.parse(source, filename=str(file_path))
@@ -85,7 +87,8 @@ def _all_functions_short(file_path: Path, max_lines: int = SMALL_FUNCTION_THRESH
 def _file_stats(file_path: Path) -> CommentStats:
     try:
         source = file_path.read_text(encoding="utf-8")
-    except (UnicodeDecodeError, OSError):
+    except (UnicodeDecodeError, OSError) as exc:
+        warn_non_utf8(file_path, exc)
         return CommentStats(sloc=0, comments=0, density_pct=0.0)
     return _comment_density_from_source(source)
 

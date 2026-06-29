@@ -11,6 +11,7 @@ Implements the layered discovery model from the design notes:
 
 from __future__ import annotations
 
+import warnings
 from collections.abc import Iterator
 from pathlib import Path
 
@@ -114,3 +115,28 @@ def resolve_paths() -> list[Path]:
 def root() -> Path:
     """Return the project root (parent of ``pyproject.toml``)."""
     return get_config().root
+
+
+def warn_non_utf8(file_path: Path, exc: Exception) -> None:
+    """Emit a UserWarning when a file cannot be read as UTF-8.
+
+    Non-UTF-8 files are suspicious in Python projects — they may be
+    malicious (e.g. obfuscated payloads using exotic encodings like
+    Big5) or simply misplaced binary data. The file is skipped, but
+    the consumer is warned so they can investigate.
+
+    Parameters
+    ----------
+    file_path : Path
+        The file that failed to decode.
+    exc : Exception
+        The exception that was raised (``UnicodeDecodeError`` or
+        ``OSError``).
+    """
+    warnings.warn(
+        f"pykissembed: skipping {file_path} — not valid UTF-8 "
+        f"({type(exc).__name__}: {exc}). "
+        "Non-UTF-8 Python files may be malicious; investigate if unexpected.",
+        UserWarning,
+        stacklevel=2,
+    )

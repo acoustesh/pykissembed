@@ -22,6 +22,7 @@ from pykissembed.baselines_engine import (
 )
 from pykissembed.config import get_config
 from pykissembed.paths import iter_py_files as _iter_py_files
+from pykissembed.paths import warn_non_utf8
 
 
 class _BaselineConfig(TypedDict, total=False):
@@ -56,7 +57,8 @@ def _extract_items_with_docstrings(
     results: list[tuple[str, int, bool, str]] = []
     try:
         source = file_path.read_text(encoding="utf-8")
-    except (UnicodeDecodeError, OSError):
+    except (UnicodeDecodeError, OSError) as exc:
+        warn_non_utf8(file_path, exc)
         return results
     try:
         tree = ast.parse(source, filename=str(file_path))
@@ -94,7 +96,8 @@ def _get_cc(file_path: Path) -> list[tuple[str, int, int]]:
         return []
     try:
         source = file_path.read_text(encoding="utf-8")
-    except (UnicodeDecodeError, OSError):
+    except (UnicodeDecodeError, OSError) as exc:
+        warn_non_utf8(file_path, exc)
         return []
     try:
         raw_blocks_raw = cc_visit_fn(source)
@@ -143,7 +146,8 @@ def _get_mi(file_path: Path) -> float:
         return 0.0
     try:
         source = file_path.read_text(encoding="utf-8")
-    except (UnicodeDecodeError, OSError):
+    except (UnicodeDecodeError, OSError) as exc:
+        warn_non_utf8(file_path, exc)
         return 0.0
     try:
         score = mi_visit_fn(source, multi=False)
