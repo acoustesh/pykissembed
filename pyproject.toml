@@ -48,6 +48,7 @@ dependencies = [
     "radon>=6.0",
     "complexipy>=0.5",
     "numpy>=1.26",
+    "pandas>=3.0",
 ]
 
 [project.optional-dependencies]
