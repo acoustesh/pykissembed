@@ -1,0 +1,471 @@
+"""Unified similarity check workflow for all embedding providers.
+
+Ported from ``mega-scrapper/tests/similarity/checks.py``. The main
+adaptation is that imports use ``pykissembed.similarity.*`` instead of
+``tests.similarity.*``.
+"""
+
+from __future__ import annotations
+
+from typing import TYPE_CHECKING, TypeGuard, cast
+
+import pytest
+
+from pykissembed.similarity.embeddings import (
+    compute_cosine_similarity,
+    get_cached_embedding,
+)
+from pykissembed.similarity.refactor_index import get_refactor_priority_message
+from pykissembed.similarity.storage import REGISTRY, ProviderEntry
+
+if TYPE_CHECKING:
+    from collections.abc import Callable
+
+    from pykissembed.similarity.types import FunctionInfo, PCAModel
+
+type Baselines = dict[str, object]
+type NeighborEntry = tuple[str, str, int, float]
+type PcaCache = dict[str, tuple[PCAModel | None, int, bool]]
+
+# Provider aliases — single source of truth is REGISTRY in storage.py
+OPENAI_TEXT_PROVIDER = REGISTRY.by_cache_key("openai_text_embeddings")
+OPENAI_AST_PROVIDER = REGISTRY.by_cache_key("openai_ast_embeddings")
+CODESTRAL_TEXT_PROVIDER = REGISTRY.by_cache_key("codestral_text_embeddings")
+CODESTRAL_AST_PROVIDER = REGISTRY.by_cache_key("codestral_ast_embeddings")
+VOYAGE_TEXT_PROVIDER = REGISTRY.by_cache_key("voyage_text_embeddings")
+VOYAGE_AST_PROVIDER = REGISTRY.by_cache_key("voyage_ast_embeddings")
+GEMINI_TEXT_PROVIDER = REGISTRY.by_cache_key("gemini_text_embeddings")
+GEMINI_AST_PROVIDER = REGISTRY.by_cache_key("gemini_ast_embeddings")
+COMBINED_PROVIDER = REGISTRY.by_cache_key("combined_embeddings")
+
+
+def _load_cached_embeddings(
+    baselines: Baselines,
+    functions: list[FunctionInfo],
+    provider: ProviderEntry,
+) -> list[FunctionInfo]:
+    """Load cached embeddings and return list of uncached functions.
+
+    Returns
+    -------
+    list[FunctionInfo]
+        List of functions that did not have a cached embedding.
+    """
+    uncached: list[FunctionInfo] = []
+    for func in functions:
+        # Use provider-specific hash field (text_hash for Text/Combined, hash for AST)
+        content_hash = getattr(func, provider.hash_field)
+        cached = get_cached_embedding(baselines, content_hash, provider.cache_key)
+        if cached is not None:
+            func.embedding = cached
+        else:
+            uncached.append(func)
+    return uncached
+
+
+def _skip_missing_embeddings(uncached: list[FunctionInfo], provider: ProviderEntry) -> None:
+    """Skip test if any functions lack cached embeddings."""
+    uncached_names = [f"{f.file}:{f.name}" for f in uncached[:10]]
+    more_msg = f"\n  ... and {len(uncached) - 10} more" if len(uncached) > 10 else ""
+    pytest.skip(
+        f"{len(uncached)} functions lack cached {provider.label} embeddings.\n"
+        f"Run: pykissembed populate-embeddings --provider "
+        f"{provider.label.lower()}\n  " + "\n  ".join(uncached_names) + more_msg,
+    )
+
+
+def _format_pair_violation(func_a: FunctionInfo, func_b: FunctionInfo, similarity: float) -> str:
+    """Format a single pair violation message.
+
+    Returns
+    -------
+    str
+        Formatted violation string.
+    """
+    return (
+        f"{func_a.file}:{func_a.start_line} {func_a.name}() vs "
+        f"{func_b.file}:{func_b.start_line} {func_b.name}() - "
+        f"similarity: {similarity:.1%}"
+    )
+
+
+def _format_neighbor_violation(func_a: FunctionInfo, similar_neighbors: list[NeighborEntry]) -> str:
+    """Format a neighbor violation message.
+
+    Returns
+    -------
+    str
+        Formatted neighbor violation string.
+    """
+    neighbor_info = ", ".join(f"{f}:{n}() ({s:.1%})" for f, n, _, s in similar_neighbors[:3])
+    return (
+        f"{func_a.file}:{func_a.start_line} {func_a.name}() has "
+        f"{len(similar_neighbors)} similar functions: {neighbor_info}"
+    )
+
+
+def _is_excluded_pair(
+    func_a: FunctionInfo,
+    func_b: FunctionInfo,
+    excluded_file_pairs: list[list[str]],
+    excluded_function_pairs: list[list[str]],
+) -> bool:
+    """Check if two functions belong to an excluded pair.
+
+    Returns
+    -------
+    bool
+        True if the pair is excluded, False otherwise.
+    """
+    # Check file-level exclusions
+    for pair in excluded_file_pairs:
+        if len(pair) != 2:
+            continue
+        pattern_a, pattern_b = pair
+        if (pattern_a in func_a.file and pattern_b in func_b.file) or (
+            pattern_b in func_a.file and pattern_a in func_b.file
+        ):
+            return True
+
+    # Check function-level exclusions
+    func_a_key = f"{func_a.file}:{func_a.name}"
+    func_b_key = f"{func_b.file}:{func_b.name}"
+    for pair in excluded_function_pairs:
+        if len(pair) != 2:
+            continue
+        pattern_a, pattern_b = pair
+        if (pattern_a in func_a_key and pattern_b in func_b_key) or (
+            pattern_b in func_a_key and pattern_a in func_b_key
+        ):
+            return True
+
+    return False
+
+
+def _check_against_others(
+    func_a: FunctionInfo,
+    func_a_idx: int,
+    functions: list[FunctionInfo],
+    threshold_pair: float,
+    threshold_neighbor: float,
+    excluded_file_pairs: list[list[str]] | None = None,
+    excluded_function_pairs: list[list[str]] | None = None,
+) -> tuple[list[str], list[NeighborEntry]]:
+    """Check one function against all later functions in the list.
+
+    Returns
+    -------
+    tuple[list[str], list[tuple]]
+        Tuple of (pair violation messages, neighbor entry tuples).
+    """
+    pair_violations: list[str] = []
+    neighbor_entries: list[NeighborEntry] = []
+    efp = excluded_file_pairs or []
+    efnp = excluded_function_pairs or []
+    embedding_a = func_a.embedding
+    if embedding_a is None:
+        return pair_violations, neighbor_entries
+
+    for j, func_b in enumerate(functions):
+        if func_a_idx >= j or func_b.embedding is None:
+            continue
+
+        if _is_excluded_pair(func_a, func_b, efp, efnp):
+            continue
+
+        similarity = compute_cosine_similarity(embedding_a, func_b.embedding)
+
+        if similarity >= threshold_pair:
+            pair_violations.append(_format_pair_violation(func_a, func_b, similarity))
+        if similarity >= threshold_neighbor:
+            neighbor_entries.append((func_b.file, func_b.name, func_b.start_line, similarity))
+
+    return pair_violations, neighbor_entries
+
+
+def _find_violations(
+    functions: list[FunctionInfo],
+    threshold_pair: float,
+    threshold_neighbor: float,
+    excluded_file_pairs: list[list[str]] | None = None,
+    excluded_function_pairs: list[list[str]] | None = None,
+) -> tuple[list[str], list[str]]:
+    """Find similarity violations among functions.
+
+    Returns
+    -------
+    tuple[list[str], list[str]]
+        Tuple of (pair violation messages, neighbor violation messages).
+    """
+    pair_violations: list[str] = []
+    neighbor_violations: list[str] = []
+
+    for i, func_a in enumerate(functions):
+        if func_a.embedding is None:
+            continue
+
+        func_pair_viols, similar_neighbors = _check_against_others(
+            func_a,
+            i,
+            functions,
+            threshold_pair,
+            threshold_neighbor,
+            excluded_file_pairs,
+            excluded_function_pairs,
+        )
+        pair_violations.extend(func_pair_viols)
+
+        if len(similar_neighbors) >= 2:
+            neighbor_violations.append(_format_neighbor_violation(func_a, similar_neighbors))
+
+    return pair_violations, neighbor_violations
+
+
+def _report_violations(
+    pair_violations: list[str],
+    neighbor_violations: list[str],
+    threshold_pair: float,
+    threshold_neighbor: float,
+    functions: list[FunctionInfo],
+    load_complexity_maps_fn: Callable[[], tuple[dict[str, int], dict[str, int]]],
+) -> None:
+    """Report violations and fail test if any found."""
+    all_violations: list[str] = []
+    if pair_violations:
+        all_violations.append(
+            f"High similarity pairs (>={threshold_pair:.0%}):\n  " + "\n  ".join(pair_violations),
+        )
+    if neighbor_violations:
+        all_violations.append(
+            f"Functions with multiple similar neighbors (>={threshold_neighbor:.0%}):\n  "
+            + "\n  ".join(neighbor_violations),
+        )
+
+    if all_violations:
+        error_msg = "\n\n".join(all_violations)
+        cc_map, cog_map = load_complexity_maps_fn()
+        refactor_msg = get_refactor_priority_message(functions, cc_map, cog_map)
+        if refactor_msg:
+            error_msg += refactor_msg
+        pytest.fail(error_msg)
+
+
+def run_provider_similarity_checks(
+    *,
+    baselines: Baselines,
+    functions: list[FunctionInfo],
+    update_baselines: bool,
+    cached_only: bool,
+    provider: ProviderEntry,
+    threshold_pair: float,
+    threshold_neighbor: float,
+    load_complexity_maps_fn: Callable[[], tuple[dict[str, int], dict[str, int]]],
+    pca_cache: PcaCache | None = None,
+) -> None:
+    """Unified workflow for similarity tests across all embedding providers.
+
+    This single function handles OpenAI, Codestral, Voyage, Gemini, and
+    Combined providers with the same flow: load cached → populate if
+    needed → apply PCA → find violations.
+
+    When cached_only=False (default), missing embeddings are auto-populated via API.
+    When cached_only=True, the test is skipped if embeddings are missing.
+
+    Parameters
+    ----------
+    baselines: Dict with function_hashes, config, and embeddings (lazy-loaded).
+    functions: List of FunctionInfo objects to check.
+    update_baselines: Whether to auto-populate missing embeddings.
+    cached_only: If True, skip test when embeddings are missing.
+    provider: ProviderEntry with label, cache_key, etc.
+    threshold_pair: Similarity threshold for pair violations.
+    threshold_neighbor: Similarity threshold for neighbor violations.
+    load_complexity_maps_fn: Callable returning (cc_map, cog_map) for refactor index.
+    pca_cache: Optional session-scoped cache for fitted PCA models.
+    """
+    from pykissembed.similarity.pca import fit_pca, transform_embeddings_with_pca
+    from pykissembed.similarity.populate_embeddings import get_provider_populator
+    from pykissembed.similarity.storage import load_provider_embeddings, save_baselines
+
+    if len(functions) < 2:
+        pytest.skip("Not enough functions to compare")
+
+    # Lazy-load this provider's embeddings if not already loaded
+    load_provider_embeddings(baselines, provider.cache_key)
+
+    # Load cached embeddings
+    uncached = _load_cached_embeddings(baselines, functions, provider)
+
+    if uncached:
+        if cached_only:
+            _skip_missing_embeddings(uncached, provider)
+        else:
+            # Auto-populate missing embeddings: base providers via API,
+            # combined provider from already-loaded base caches.
+            populate_fn = get_provider_populator(provider.label.lower())
+            if populate_fn is None:
+                pytest.skip(f"Unknown provider: {provider.label}")
+                return
+            new_count = populate_fn(baselines, functions)
+            if new_count > 0:
+                save_baselines(baselines)
+            # Reload embeddings after populating
+            uncached = _load_cached_embeddings(baselines, functions, provider)
+            if uncached:
+                _skip_missing_embeddings(uncached, provider)
+
+    # Apply PCA dimensionality reduction using provider-specific threshold
+    config = _extract_config(baselines)
+    pca_variance = _extract_pca_variance(config, provider)
+    embeddings_cache = _extract_embedding_cache(baselines, provider.cache_key)
+
+    # Use cached PCA if available, otherwise fit fresh
+    pca_model, n_components, is_gpu = fit_pca(
+        embeddings_cache,
+        pca_variance,
+        pca_cache=pca_cache,
+        cache_key=provider.cache_key if pca_cache is not None else "",
+    )
+    if pca_model is not None:
+        transform_embeddings_with_pca(functions, pca_model, n_components, is_gpu)
+
+    # Load exclusion lists (intentionally similar pairs to skip)
+    excluded_file_pairs = _extract_excluded_pairs(config, "excluded_file_pairs")
+    excluded_function_pairs = _extract_excluded_pairs(config, "excluded_function_pairs")
+
+    # Find and report violations
+    pair_violations, neighbor_violations = _find_violations(
+        functions,
+        threshold_pair,
+        threshold_neighbor,
+        excluded_file_pairs,
+        excluded_function_pairs,
+    )
+    _report_violations(
+        pair_violations,
+        neighbor_violations,
+        threshold_pair,
+        threshold_neighbor,
+        functions,
+        load_complexity_maps_fn,
+    )
+
+
+def _is_str_object_dict(value: object) -> TypeGuard[dict[str, object]]:
+    """Check if a dictionary has string keys and object values.
+
+    Returns
+    -------
+    bool
+        True if the dictionary has string keys and object values.
+    """
+    if not isinstance(value, dict):
+        return False
+    return all(isinstance(key, str) for key in cast("dict[object, object]", value))
+
+
+def _extract_config(baselines: Baselines) -> dict[str, object]:
+    """Extract configuration from a dictionary.
+
+    Returns
+    -------
+    dict[str, object]
+        The extracted configuration.
+
+    Raises
+    ------
+    TypeError
+        If ``baselines['config']`` is not ``dict[str, object]``.
+    """
+    config = baselines.get("config", {})
+    if not _is_str_object_dict(config):
+        msg = "baselines['config'] must be a dict[str, object]"
+        raise TypeError(msg)
+    return config
+
+
+def _extract_pca_variance(config: dict[str, object], provider: ProviderEntry) -> float:
+    """Extract PCA variance from a dictionary.
+
+    Returns
+    -------
+    float
+        The extracted PCA variance.
+
+    Raises
+    ------
+    TypeError
+        If the configured PCA variance value is not numeric.
+    """
+    raw_variance = config.get(provider.pca_variance_key, provider.default_pca_variance)
+    if not isinstance(raw_variance, int | float):
+        msg = f"Config key '{provider.pca_variance_key}' must be numeric"
+        raise TypeError(msg)
+    return float(raw_variance)
+
+
+def _is_float_list(value: object) -> TypeGuard[list[float]]:
+    """Check if a list contains only floats.
+
+    Returns
+    -------
+    bool
+        True if the list contains only floats.
+    """
+    if not isinstance(value, list):
+        return False
+    return all(isinstance(component, float) for component in cast("list[object]", value))
+
+
+def _extract_embedding_cache(baselines: Baselines, cache_key: str) -> dict[str, list[float]]:
+    """Extract embedding cache from a dictionary.
+
+    Returns
+    -------
+    dict[str, list[float]]
+        The extracted embedding cache.
+
+    Raises
+    ------
+    TypeError
+        If cache data is not a ``dict[str, list[float]]``.
+    """
+    raw_cache = baselines.get(cache_key, {})
+    if not _is_str_object_dict(raw_cache):
+        msg = f"baselines['{cache_key}'] must be a dict[str, list[float]]"
+        raise TypeError(msg)
+    typed_cache: dict[str, list[float]] = {}
+    for hash_key, embedding in raw_cache.items():
+        if not _is_float_list(embedding):
+            msg = f"baselines['{cache_key}']['{hash_key}'] must be list[float]"
+            raise TypeError(msg)
+        typed_cache[hash_key] = embedding
+    return typed_cache
+
+
+def _extract_excluded_pairs(config: dict[str, object], key: str) -> list[list[str]]:
+    """Extract excluded pairs from a dictionary.
+
+    Returns
+    -------
+    list[list[str]]
+        The extracted excluded pairs.
+
+    Raises
+    ------
+    TypeError
+        If the excluded pairs data is not ``list[list[str]]``.
+    """
+    raw_pairs = config.get(key, [])
+    if not isinstance(raw_pairs, list):
+        msg = f"config['{key}'] must be a list"
+        raise TypeError(msg)
+    pairs: list[list[str]] = []
+    for pair in cast("list[object]", raw_pairs):
+        if not isinstance(pair, list) or not all(
+            isinstance(item, str) for item in cast("list[object]", pair)
+        ):
+            msg = f"config['{key}'] entries must be list[str]"
+            raise TypeError(msg)
+        pairs.append(cast("list[str]", pair))
+    return pairs

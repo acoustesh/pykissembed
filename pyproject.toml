@@ -13,7 +13,7 @@ build-backend = "hatchling.build"
 
 [project]
 name = "pykissembed"
-version = "0.1.3"
+version = "0.1.4"
 description = "Generic Python code-quality test library: lint, type, complexity, docstring, comment density, and embedding-based similarity (pytest plugin)."
 readme = "README.md"
 license = "MIT"
@@ -49,6 +49,8 @@ dependencies = [
     "complexipy>=0.5",
     "numpy>=1.26",
     "pandas>=3.0",
+    "scikit-learn>=1.5",
+    "tiktoken>=0.7",
 ]
 
 [project.optional-dependencies]
@@ -173,6 +175,19 @@ ignore = [
     "C901",               # complex structure — refactor separately
     "PYI049",             # unused private TypedDict
     "F841",               # unused variable in early-return paths
+    # Preview-rule suppressions for ported similarity code
+    "DOC501",             # docstring-missing-exception (KeyboardInterrupt etc.)
+    "DOC201",             # docstring-missing-returns (returns are documented in mega-scrapper style)
+    "ARG001",             # unused-function-argument (fixtures with shared_baselines etc.)
+    "B028",               # redefined-loop-name (line variable reuse in .env parsing)
+    "FBT002",             # boolean-default-value-positional-argument
+    "S108",               # hardcoded-temp-file (test fixtures use /tmp paths)
+    "PLC2701",            # import-private-name (tests inspect _CHECK_STEMS)
+    "TC006",              # too-many-statements-in-try-clause
+    "TRY301",             # too-many-statements-in-try-clause
+    "RUF069",             # too-many-statements-in-try-clause (ported code)
+    "PLW0717",            # float-equality-comparison (test assertions on exact values)
+    "PLW2901",            # redefined-loop-name (line variable reuse in .env parsing)
 ]
 
 [tool.ruff.lint.pydocstyle]

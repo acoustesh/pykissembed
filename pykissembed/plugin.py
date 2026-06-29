@@ -80,9 +80,62 @@ def pykissembed_paths() -> list[Path]:
     return resolve_paths()
 
 
+# ---------------------------------------------------------------------------
+# Session-scoped fixtures for similarity tests (shared state across all tests)
+# ---------------------------------------------------------------------------
+
+
+@pytest.fixture(scope="session")
+def shared_baselines() -> dict[str, object]:
+    """Session-scoped baselines (config + function_hashes, embeddings lazy-loaded).
+
+    Returns
+    -------
+    dict[str, object]
+        The loaded baselines dictionary.
+    """
+    from pykissembed.similarity.storage import load_minimal_baselines
+
+    return load_minimal_baselines()
+
+
+@pytest.fixture(scope="session")
+def shared_functions(shared_baselines: dict[str, object]) -> list:
+    """Session-scoped list of FunctionInfo objects extracted from workspace.
+
+    Returns
+    -------
+    list[FunctionInfo]
+        The extracted function info objects.
+    """
+    from pykissembed.similarity.ast_helpers import extract_all_function_infos
+
+    return extract_all_function_infos(min_loc=1)
+
+
+@pytest.fixture(scope="session")
+def pca_cache() -> dict[str, tuple]:
+    """Session-scoped cache for fitted PCA models.
+
+    Returns
+    -------
+    dict[str, tuple]
+        An empty dictionary for caching PCA models.
+    """
+    return {}
+
+
 @pytest.hookimpl(trylast=True)
 def pytest_configure(config: pytest.Config) -> None:
-    """Register pykissembed markers and ensure source dirs are importable."""
+    """Register markers, inject source dirs into sys.path, and collect checks.
+
+    The last action is critical: pytest only walks directories listed in
+    ``config.args`` (derived from ``testpaths`` or CLI arguments). The
+    installed ``pykissembed/checks/`` directory is never in that list by
+    default, so :func:`pytest_collect_file` would never be called for
+    those files. We append the checks directory to ``config.args`` here
+    so pytest discovers and collects the check modules automatically.
+    """
     config.addinivalue_line(
         "markers",
         "lint: lint + type-check gate (ruff, pyright)",
@@ -109,18 +162,27 @@ def pytest_configure(config: pytest.Config) -> None:
     )
 
     # Ensure source dirs are importable for similarity/refactor tests
-    if os.environ.get("PYQTEST_SKIP_PATH_INJECTION"):
-        return
-    try:
-        from pykissembed.paths import resolve_paths
-    except ImportError:  # pragma: no cover — defensive
-        return
-    import sys
+    if not os.environ.get("PYQTEST_SKIP_PATH_INJECTION"):
+        try:
+            from pykissembed.paths import resolve_paths
+        except ImportError:  # pragma: no cover — defensive
+            pass
+        else:
+            import sys
 
-    for p in resolve_paths():
-        sp = str(p)
-        if sp not in sys.path and p.exists():
-            sys.path.insert(0, sp)
+            for p in resolve_paths():
+                sp = str(p)
+                if sp not in sys.path and p.exists():
+                    sys.path.insert(0, sp)
+
+    # Inject the installed pykissembed/checks/ directory into pytest's
+    # collection args so the check modules are discovered automatically.
+    checks = _checks_dir()
+    if checks is not None and checks.is_dir():
+        checks_str = str(checks)
+        current_args = getattr(config, "args", [])
+        if checks_str not in current_args:
+            current_args.append(checks_str)
 
 
 def _checks_dir() -> Path | None:
@@ -135,7 +197,7 @@ def _checks_dir() -> Path | None:
     return Path(checks_pkg.__file__).parent
 
 
-@pytest.hookimpl(trylast=True)
+@pytest.hookimpl(tryfirst=True)
 def pytest_collect_file(file_path: Path, parent: pytest.Collector) -> pytest.Module | None:
     """Collect pykissembed's check modules as test modules.
 
@@ -145,6 +207,11 @@ def pytest_collect_file(file_path: Path, parent: pytest.Collector) -> pytest.Mod
     copy test files. The modules are collected only if they live inside
     the installed ``pykissembed/checks/`` directory and their stem matches
     a known check module name.
+
+    Registered with ``tryfirst=True`` so it runs *before* pytest's default
+    ``python_files`` filter (which would reject files not matching
+    ``test_*.py``). By returning a ``Module`` here we short-circuit the
+    default collection for these files.
     """
     if file_path.suffix != ".py":
         return None
