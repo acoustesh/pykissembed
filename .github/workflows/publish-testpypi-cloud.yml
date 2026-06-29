@@ -61,11 +61,10 @@ jobs:
 
       - uses: pypa/gh-action-pypi-publish@release/v1
         with:
+          user: __token__
+          password: ${{ secrets.TESTPYPI_TOKEN }}
           packages-dir: pykissembed_cloud/dist/
           repository-url: https://test.pypi.org/legacy/
           # skip-existing avoids spurious failures when the same tag
           # is re-pushed; the version is still monotonic across tags.
           skip-existing: true
-        env:
-          TWINE_USERNAME: __token__
-          TWINE_PASSWORD: ${{ secrets.TESTPYPI_TOKEN }}
