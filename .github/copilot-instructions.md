@@ -1,5 +1,5 @@
----
-description: "Always-on workspace rules for the speechtext repo: fetch current upstream docs from context7 first, then consult the openrouter-advisor MCP tool for hard decisions."
+Developer: ---
+description: "Always-on workspace rules for the repo: fetch current upstream docs from context7 first when needed, then consult the openrouter-advisor MCP tool for hard decisions."
 applyTo: "**"
 ---
 
@@ -13,7 +13,9 @@ The decision pipeline for any non-trivial change in this repo is:
 2. **`openrouter-advisor`** — ask a stronger model for an opinion on the
    hard decision, citing the context7 results.
 
-Both steps are mandatory when the trigger conditions below hold.
+Both steps are mandatory when the trigger conditions below hold. The
+advisor checkpoint must happen before producing a non-trivial Active Plan
+or any code, not merely before editing files.
 
 ---
 
@@ -29,8 +31,9 @@ This VS Code instance has the `context7` MCP server registered at the
 
 ### When to call context7
 
-Before writing or modifying code that touches a third-party API, **always**
-resolve and query context7 first. Concretely:
+Before writing or modifying code that touches a third-party API, call
+context7 first **unless one of the explicit exceptions in “When NOT to call
+context7” applies**. Concretely:
 
 - Any new call into the OpenRouter Chat Completions API or to a provider
   SDK (AssemblyAI, Azure, ElevenLabs, Google, Mistral, OpenAI, …).
@@ -82,8 +85,11 @@ resolve and query context7 first. Concretely:
 ### When NOT to call context7
 
 - Trivial edits (typos, formatting, single-line renames) where the local
-  code, tests, or repo memory already give a definitive answer.
-- Pure execution of an unambiguous, user-specified plan.
+  code, tests, or repo memory already give a definitive answer, even if the
+  touched file references a third-party library.
+- Pure execution of an unambiguous, user-specified plan when the required
+  library usage is already explicit and stable in the local code or in prior
+  context7 results for this task.
 - Pure reasoning tasks with no third-party API surface (e.g. "what should
   we name this variable").
 - Anything that would require a secret (API key, token, password) in the
@@ -115,18 +121,19 @@ MCP server (defined in
 [`advisor-mcp/advisor_mcp_server.py`](../advisor-mcp/advisor_mcp_server.py)):
 
 > **Tool:** `mcp__openrouter-advisor__consult_advisor`
-> **Model:** `@preset/glm2` (the default `ADVISOR_MODEL` in `.vscode/mcp.json`)
+> **Model:** `@preset/glm52` (the `ADVISOR_MODEL` set in `.vscode/mcp.json`;
+>   the hardcoded fallback default is the direct slug `z-ai/glm-5.2`)
 > **Signature:** `consult_advisor(prompt: str) -> str`
 
 **When the active model is a small / fast / preset model (for example
 `@preset/minimax` or any `@preset/*` slug), and you face a hard decision —
 ambiguous requirements, conflicting trade-offs, a design choice with
 non-obvious consequences, or a task at the edge of the model's competence —
-call `mcp__openrouter-advisor__consult_advisor` after consulting context7
-(§1) and before committing to an answer.** The advisor should see the
-context7 findings summarised in the prompt. Use the advisor's reply to
-inform your reasoning; you do not have to follow it verbatim, but you must
-consult it rather than guess.
+treat `mcp__openrouter-advisor__consult_advisor` as a required checkpoint
+after consulting context7 (§1) and before producing a non-trivial Active
+Plan or any code.** The advisor should see the context7 findings summarised
+in the prompt. Use the advisor's reply to inform your reasoning; you do not
+have to follow it verbatim, but you must consult it rather than guess.
 
 ### When to consult
 
@@ -152,7 +159,8 @@ Skip the advisor for:
   a network round-trip exceeds the benefit.
 - Tasks where the local code, tests, or repo memory, **plus** the context7
   results from §1, already give a definitive answer.
-- Pure execution of an unambiguous, user-specified plan.
+- The user provided an explicit step-by-step plan **and** the change is a
+  single-file mechanical transformation with no design choices.
 - Anything that would require a secret (API key, token, password) to be
   pasted into the prompt — the advisor logs nothing we control, so do not
   send secrets through it.
@@ -210,4 +218,56 @@ mcp__openrouter-advisor__consult_advisor(
 - When in doubt about provider-specific behaviour, prefer reading the
   provider module over guessing — and run the §1 → §2 pipeline (context7
   first, then advisor) before making architectural changes that span
-  multiple providers.
+  multiple providers. 
+
+# Role and Objective
+- Act as a GitHub Copilot agent with expertise in Python 3.14 and WSL2 Ubuntu 24.04
+# Working Context
+- `<file>` refers to the file or files involved.
+- Dependency manager: `uv` (or pixi only when you are dealing with GPU-accelerated libraries). Never use `pip`.
+- Use the `context7` tool to verify current functionality and library usage when its trigger conditions apply.
+
+# Implementation Rules
+- Do not add new dependencies without asking first.
+- Use NumPy-style docstrings.
+- Before proceeding to implementation, ask 3–4 questions about design options unless the user provided an explicit step-by-step plan **and** the change is a single-file mechanical transformation with no design choices.
+- Do not implement anything until the user approves the plan.
+
+# Quality and Validation
+- Tests: `uv run pytest <file>`
+- Add a test for every new function.
+- Lint and format: `ruff check --fix --preview --unsafe-fixes <file>` and `ruff format`
+- Type checking: `uv run pyright <file>`
+
+# Repository Instructions and Memory
+1. Read relevant repository instructions and available Copilot Memory.
+2. Do not store the Active Plan in Copilot Memory.
+3. Store only durable repository facts in Memory, such as build commands, architecture constraints, naming conventions, or test rules.
+4. Before storing memory, show the exact proposed memory and ask for approval.
+
+# Active Plan
+1. Produce a 3–7 step Active Plan before editing.
+2. For every non-trivial Active Plan (3+ steps, or any step touching
+   architecture, schema, public APIs, or tests), the first line must be one
+   of:
+   - `Advisory consulted: yes (consult_advisor, <ref-or-timestamp>)`
+   - `Advisory consulted: no (exemption: <a|b|c>, reason: <one sentence>)`
+3. If the advisory status is `no`, cite the specific exemption and
+   one-sentence reason before any other plan content. The valid exemptions
+   are:
+   - `a`: trivial edit, such as a typo, formatting-only change, or
+     single-line rename.
+   - `b`: local code, tests, repo memory, and any applicable context7
+     results already give a definitive answer.
+   - `c`: the user provided an explicit step-by-step plan **and** the change
+     is a single-file mechanical transformation with no design choices.
+4. Keep the Active Plan in this chat/session context.
+5. Before each coding step, restate:
+   - the current plan step number
+   - whether the step is unchanged, changed, or completed
+   - the reason for any change
+6. After each change, update the Active Plan status.
+
+# Reasoning and Execution
+- Think step by step internally.
+- Do not begin implementation until design questions have been answered and the plan has been approved.
