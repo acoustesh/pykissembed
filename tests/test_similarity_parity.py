@@ -30,7 +30,13 @@ import pytest
 
 from pykissembed.similarity.types import FunctionInfo
 
-from tests._similarity_backend import (
+# Sibling helper module; pytest's default import mode prepends the test
+# file's directory to ``sys.path``, so the bare name resolves correctly.
+# A previous version used ``from tests._similarity_backend import …``,
+# which fails because ``pykissembed_local/tests/__init__.py`` and
+# ``pykissembed_cloud/tests/__init__.py`` shadow the root ``tests/``
+# namespace package on ``sys.path``. See commit history for context.
+from _similarity_backend import (
     assert_matrix_parity,
     compute_similarity_matrix_accel,
     compute_similarity_matrix_cpu,
