@@ -69,6 +69,13 @@ jobs:
         run: |
           python -m pip install --upgrade pip
           python -m pip install .
+          # Install dev tooling (pytest-xdist, pytest-cov) so the
+          # `addopts = [..., "-n", "auto"]` block in pyproject.toml works
+          # in CI. Without this, pytest errors out with
+          # `unrecognized arguments: -n`. PEP 735 groups require pip 25+;
+          # the runner ships with pip 24.0 but `pip install --upgrade pip`
+          # above pulls a pip 26.x that supports `--group`.
+          python -m pip install --group dev
           if [ "${{ inputs.install-local }}" = "true" ]; then
             pip install ./pykissembed_local
           fi
