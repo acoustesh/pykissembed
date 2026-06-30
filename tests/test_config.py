@@ -125,3 +125,62 @@ class TestAutoDetect:
         """An empty project falls back to 'src'."""
         config = _auto_detect(tmp_path)
         assert config.paths == ["src"]
+
+
+class TestIncludeNotebooks:
+    """Tests for the include_notebooks config flag."""
+
+    @staticmethod
+    def test_default_is_false(
+        tmp_path: Path,
+        monkeypatch: pytest.MonkeyPatch,
+    ) -> None:
+        """include_notebooks defaults to False (notebooks excluded)."""
+        (tmp_path / "pyproject.toml").write_text(
+            dedent(
+                """
+                [tool.pykissembed]
+                paths = ["src"]
+                """,
+            ),
+            encoding="utf-8",
+        )
+        (tmp_path / "src").mkdir()
+        monkeypatch.chdir(tmp_path)
+        config = load_config()
+        assert config.include_notebooks is False
+
+    @staticmethod
+    def test_explicit_true_is_loaded(
+        tmp_path: Path,
+        monkeypatch: pytest.MonkeyPatch,
+    ) -> None:
+        """include_notebooks = true loads as True."""
+        (tmp_path / "pyproject.toml").write_text(
+            dedent(
+                """
+                [tool.pykissembed]
+                paths = ["src"]
+                include_notebooks = true
+                """,
+            ),
+            encoding="utf-8",
+        )
+        (tmp_path / "src").mkdir()
+        monkeypatch.chdir(tmp_path)
+        config = load_config()
+        assert config.include_notebooks is True
+
+
+class TestIterPyFiles:
+    """Tests for the iter_py_files helper in paths.py."""
+
+    @staticmethod
+    def test_iter_py_files_skips_ipynb(tmp_path: Path) -> None:
+        """iter_py_files() only yields .py files, never .ipynb."""
+        from pykissembed.paths import iter_py_files
+
+        (tmp_path / "real_module.py").write_text("x = 1\n", encoding="utf-8")
+        (tmp_path / "notebook.ipynb").write_text("{}", encoding="utf-8")
+        files = sorted(p.name for p in iter_py_files(tmp_path))
+        assert files == ["real_module.py"]

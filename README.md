@@ -58,6 +58,53 @@ the check modules (`code_complexity.py`, `code_similarity.py`,
 `comment_density.py`, `docstring_format.py`, `lint_typecheck.py`) are
 discovered and run in **any** consumer project — no need to copy test files
 or configure `testpaths`. The plugin's `pytest_collect_file` hook
+
+### Baseline-and-ratchet workflow
+
+pykissembed uses **per-baseline ratcheting** in CI. Baselines are committed
+JSON envelopes under `tests/baselines/` and the tests fail only when
+diagnostics exceed them. The intended workflow:
+
+```bash
+# 1. First time on an existing codebase — seed baselines
+pytest --update-baselines
+git add tests/baselines && git commit -m "seed pykissembed baselines"
+
+# 2. Day-to-day — fix code; tests only fail on REGRESSIONS
+pytest              # any diagnostic above its baseline fails the build
+
+# 3. Periodic ratchet — lower baselines as you fix issues
+pykissembed ratchet  # scans tests/baselines/*.json for ratchetable data
+
+# 4. Discover the JSON schema for a baseline type
+pykissembed schema --kind complexity
+```
+
+A new file (no baseline yet) always reports as "new violation" until you
+either fix the code or seed the baseline for that file. To handle large
+existing codebases without breaking the build, seed everything once, then
+gradually fix and ratchet downward.
+
+### Excluding Jupyter notebooks
+
+By default, pykissembed does **not** run ruff or similarity checks against
+`.ipynb` files (notebooks typically contain exploratory code with relaxed
+hygiene). To opt in:
+
+```toml
+[tool.pykissembed]
+include_notebooks = true   # apply ruff + similarity to .ipynb too
+```
+
+The `[tool.pykissembed]` config reference:
+
+| Key | Default | Purpose |
+|---|---|---|
+| `paths` | `["src"]` | Source directories to scan |
+| `mode` | `"ratchet"` | `"ratchet"` (per-baseline) or `"strict"` (zero tolerance) |
+| `baseline_dir` | `"tests/baselines"` | Where committed JSON envelopes live |
+| `cache_dir` | `"tests/.pykissembed_cache"` | Where embedding caches live (gitignored) |
+| `include_notebooks` | `false` | If true, run ruff/similarity against `.ipynb` files |
 (registered with `tryfirst=True`) collects these modules before pytest's
 default `python_files` filter can reject them.
 

@@ -16,6 +16,7 @@ import pytest
 
 from pykissembed.baselines_engine import load_envelope, save_envelope
 from pykissembed.config import get_config
+from pykissembed.paths import include_notebooks
 
 
 @dataclass(frozen=True, slots=True)
@@ -35,6 +36,11 @@ class DocstringViolation:
 def _run_ruff_docstring_check(target_dir: Path, *, root: Path) -> list[DocstringViolation]:
     """Run ``ruff check --select=D --output-format=json`` on *target_dir*.
 
+    Notebooks (``.ipynb``) are excluded by default because they typically
+    contain exploratory code that isn't held to the same hygiene standards
+    as production source. Consumers can override this by setting
+    ``include_notebooks = true`` in ``[tool.pykissembed]``.
+
     Parameters
     ----------
     target_dir : Path
@@ -50,12 +56,11 @@ def _run_ruff_docstring_check(target_dir: Path, *, root: Path) -> list[Docstring
     ruff = shutil.which("ruff")
     if ruff is None:
         return []
-    result = subprocess.run(
-        [ruff, "check", str(target_dir), "--select=D", "--output-format=json"],
-        capture_output=True,
-        text=True,
-        check=False,
-    )
+    cmd = [ruff, "check"]
+    if not include_notebooks():
+        cmd.extend(["--extend-exclude", "*.ipynb"])
+    cmd.extend([str(target_dir), "--select=D", "--output-format=json"])
+    result = subprocess.run(cmd, capture_output=True, text=True, check=False)
     if not result.stdout.strip():
         return []
     try:

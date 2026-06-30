@@ -117,6 +117,15 @@ def root() -> Path:
     return get_config().root
 
 
+def include_notebooks() -> bool:
+    """Return True if the consumer opted into scanning ``.ipynb`` files.
+
+    Reads ``[tool.pykissembed] include_notebooks`` from ``pyproject.toml``.
+    Defaults to ``False``.
+    """
+    return bool(get_config().include_notebooks)
+
+
 def warn_non_utf8(file_path: Path, exc: Exception) -> None:
     """Emit a UserWarning when a file cannot be read as UTF-8.
 

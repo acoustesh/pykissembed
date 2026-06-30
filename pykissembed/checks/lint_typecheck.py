@@ -22,6 +22,7 @@ from pykissembed.baselines_engine import (
     save_envelope,
 )
 from pykissembed.config import get_config
+from pykissembed.paths import include_notebooks
 
 
 def _resolve_tool(name: str) -> str:
@@ -30,15 +31,23 @@ def _resolve_tool(name: str) -> str:
 
 
 def _run_ruff(paths: list[Path]) -> list[dict[str, Any]]:
-    """Run ``ruff check --output-format json`` and return parsed diagnostics."""
+    """Run ``ruff check --output-format json`` and return parsed diagnostics.
+
+    Notebooks (``.ipynb``) are excluded by default because they typically
+    contain exploratory code that isn't held to the same hygiene standards
+    as production source. Consumers can override this by setting
+    ``include_notebooks = true`` in ``[tool.pykissembed]``.
+    """
     cmd = [
         _resolve_tool("ruff"),
         "check",
         "--preview",
         "--output-format",
         "json",
-        *[str(p) for p in paths],
     ]
+    if not include_notebooks():
+        cmd.extend(["--extend-exclude", "*.ipynb"])
+    cmd.extend([str(p) for p in paths])
     try:
         result = subprocess.run(cmd, capture_output=True, text=True, check=False, timeout=120)
     except (OSError, subprocess.TimeoutExpired):

@@ -37,6 +37,9 @@ class PyqtestConfig:
     cache_dir
         Directory for embedding caches (relative to ``root``, should be
         gitignored). Defaults to ``tests/.pykissembed_cache``.
+    include_notebooks
+        Whether to apply ruff and similarity checks to ``.ipynb`` files.
+        Defaults to ``False`` — notebooks are typically exploratory.
     root
         Project root (parent directory of ``pyproject.toml``).
     """
@@ -45,6 +48,7 @@ class PyqtestConfig:
     mode: str = "ratchet"
     baseline_dir: str = "tests/baselines"
     cache_dir: str = "tests/.pykissembed_cache"
+    include_notebooks: bool = False
     root: Path = field(default_factory=Path.cwd)
 
     @property
@@ -157,12 +161,15 @@ def load_config(start: Path | None = None) -> PyqtestConfig:
         mode = "ratchet"
     baseline_dir = str(section.get("baseline_dir", "tests/baselines"))
     cache_dir = str(section.get("cache_dir", "tests/.pykissembed_cache"))
+    include_notebooks_raw = section.get("include_notebooks", False)
+    include_notebooks = bool(include_notebooks_raw)
 
     return PyqtestConfig(
         paths=paths or ["src"],
         mode=mode,
         baseline_dir=baseline_dir,
         cache_dir=cache_dir,
+        include_notebooks=include_notebooks,
         root=root,
     )
 
@@ -189,6 +196,7 @@ def _auto_detect(root: Path) -> PyqtestConfig:
         mode=os.environ.get("pykissembed_MODE", "ratchet"),
         baseline_dir="tests/baselines",
         cache_dir="tests/.pykissembed_cache",
+        include_notebooks=False,
         root=root,
     )
 

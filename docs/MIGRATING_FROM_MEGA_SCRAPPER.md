@@ -64,6 +64,7 @@ paths = ["src", "scripts"]
 mode = "ratchet"
 baseline_dir = "tests/baselines"
 cache_dir = "tests/.pykissembed_cache"
+include_notebooks = false   # true to run ruff/similarity on .ipynb
 ```
 
 Or scaffold it automatically:
@@ -71,6 +72,10 @@ Or scaffold it automatically:
 ```bash
 uv run pykissembed init
 ```
+
+> **v0.1.6+:** Notebooks are excluded by default. To opt in,
+> add `include_notebooks = true` to the `[tool.pykissembed]` block. This
+> affects ruff D-rules (docstring format) and the ruff gate (lint_typecheck).
 
 ### 3. Map mega-scrapper baseline files
 
@@ -129,6 +134,41 @@ Note: `tests/.pykissembed_cache/` (embedding caches) should be **gitignored**.
 ```sh
 pytest                       # should match pre-migration diagnostic counts
 pykissembed ratchet              # should be a no-op on a clean tree
+```
+
+### 8. The baseline-and-ratchet workflow
+
+pykissembed follows a **ratchet** model: tests fail only when diagnostics
+**exceed** their baseline. This lets you adopt pykissembed against an
+existing codebase without breaking the build on day one.
+
+```bash
+# A. Existing codebase with thousands of violations
+pytest --update-baselines          # captures current state as baseline
+git add tests/baselines
+git commit -m "seed baselines"
+
+# B. Day-to-day development: only NEW regressions fail
+pytest                            # any count > baseline fails
+pytest -m complexity               # subset by marker
+
+# C. Periodic ratchet: lower baselines after fixing code
+pykissembed ratchet                # walks each baseline file interactively
+pykissembed ratchet --dry-run      # show what would change
+
+# D. Schema discovery for a baseline type
+pykissembed schema --kind complexity
+pykissembed schema --kind similarity
+```
+
+A **new file** (no baseline yet) reports as "new violation" until seeded.
+To grandfather in lots of files at once:
+
+```sh
+pytest --update-baselines -k "test_no_lint_or_type_errors"
+pytest --update-baselines -k "test_docstring_coverage"
+pytest --update-baselines -k "test_comment_density"
+pytest --update-baselines -k "test_providers_parallel"
 ```
 
 ---
