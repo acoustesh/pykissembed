@@ -5,6 +5,12 @@
 # VS Code spawns MCP servers as non-interactive, non-login child processes
 # that do NOT source ~/.bashrc or ~/.profile.  This wrapper ensures the
 # key reaches the server regardless of how the process is launched.
+#
+# SYNC NOTE: This file is mirrored from
+# /home/alvaro/speechtext/advisor-mcp/start_advisor.sh.  Keep them
+# byte-identical; verify with:
+#   diff -q /home/alvaro/speechtext/advisor-mcp/start_advisor.sh \
+#           /home/alvaro/pykissembed/advisor-mcp/start_advisor.sh
 set -euo pipefail
 
 # --- locate workspace root -------------------------------------------------
