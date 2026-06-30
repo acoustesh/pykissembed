@@ -116,13 +116,19 @@ jobs:
             hf-${{ hashFiles('pykissembed_local/pykissembed_local/provider.py') }}-
             hf-
 
+      # Live smoke tests are best-effort: missing API keys, transient
+      # network blips, or HuggingFace rate limits shouldn't block CI on the
+      # main pykissembed gate. A failure here emits a warning annotation
+      # but does not turn the job red.
       - name: Run live smoke tests (local)
         if: inputs.run-smoke && inputs.install-local
+        continue-on-error: true
         working-directory: pykissembed_local
         run: pytest -m "live and smoke" --tb=short
 
       - name: Run live smoke tests (cloud)
         if: inputs.run-smoke && inputs.install-cloud
+        continue-on-error: true
         working-directory: pykissembed_cloud
         env:
           # Use the repo's own .env if present; otherwise rely on the secret.
