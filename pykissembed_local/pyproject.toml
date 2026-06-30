@@ -16,7 +16,7 @@ build-backend = "hatchling.build"
 
 [project]
 name = "pykissembed-local"
-version = "0.1.4"
+version = "0.1.5"
 description = "Local sentence-transformers embedding provider for pykissembed (BAAI/bge-small-en-v1.5)."
 readme = "README.md"
 license = "MIT"
