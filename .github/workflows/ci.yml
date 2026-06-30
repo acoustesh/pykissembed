@@ -13,6 +13,13 @@ name: CI
 permissions:
   contents: read
 
+# Force the JS-actions runtime to Node 24 ahead of GitHub's default flip
+# (June 16, 2026). Once Node 20 is fully removed (fall 2026), this env
+# becomes a no-op and can be dropped. See:
+# https://github.blog/changelog/2025-09-19-deprecation-of-node-20-on-github-actions-runners/
+env:
+  FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: "true"
+
 jobs:
   pykissembed:
     uses: ./.github/workflows/pykissembed.yml
@@ -27,8 +34,8 @@ jobs:
     name: Build sdist + wheel
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-python@v5
+      - uses: actions/checkout@v5
+      - uses: actions/setup-python@v6
         with:
           python-version: "3.12"
       - name: Install build
@@ -38,7 +45,7 @@ jobs:
       - name: Build wheel
         run: python -m build --wheel
       - name: Upload artifacts
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: dist
           path: dist/

@@ -24,14 +24,21 @@ name: publish-testpypi-cloud
 permissions:
   contents: read
 
+# Force the JS-actions runtime to Node 24 ahead of GitHub's default flip
+# (June 16, 2026). Once Node 20 is fully removed (fall 2026), this env
+# becomes a no-op and can be dropped. See:
+# https://github.blog/changelog/2025-09-19-deprecation-of-node-20-on-github-actions-runners/
+env:
+  FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: "true"
+
 jobs:
   build:
     name: Build pykissembed-cloud ${{ github.ref_name }}
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
 
-      - uses: actions/setup-python@v5
+      - uses: actions/setup-python@v6
         with:
           python-version: "3.12"
 
@@ -43,7 +50,7 @@ jobs:
         run: python -m build --sdist --wheel
 
       - name: Upload artifacts
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: dist-pykissembed-cloud
           path: pykissembed_cloud/dist/
@@ -54,7 +61,7 @@ jobs:
     runs-on: ubuntu-latest
     environment: testpypi-cloud
     steps:
-      - uses: actions/download-artifact@v4
+      - uses: actions/download-artifact@v8
         with:
           name: dist-pykissembed-cloud
           path: pykissembed_cloud/dist/
