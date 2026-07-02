@@ -51,6 +51,18 @@ def pytest_addoption(parser: pytest.Parser) -> None:
         default=False,
         help="Use only cached embeddings; skip any API calls.",
     )
+    parser.addoption(
+        "--pykissembed-all",
+        action="store_true",
+        default=False,
+        help=(
+            "Auto-collect and run every pykissembed check module. "
+            "Without this flag, pykissembed only auto-injects check modules "
+            "when you target a specific pykissembed NodeId (e.g. "
+            "`pytest .../docstring_format.py::TestDocstringFormat`). "
+            "Use this flag for the default 'run the full battery' behaviour."
+        ),
+    )
 
 
 @pytest.fixture
@@ -175,14 +187,88 @@ def pytest_configure(config: pytest.Config) -> None:
                 if sp not in sys.path and p.exists():
                     sys.path.insert(0, sp)
 
-    # Inject the installed pykissembed/checks/ directory into pytest's
-    # collection args so the check modules are discovered automatically.
+    # Inject the installed pykissembed/checks/ directory (or a single
+    # check file) into pytest's collection args. Default policy: do NOT
+    # auto-inject. The consumer must either pass ``--pykissembed-all`` for
+    # the full battery, or target a specific check NodeId (smart-restrict),
+    # or rely on a testpaths/pyproject configuration that already includes
+    # the checks directory. This keeps a focused `pytest <file>::Test::test_x`
+    # invocation from accidentally collecting every plugin check.
     checks = _checks_dir()
     if checks is not None and checks.is_dir():
-        checks_str = str(checks)
-        current_args = getattr(config, "args", [])
-        if checks_str not in current_args:
-            current_args.append(checks_str)
+        target = _decide_injection(config, checks)
+        if target is not None:
+            target_str = str(target)
+            current_args = getattr(config, "args", [])
+            if target_str not in current_args:
+                current_args.append(target_str)
+
+
+def _decide_injection(
+    config: pytest.Config,
+    checks_dir: Path,
+) -> Path | None:
+    """Decide which pykissembed check paths to append to ``config.args``.
+
+    Returns
+    -------
+    Path | None
+        * The whole ``checks_dir`` if the user passed ``--pykissembed-all``
+          or a marker filter (``-m``).
+        * A single file inside ``checks_dir`` whose stem matches a
+          ``::NodeId`` filter pointing at a pykissembed check
+          (smart-restrict).
+        * ``None`` when the user's args already include a per-test filter
+          that we cannot narrow further (``-k`` keyword, ``--deselect``,
+          or any other filter that does not name a check stem).
+
+    The decision tree in order:
+
+    1. ``--pykissembed-all`` set → return the whole ``checks_dir``.
+    2. ``-m <marker>`` present → return the whole ``checks_dir`` so the
+       marker filter can narrow the run.
+    3. Any ``::NodeId`` whose non-class part is one of the
+       ``_CHECK_STEMS`` → return that single file.
+    4. Any other filter present (``-k``, ``--deselect``) → return ``None``
+       (the filter alone decides).
+    5. Otherwise → return ``None``. The consumer did not ask for the
+       battery; respect that.
+    """
+    if config.getoption("--pykissembed-all"):
+        return checks_dir
+
+    args: list[str] = list(getattr(config, "args", []))
+
+    has_marker_filter = any(
+        a == "-m" or a.startswith(("--markers", "-m=")) for a in args
+    )
+    if has_marker_filter:
+        return checks_dir
+
+    has_keyword_filter = any(
+        a == "-k" or a.startswith(("-k=", "--keyword")) for a in args
+    )
+    has_deselect = any(a == "--deselect" or a.startswith("--deselect=") for a in args)
+
+    for raw in args:
+        # NodeIds always contain `::`. The first segment is the file path;
+        # if its stem matches a known check, we can smart-restrict to that
+        # file alone. This is what lets a user run *exactly* one check.
+        if "::" in raw:
+            head = raw.split("::", 1)[0]
+            head_stem = Path(head).stem
+            if head_stem in _CHECK_STEMS:
+                candidate = checks_dir / f"{head_stem}.py"
+                if candidate.is_file():
+                    return candidate
+            # NodeId present but does not name a pykissembed check. The
+            # consumer is targeting something else — do not inject.
+            return None
+
+    if has_keyword_filter or has_deselect:
+        return None
+
+    return None
 
 
 def _checks_dir() -> Path | None:
@@ -198,7 +284,9 @@ def _checks_dir() -> Path | None:
 
 
 @pytest.hookimpl(tryfirst=True)
-def pytest_collect_file(file_path: Path, parent: pytest.Collector) -> pytest.Module | None:
+def pytest_collect_file(
+    file_path: Path, parent: pytest.Collector
+) -> pytest.Module | None:
     """Collect pykissembed's check modules as test modules.
 
     This hook makes the check modules (``code_complexity.py``,

@@ -1,0 +1,368 @@
+"""Tests for the pykissembed pytest plugin's collection contract.
+
+The plugin must respect a focused test invocation. Running
+``pytest tests/test_foo.py::TestBar::test_baz`` should collect only that
+test — it should not also collect the entire pykissembed check battery
+because the plugin auto-injected its ``checks/`` directory into
+``config.args``.
+
+These tests cover the ``_decide_injection`` helper directly so we can
+verify the policy without spawning subprocess pytest invocations.
+"""
+
+from __future__ import annotations
+
+import sys
+from pathlib import Path
+from types import SimpleNamespace
+from unittest.mock import MagicMock
+
+import pytest
+
+from pykissembed.plugin import _CHECK_STEMS, _decide_injection
+
+
+def _make_config(args: list[str], *, all_flag: bool = False) -> MagicMock:
+    """Build a minimal mock of ``pytest.Config`` for ``_decide_injection``.
+
+    The decision helper only reads three things from the config:
+    ``getoption('--pykissembed-all')`` and ``config.args``. Everything
+    else is stubbed out so the helper can run in isolation.
+    """
+    cfg = MagicMock()
+    cfg.getoption = MagicMock(
+        side_effect=lambda name: all_flag if name == "--pykissembed-all" else None,
+    )
+    cfg.args = list(args)
+    return cfg
+
+
+@pytest.fixture
+def fake_checks_dir(tmp_path: Path) -> Path:
+    """Create a fake ``pykissembed/checks/`` directory with the standard stems.
+
+    Each stem in :data:`pykissembed.plugin._CHECK_STEMS` gets a touch
+    file so the smart-restrict branch of ``_decide_injection`` can find
+    a real file to return. Anything that does not exist on disk is
+    treated as "not injectable" by the helper.
+    """
+    d = tmp_path / "checks"
+    d.mkdir()
+    for stem in _CHECK_STEMS:
+        (d / f"{stem}.py").write_text("# stub\n", encoding="utf-8")
+    return d
+
+
+class TestDecideInjection:
+    """``_decide_injection`` must produce the documented policy matrix."""
+
+    @staticmethod
+    def test_bare_pytest_injects_nothing(fake_checks_dir: Path) -> None:
+        """``pytest`` alone (no args, no flag) does NOT inject the battery."""
+        cfg = _make_config(args=[])
+        assert _decide_injection(cfg, fake_checks_dir) is None
+
+    @staticmethod
+    def test_pykissembed_all_flag_injects_full_battery(fake_checks_dir: Path) -> None:
+        """``--pykissembed-all`` returns the whole ``checks_dir``."""
+        cfg = _make_config(args=[], all_flag=True)
+        assert _decide_injection(cfg, fake_checks_dir) == fake_checks_dir
+
+    @staticmethod
+    def test_pykissembed_all_overrides_keyword_filter(
+        fake_checks_dir: Path,
+    ) -> None:
+        """``--pykissembed-all`` beats any other filter (it's an opt-in)."""
+        cfg = _make_config(
+            args=["-k", "test_docstring_format", "tests/test_foo.py"],
+            all_flag=True,
+        )
+        assert _decide_injection(cfg, fake_checks_dir) == fake_checks_dir
+
+    @staticmethod
+    def test_nodeid_naming_a_check_smart_restricts(fake_checks_dir: Path) -> None:
+        """``docstring_format.py::TestDocstringFormat::test_x`` → single file."""
+        target = fake_checks_dir / "docstring_format.py"
+        cfg = _make_config(
+            args=[
+                f"{target}::TestDocstringFormat::test_docstring_format",
+            ],
+        )
+        assert _decide_injection(cfg, fake_checks_dir) == target
+
+    @staticmethod
+    def test_nodeid_naming_a_check_with_other_args_still_restricts(
+        fake_checks_dir: Path,
+    ) -> None:
+        """A NodeId in args smart-restricts even if other args are present."""
+        target = fake_checks_dir / "code_complexity.py"
+        cfg = _make_config(
+            args=[
+                "-p",
+                "no:cacheprovider",
+                f"{target}::TestCyclomaticComplexity::test_cyclomatic_complexity",
+            ],
+        )
+        assert _decide_injection(cfg, fake_checks_dir) == target
+
+    @staticmethod
+    def test_nodeid_not_naming_a_pytest_check_injects_nothing(
+        fake_checks_dir: Path,
+    ) -> None:
+        """A NodeId pointing at a consumer file does NOT inject the battery."""
+        cfg = _make_config(
+            args=["tests/test_consumer.py::TestFoo::test_bar"],
+        )
+        assert _decide_injection(cfg, fake_checks_dir) is None
+
+    @staticmethod
+    def test_keyword_filter_injects_nothing(fake_checks_dir: Path) -> None:
+        """``-k`` keyword filter alone: do not auto-inject."""
+        cfg = _make_config(args=["-k", "test_docstring_format"])
+        assert _decide_injection(cfg, fake_checks_dir) is None
+
+    @staticmethod
+    def test_keyword_equals_form_injects_nothing(fake_checks_dir: Path) -> None:
+        """``-k=...`` (equals form) is also detected as a keyword filter."""
+        cfg = _make_config(args=["-k=test_docstring_format"])
+        assert _decide_injection(cfg, fake_checks_dir) is None
+
+    @staticmethod
+    def test_marker_filter_injects_full_battery(fake_checks_dir: Path) -> None:
+        """``-m <marker>`` returns the whole ``checks_dir`` so markers can narrow."""
+        cfg = _make_config(args=["-m", "docstring_format"])
+        assert _decide_injection(cfg, fake_checks_dir) == fake_checks_dir
+
+    @staticmethod
+    def test_marker_equals_form_injects_full_battery(
+        fake_checks_dir: Path,
+    ) -> None:
+        """``-m=...`` (equals form) is also detected as a marker filter."""
+        cfg = _make_config(args=["-m=docstring_format"])
+        assert _decide_injection(cfg, fake_checks_dir) == fake_checks_dir
+
+    @staticmethod
+    def test_deselect_injects_nothing(fake_checks_dir: Path) -> None:
+        """``--deselect`` alone: do not auto-inject."""
+        cfg = _make_config(
+            args=["--deselect", "tests/test_foo.py::TestBar::test_baz"],
+        )
+        assert _decide_injection(cfg, fake_checks_dir) is None
+
+    @staticmethod
+    def test_deselect_equals_form_injects_nothing(fake_checks_dir: Path) -> None:
+        """``--deselect=...`` is also detected as a deselect filter."""
+        cfg = _make_config(
+            args=["--deselect=tests/test_foo.py::TestBar::test_baz"],
+        )
+        assert _decide_injection(cfg, fake_checks_dir) is None
+
+    @staticmethod
+    def test_missing_check_file_does_not_crash(
+        tmp_path: Path,
+    ) -> None:
+        """If the smart-restricted file does not exist, return None (not raise)."""
+        # Make a checks dir whose file is missing on disk.
+        d = tmp_path / "checks_empty"
+        d.mkdir()
+        cfg = _make_config(
+            args=[f"{d}/docstring_format.py::TestDocstringFormat::test_x"],
+        )
+        # The smart-restrict branch checks is_file() before returning;
+        # the missing file must produce None, not a broken path.
+        assert _decide_injection(cfg, d) is None
+
+
+class TestPluginEntryPoint:
+    """Smoke tests: the plugin module is importable and exposes the right symbols."""
+
+    @staticmethod
+    def test_check_stems_are_frozenset() -> None:
+        """``_CHECK_STEMS`` is an immutable set of check module stems."""
+        assert isinstance(_CHECK_STEMS, frozenset)
+        # All five check modules must be listed
+        assert {
+            "code_complexity",
+            "code_similarity",
+            "comment_density",
+            "docstring_format",
+            "lint_typecheck",
+        } == set(_CHECK_STEMS)
+
+    @staticmethod
+    def test_plugin_registers_pytest11_entry() -> None:
+        """``pyproject.toml`` still registers the plugin via ``pytest11``."""
+        import tomllib
+
+        with (Path(__file__).resolve().parents[1] / "pyproject.toml").open("rb") as f:
+            data = tomllib.load(f)
+        eps = data["project"]["entry-points"]["pytest11"]
+        assert "pykissembed" in eps
+        assert eps["pykissembed"] == "pykissembed.plugin"
+
+
+class TestSubprocessCollection:
+    """End-to-end subprocess tests of the collection contract.
+
+    Each test scaffolds a tiny consumer project, invokes pytest on it
+    with a specific argument shape, and asserts that *only* the expected
+    tests were collected. This guards against regressions in the
+    surrounding hook machinery (e.g. ``pytest_collect_file``) that the
+    pure unit tests cannot catch.
+    """
+
+    @staticmethod
+    def test_specific_nodeid_only_collects_that_test(
+        tmp_path: Path,
+        monkeypatch: pytest.MonkeyPatch,
+    ) -> None:
+        """``pytest <file>::Test::test_x`` collects exactly one test, not 11."""
+        import subprocess
+
+        # Build a minimal consumer project that has pykissembed installed
+        # in editable mode. ``pip install -e .`` is too slow; instead we set
+        # PYTHONPATH so the plugin is importable.
+        consumer = tmp_path / "consumer"
+        consumer.mkdir()
+        (consumer / "tests").mkdir()
+        (consumer / "tests" / "test_user.py").write_text(
+            "def test_user_passes():\n    assert True\n",
+            encoding="utf-8",
+        )
+        (consumer / "pyproject.toml").write_text(
+            '[tool.pykissembed]\npaths = ["."]\n',
+            encoding="utf-8",
+        )
+
+        repo = Path(__file__).resolve().parents[1]
+        env = {
+            **__import__("os").environ,
+            "PYTHONPATH": str(repo),
+        }
+        result = subprocess.run(
+            [
+                sys.executable,
+                "-m",
+                "pytest",
+                "tests/test_user.py::test_user_passes",
+                "--collect-only",
+                "-q",
+            ],
+            cwd=consumer,
+            env=env,
+            capture_output=True,
+            text=True,
+            check=False,
+        )
+        assert result.returncode == 0, result.stderr
+        # Only the user's test was collected. Crucially, NONE of the
+        # pykissembed check tests appear, because the user's NodeId
+        # smart-restricted the plugin injection to nothing matching
+        # (since "test_user.py" is not a pykissembed check stem).
+        collected = [
+            line
+            for line in result.stdout.splitlines()
+            if "::" in line and "no tests ran" not in line.lower()
+        ]
+        assert collected == [
+            "tests/test_user.py::test_user_passes",
+        ], (
+            "expected only the user's test to be collected, "
+            f"got:\n{chr(10).join(collected)}\n\nstdout:\n{result.stdout}\n"
+            f"stderr:\n{result.stderr}"
+        )
+
+    @staticmethod
+    def test_pykissembed_all_flag_collects_the_battery(
+        tmp_path: Path,
+    ) -> None:
+        """``--pykissembed-all`` collects every check module, even on bare pytest."""
+        import os
+        import subprocess
+
+        consumer = tmp_path / "consumer"
+        consumer.mkdir()
+        (consumer / "pyproject.toml").write_text(
+            '[tool.pykissembed]\npaths = ["."]\n',
+            encoding="utf-8",
+        )
+
+        repo = Path(__file__).resolve().parents[1]
+        env = {**os.environ, "PYTHONPATH": str(repo)}
+        result = subprocess.run(
+            [
+                sys.executable,
+                "-m",
+                "pytest",
+                "--pykissembed-all",
+                "--collect-only",
+                "-q",
+            ],
+            cwd=consumer,
+            env=env,
+            capture_output=True,
+            text=True,
+            check=False,
+        )
+        assert result.returncode == 0, result.stderr
+        # Every check module stem must appear in the collected output.
+        # The exact path-prefix depends on pytest's collection rootdir
+        # resolution, so we just check for the stem appearing as a
+        # Python file reference (`{stem}.py` in the NodeId).
+        for stem in _CHECK_STEMS:
+            assert f"{stem}.py" in result.stdout, (
+                f"expected {stem} to be collected with --pykissembed-all, "
+                f"got:\n{result.stdout}\nstderr:\n{result.stderr}"
+            )
+
+    @staticmethod
+    def test_bare_pytest_collects_nothing_from_plugin(
+        tmp_path: Path,
+    ) -> None:
+        """Bare ``pytest`` no longer auto-collects the check battery."""
+        import os
+        import subprocess
+
+        consumer = tmp_path / "consumer"
+        consumer.mkdir()
+        (consumer / "pyproject.toml").write_text(
+            '[tool.pykissembed]\npaths = ["."]\n',
+            encoding="utf-8",
+        )
+
+        repo = Path(__file__).resolve().parents[1]
+        env = {**os.environ, "PYTHONPATH": str(repo)}
+        result = subprocess.run(
+            [
+                sys.executable,
+                "-m",
+                "pytest",
+                "--collect-only",
+                "-q",
+            ],
+            cwd=consumer,
+            env=env,
+            capture_output=True,
+            text=True,
+            check=False,
+        )
+        # Exit code 5 means "no tests collected" — exactly what we want.
+        assert result.returncode in (0, 5), result.stderr
+        # No check stem should appear in the collected output.
+        for stem in _CHECK_STEMS:
+            assert stem not in result.stdout, (
+                f"bare `pytest` should not auto-collect {stem}, got:\n{result.stdout}"
+            )
+
+
+# The submodule guards against pytest auto-collecting this test file
+# itself (it does not contain pytest tests at module level, only inside
+# classes — pytest finds them fine, but the guard makes the intent
+# explicit).
+_ = SimpleNamespace  # keep the import non-empty for tooling
+
+__all__ = [
+    "TestDecideInjection",
+    "TestPluginEntryPoint",
+    "TestSubprocessCollection",
+]
