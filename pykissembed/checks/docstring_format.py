@@ -162,23 +162,33 @@ class TestDocstringFormat:
         if regressions or new_files:
             total_violations = sum(len(v) for v in by_file.values())
             n_files = len(regressions) + len(new_files)
+            # Count violations by error code for the summary.
+            code_counts: dict[str, int] = {}
+            for viols in by_file.values():
+                for v in viols:
+                    code_counts[v.code] = code_counts.get(v.code, 0) + 1
+            top_codes = sorted(code_counts.items(), key=lambda kv: -kv[1])[:5]
             lines = [
                 f"Docstring format: {total_violations} violation(s) across {n_files} file(s).",
                 "",
-                "Violations are NumPy-style docstring issues detected by ruff D rules.",
-                "Common codes: D100-D103 = missing docstring, D205 = blank line,",
-                '  D301 = use r""", D401 = imperative mood, D404/D406/D407 = section format.',
+                "Top error codes: " + ", ".join(f"{code}={n}" for code, n in top_codes),
                 "",
             ]
             if regressions:
                 lines.append("--- Regressions (exceeds baseline) ---")
-                lines.extend(regressions)
+                for entry in regressions:
+                    # Show only the file summary line, not every violation.
+                    header = entry.split("\n", 1)[0]
+                    lines.append(header)
                 lines.append("")
             if new_files:
                 lines.append("--- New violations (no baseline) ---")
-                lines.extend(new_files)
+                for entry in new_files:
+                    header = entry.split("\n", 1)[0]
+                    lines.append(header)
                 lines.append("")
             lines.append(
-                "To auto-fix D-rule violations: ruff check --fix --select=D <file>"
+                "Run `ruff check --select=D <file>` for full details, "
+                "or `ruff check --fix --select=D <file>` to auto-fix."
             )
             pytest.fail("\n".join(lines))
