@@ -81,20 +81,26 @@ class TestDecideInjection:
 
     @staticmethod
     def test_nodeid_naming_a_check_smart_restricts(fake_checks_dir: Path) -> None:
-        """``docstring_format.py::TestDocstringFormat::test_x`` → single file."""
+        """``docstring_format.py::TestDocstringFormat::test_x`` → skip injection.
+
+        When the user already passes a check file path on the CLI, the
+        plugin must NOT re-inject it (which would cause double-collection).
+        The user's NodeId already targets the file, so pytest collects it
+        from the CLI arg alone.
+        """
         target = fake_checks_dir / "docstring_format.py"
         cfg = _make_config(
             args=[
                 f"{target}::TestDocstringFormat::test_docstring_format",
             ],
         )
-        assert _decide_injection(cfg, fake_checks_dir) == target
+        assert _decide_injection(cfg, fake_checks_dir) is None
 
     @staticmethod
-    def test_nodeid_naming_a_check_with_other_args_still_restricts(
+    def test_nodeid_naming_a_check_with_other_args_still_skips(
         fake_checks_dir: Path,
     ) -> None:
-        """A NodeId in args smart-restricts even if other args are present."""
+        """A NodeId targeting a check file skips injection even with other args."""
         target = fake_checks_dir / "code_complexity.py"
         cfg = _make_config(
             args=[
@@ -103,7 +109,7 @@ class TestDecideInjection:
                 f"{target}::TestCyclomaticComplexity::test_cyclomatic_complexity",
             ],
         )
-        assert _decide_injection(cfg, fake_checks_dir) == target
+        assert _decide_injection(cfg, fake_checks_dir) is None
 
     @staticmethod
     def test_nodeid_not_naming_a_pytest_check_injects_nothing(
@@ -171,6 +177,38 @@ class TestDecideInjection:
         # The smart-restrict branch checks is_file() before returning;
         # the missing file must produce None, not a broken path.
         assert _decide_injection(cfg, d) is None
+
+    @staticmethod
+    def test_nodeid_already_targeting_check_file_skips_injection(
+        fake_checks_dir: Path,
+    ) -> None:
+        """When the user already passes a check file path on the CLI, do NOT re-inject.
+
+        This prevents double-collection: pytest collects each entry in
+        config.args independently, so appending a path the user already
+        passed causes the same test to run twice.
+        """
+        target = fake_checks_dir / "docstring_format.py"
+        cfg = _make_config(
+            args=[
+                f"{target}::TestDocstringFormat::test_docstring_format",
+            ],
+        )
+        # The user's NodeId already points at the check file inside
+        # checks_dir. _decide_injection must return None to avoid
+        # re-injecting the same path.
+        assert _decide_injection(cfg, fake_checks_dir) is None
+
+    @staticmethod
+    def test_bare_path_already_targeting_check_file_skips_injection(
+        fake_checks_dir: Path,
+    ) -> None:
+        """When the user passes a bare check file path, do NOT re-inject."""
+        target = fake_checks_dir / "docstring_format.py"
+        cfg = _make_config(
+            args=[str(target)],
+        )
+        assert _decide_injection(cfg, fake_checks_dir) is None
 
 
 class TestPluginEntryPoint:
@@ -353,6 +391,72 @@ class TestSubprocessCollection:
             assert stem not in result.stdout, (
                 f"bare `pytest` should not auto-collect {stem}, got:\n{result.stdout}"
             )
+
+    @staticmethod
+    def test_check_nodeid_collects_exactly_once(
+        tmp_path: Path,
+    ) -> None:
+        """Targeting a check NodeId must collect the test exactly once, not twice.
+
+        Before the fix, the plugin would re-inject the same check file
+        path into ``config.args`` even though the user already passed it
+        on the CLI, causing pytest to collect the test twice.
+        """
+        import os
+        import subprocess
+
+        consumer = tmp_path / "consumer"
+        consumer.mkdir()
+        (consumer / "pyproject.toml").write_text(
+            '[tool.pykissembed]\npaths = ["."]\n',
+            encoding="utf-8",
+        )
+
+        repo = Path(__file__).resolve().parents[1]
+        env = {**os.environ, "PYTHONPATH": str(repo)}
+        # Find the installed check file path.
+        result = subprocess.run(
+            [
+                sys.executable,
+                "-c",
+                "from pykissembed.plugin import _checks_dir; print(_checks_dir())",
+            ],
+            cwd=consumer,
+            env=env,
+            capture_output=True,
+            text=True,
+            check=True,
+        )
+        checks_dir = Path(result.stdout.strip())
+        target = checks_dir / "docstring_format.py"
+
+        result = subprocess.run(
+            [
+                sys.executable,
+                "-m",
+                "pytest",
+                f"{target}::TestDocstringFormat::test_docstring_format",
+                "--collect-only",
+                "-q",
+            ],
+            cwd=consumer,
+            env=env,
+            capture_output=True,
+            text=True,
+            check=False,
+        )
+        assert result.returncode == 0, result.stderr
+        # Count how many times the test appears in the collected output.
+        collected = [
+            line
+            for line in result.stdout.splitlines()
+            if "test_docstring_format" in line and "::" in line
+        ]
+        assert len(collected) == 1, (
+            f"expected test_docstring_format to be collected exactly once, "
+            f"but found {len(collected)} times:\n{chr(10).join(collected)}\n\n"
+            f"stdout:\n{result.stdout}\nstderr:\n{result.stderr}"
+        )
 
 
 # The submodule guards against pytest auto-collecting this test file

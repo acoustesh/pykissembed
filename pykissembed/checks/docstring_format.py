@@ -33,7 +33,9 @@ class DocstringViolation:
         return f"{self.file}:{self.line}:{self.column} {self.code} {self.message}"
 
 
-def _run_ruff_docstring_check(target_dir: Path, *, root: Path) -> list[DocstringViolation]:
+def _run_ruff_docstring_check(
+    target_dir: Path, *, root: Path
+) -> list[DocstringViolation]:
     """Run ``ruff check --select=D --output-format=json`` on *target_dir*.
 
     Notebooks (``.ipynb``) are excluded by default because they typically
@@ -125,7 +127,9 @@ class TestDocstringFormat:
 
         all_violations: list[DocstringViolation] = []
         for path in pykissembed_paths:
-            all_violations.extend(_run_ruff_docstring_check(path, root=get_config().root))
+            all_violations.extend(
+                _run_ruff_docstring_check(path, root=get_config().root)
+            )
 
         by_file: dict[str, list[DocstringViolation]] = {}
         for v in all_violations:
@@ -141,7 +145,9 @@ class TestDocstringFormat:
             if count > baseline:
                 detail = "\n".join(f"    {v}" for v in viols)
                 if baseline == 0:
-                    new_files.append(f"{file_path}: {count} violations (new file)\n{detail}")
+                    new_files.append(
+                        f"{file_path}: {count} violations (new file)\n{detail}"
+                    )
                 else:
                     regressions.append(
                         f"{file_path}: {count} violations (baseline {baseline}, +{count - baseline})\n{detail}",
@@ -150,13 +156,29 @@ class TestDocstringFormat:
         if update_baselines:
             envelope.data["per_file"] = current_counts
             save_envelope(baseline_file, envelope)
-            pytest.skip(f"Updated docstring format baselines: {len(current_counts)} files")
+            pytest.skip(
+                f"Updated docstring format baselines: {len(current_counts)} files"
+            )
         if regressions or new_files:
-            lines = ["Docstring format violations (NumPy style via ruff D rules):"]
+            total_violations = sum(len(v) for v in by_file.values())
+            n_files = len(regressions) + len(new_files)
+            lines = [
+                f"Docstring format: {total_violations} violation(s) across {n_files} file(s).",
+                "",
+                "Violations are NumPy-style docstring issues detected by ruff D rules.",
+                "Common codes: D100-D103 = missing docstring, D205 = blank line,",
+                '  D301 = use r""", D401 = imperative mood, D404/D406/D407 = section format.',
+                "",
+            ]
             if regressions:
-                lines.append("\n=== Regressions (exceeds baseline) ===")
+                lines.append("--- Regressions (exceeds baseline) ---")
                 lines.extend(regressions)
+                lines.append("")
             if new_files:
-                lines.append("\n=== New violations (no baseline) ===")
+                lines.append("--- New violations (no baseline) ---")
                 lines.extend(new_files)
+                lines.append("")
+            lines.append(
+                "To auto-fix D-rule violations: ruff check --fix --select=D <file>"
+            )
             pytest.fail("\n".join(lines))

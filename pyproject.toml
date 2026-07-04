@@ -13,7 +13,7 @@ build-backend = "hatchling.build"
 
 [project]
 name = "pykissembed"
-version = "0.1.9"
+version = "0.1.10"
 description = "Generic Python code-quality test library: lint, type, complexity, docstring, comment density, and embedding-based similarity (pytest plugin)."
 readme = "README.md"
 license = "MIT"

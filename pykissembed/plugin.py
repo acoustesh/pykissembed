@@ -20,6 +20,7 @@ import os
 from pathlib import Path
 
 import pytest
+from _pytest.stash import StashKey
 
 # Modules inside pykissembed/checks/ that contain test classes/functions.
 # These are collected by the plugin and run in the consumer's pytest session.
@@ -250,6 +251,11 @@ def _decide_injection(
     )
     has_deselect = any(a == "--deselect" or a.startswith("--deselect=") for a in args)
 
+    # Check if the user already targeted a check file directly (either
+    # via a NodeId or a bare path). If so, skip injection to avoid
+    # double-collection — pytest collects each entry in config.args
+    # independently, so appending a path the user already passed causes
+    # the same test to run twice.
     for raw in args:
         # NodeIds always contain `::`. The first segment is the file path;
         # if its stem matches a known check, we can smart-restrict to that
@@ -260,10 +266,34 @@ def _decide_injection(
             if head_stem in _CHECK_STEMS:
                 candidate = checks_dir / f"{head_stem}.py"
                 if candidate.is_file():
+                    # Guard: only inject if the user's path does NOT
+                    # already resolve to the same file inside checks_dir.
+                    try:
+                        resolved = Path(head).resolve()
+                    except OSError:
+                        resolved = None
+                    if resolved is not None and resolved == candidate.resolve():
+                        return None  # already on the CLI; don't re-inject
                     return candidate
             # NodeId present but does not name a pykissembed check. The
             # consumer is targeting something else — do not inject.
             return None
+
+    # Also check for bare file paths (no ::) that already point at a
+    # check file inside checks_dir.
+    for raw in args:
+        if "::" in raw or raw.startswith("-"):
+            continue
+        try:
+            resolved = Path(raw).resolve()
+        except (OSError, ValueError):
+            continue
+        if (
+            resolved.is_file()
+            and resolved.parent == checks_dir.resolve()
+            and resolved.stem in _CHECK_STEMS
+        ):
+            return None  # user already targeted this check file
 
     if has_keyword_filter or has_deselect:
         return None
@@ -283,6 +313,12 @@ def _checks_dir() -> Path | None:
     return Path(checks_pkg.__file__).parent
 
 
+# Session-scoped dedup guard for non-init check files.
+# Uses config.stash (pytest-idiomatic) instead of a module-level set
+# to avoid leaking state across pytester sessions.
+_collected_key = StashKey[set[Path]]()
+
+
 @pytest.hookimpl(tryfirst=True)
 def pytest_collect_file(
     file_path: Path, parent: pytest.Collector
@@ -300,6 +336,15 @@ def pytest_collect_file(
     ``python_files`` filter (which would reject files not matching
     ``test_*.py``). By returning a ``Module`` here we short-circuit the
     default collection for these files.
+
+    **Double-collection guard:** ``pytest_collect_file`` is NOT a
+    ``firstresult`` hook — pluggy calls ALL implementations and collects
+    all non-None returns. If the user (or ``_decide_injection``) already
+    passed this file on the CLI, pytest's default hook also returns a
+    ``Module`` for it (via the ``isinitpath`` bypass of ``python_files``).
+    To avoid collecting the same test twice, we defer to the default hook
+    for init paths by returning ``None`` when
+    ``parent.session.isinitpath(file_path)`` is ``True``.
     """
     if file_path.suffix != ".py":
         return None
@@ -313,4 +358,17 @@ def pytest_collect_file(
         file_path.relative_to(checks)
     except ValueError:
         return None
+    # If the file was explicitly passed on the CLI (or injected into
+    # config.args by _decide_injection), defer to pytest's default
+    # pytest_collect_file. The default hook skips the python_files
+    # filter for init paths, so it will still collect the file — but
+    # only once, not twice.
+    if parent.session.isinitpath(file_path):
+        return None
+    # Dedup guard for non-init files (session-scoped via config.stash).
+    collected = parent.config.stash.setdefault(_collected_key, set())
+    resolved = file_path.resolve()
+    if resolved in collected:
+        return None
+    collected.add(resolved)
     return pytest.Module.from_parent(parent, path=file_path)
