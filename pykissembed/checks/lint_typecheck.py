@@ -49,20 +49,26 @@ def _run_ruff(paths: list[Path]) -> list[dict[str, Any]]:
         cmd.extend(["--extend-exclude", "*.ipynb"])
     cmd.extend([str(p) for p in paths])
     try:
-        result = subprocess.run(cmd, capture_output=True, text=True, check=False, timeout=120)
+        result = subprocess.run(
+            cmd, capture_output=True, text=True, check=False, timeout=120
+        )
     except (OSError, subprocess.TimeoutExpired):
         return []
     if not result.stdout.strip():
         return []
     parsed = cast("object", json.loads(result.stdout))
-    return list(cast("list[dict[str, Any]]", parsed)) if isinstance(parsed, list) else []
+    return (
+        list(cast("list[dict[str, Any]]", parsed)) if isinstance(parsed, list) else []
+    )
 
 
 def _run_pyright(paths: list[Path]) -> list[dict[str, Any]]:
     """Run ``pyright --outputjson`` and return ``generalDiagnostics``."""
     cmd = [_resolve_tool("pyright"), "--outputjson", *[str(p) for p in paths]]
     try:
-        result = subprocess.run(cmd, capture_output=True, text=True, check=False, timeout=120)
+        result = subprocess.run(
+            cmd, capture_output=True, text=True, check=False, timeout=120
+        )
     except (OSError, subprocess.TimeoutExpired):
         return []
     if not result.stdout.strip():
@@ -107,7 +113,9 @@ def _build_report(
             rel = str(fp)
         sev_raw = d.get("severity", "error")
         if isinstance(sev_raw, int):
-            sev = {0: "error", 1: "warning", 2: "information"}.get(sev_raw, "information")
+            sev = {0: "error", 1: "warning", 2: "information"}.get(
+                sev_raw, "information"
+            )
         else:
             sev = str(sev_raw).lower()
         rng = cast("dict[str, Any]", d.get("range", {}).get("start", {}))
@@ -164,7 +172,10 @@ def test_no_lint_or_type_errors(
 
     if update_baselines:
         envelope.data = {
-            "per_file": {f: len(d["ruff"]) + len(d["pyright"]) for f, d in report["files"].items()}
+            "per_file": {
+                f: len(d["ruff"]) + len(d["pyright"])
+                for f, d in report["files"].items()
+            }
         }
         save_envelope(baseline_file, envelope)
         pytest.skip("Updated lint/typecheck baselines")
@@ -176,12 +187,16 @@ def test_no_lint_or_type_errors(
         count = len(diags["ruff"]) + len(diags["pyright"])
         baseline = per_file_baseline.get(file_path, 0)
         if count > baseline:
-            detail = "\n".join(f"    ruff:   {d['code']}: {d['message']}" for d in diags["ruff"])
+            detail = "\n".join(
+                f"    ruff:   {d['code']}: {d['message']}" for d in diags["ruff"]
+            )
             detail += "\n" + "\n".join(
                 f"    pyright: {d['code']}: {d['message']}" for d in diags["pyright"]
             )
             if baseline == 0:
-                new_violations.append(f"{file_path}: {count} diagnostics (new file)\n{detail}")
+                new_violations.append(
+                    f"{file_path}: {count} diagnostics (new file)\n{detail}"
+                )
             else:
                 regressions.append(
                     f"{file_path}: {count} diagnostics (baseline {baseline}, +{count - baseline})\n{detail}",
@@ -207,4 +222,4 @@ def test_no_lint_or_type_errors(
     if new_violations:
         lines.append("\n=== New violations (no baseline) ===")
         lines.extend(new_violations)
-    pytest.fail("\n".join(lines))
+    pytest.fail("\n".join(lines), pytrace=False)

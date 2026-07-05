@@ -209,7 +209,9 @@ def _run_similarity_test(
     threshold_pair = _extract_float(
         config,
         provider.threshold_pair_key,
-        _extract_float(config, "similarity_threshold_pair", provider.default_threshold_pair),
+        _extract_float(
+            config, "similarity_threshold_pair", provider.default_threshold_pair
+        ),
     )
     threshold_neighbor = _extract_float(
         config,
@@ -225,7 +227,8 @@ def _run_similarity_test(
     functions: list[FunctionInfo] = [
         copy.deepcopy(func)
         for func in shared_functions
-        if func.loc >= min_loc and not any(directory in func.file for directory in excluded_dirs)
+        if func.loc >= min_loc
+        and not any(directory in func.file for directory in excluded_dirs)
     ]
 
     run_provider_similarity_checks(
@@ -306,10 +309,13 @@ def test_providers_parallel(
 
     if errors:
         detail = "\n".join(f"  {name}: {exc}" for name, exc in errors.items())
-        pytest.fail(f"Provider failures:\n{detail}")
+        pytest.fail(f"Provider failures:\n{detail}", pytrace=False)
 
     if skips and len(skips) == len(_PARALLEL_PROVIDERS):
-        pytest.skip("All providers skipped:\n" + "\n".join(f"  {n}: {m}" for n, m in skips.items()))
+        pytest.skip(
+            "All providers skipped:\n"
+            + "\n".join(f"  {n}: {m}" for n, m in skips.items())
+        )
 
 
 @pytest.mark.similarity

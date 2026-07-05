@@ -191,4 +191,4 @@ class TestDocstringFormat:
                 "Run `ruff check --select=D <file>` for full details, "
                 "or `ruff check --fix --select=D <file>` to auto-fix."
             )
-            pytest.fail("\n".join(lines))
+            pytest.fail("\n".join(lines), pytrace=False)
