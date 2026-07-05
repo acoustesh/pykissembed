@@ -61,8 +61,17 @@ def check(
     Uses ``sys.executable -m pytest`` so the current Python environment
     (with ``pykissembed`` installed) is reused — bare ``pytest`` on PATH may
     resolve to a different interpreter that lacks the plugin.
+
+    Since v0.1.9, pykissembed's check-module collection is opt-in (a bare
+    ``pytest`` invocation no longer auto-collects the battery — see
+    ``pykissembed/plugin.py::_decide_injection``). When no extra args are
+    given, default to ``--pykissembed-all`` so ``pykissembed check`` still
+    runs the full battery as documented. If the caller passes their own
+    args (e.g. a marker or a specific check NodeId), forward them
+    unchanged so their scoping is respected.
     """
-    cmd = [sys.executable, "-m", "pytest", *(pytest_args or [])]
+    args = list(pytest_args) if pytest_args else ["--pykissembed-all"]
+    cmd = [sys.executable, "-m", "pytest", *args]
     typer.echo(f"$ {' '.join(cmd)}")
     raise typer.Exit(subprocess.call(cmd))
 

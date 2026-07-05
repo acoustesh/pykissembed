@@ -34,7 +34,7 @@ mode = "ratchet"                       # default; alternative: "strict"
 Then run:
 
 ```bash
-pytest                 # runs all installed checks automatically
+pytest --pykissembed-all   # run every installed check module
 pytest -m lint         # lint + type-check gate
 pytest -m complexity   # CC + COG + MI + line counts + docstrings
 pytest -m density      # comment density
@@ -42,22 +42,42 @@ pytest -m docstring_format  # NumPy docstring format (ruff D rules)
 pytest -m similarity    # embedding-based near-duplicate detection
 ```
 
+> **A bare `pytest` with no flag or marker does NOT run pykissembed's
+> checks** (as of v0.1.9). This is deliberate: it keeps a focused
+> `pytest path/to/test.py::TestFoo::test_bar` invocation from accidentally
+> pulling in the whole check battery. See
+> ["How check modules are collected"](#how-check-modules-are-collected)
+> below for the full policy.
+
 Seed the baselines on a clean tree (so CI doesn't fail before you've fixed
 anything):
 
 ```bash
-pytest --update-baselines   # write baselines = current diagnostics
+pytest --pykissembed-all --update-baselines   # write baselines = current diagnostics
 git add tests/baselines && git commit -m "seed pykissembed baselines"
 ```
 
 ### How check modules are collected
 
-pykissembed's pytest plugin automatically injects the installed
-`pykissembed/checks/` directory into pytest's collection paths. This means
-the check modules (`code_complexity.py`, `code_similarity.py`,
-`comment_density.py`, `docstring_format.py`, `lint_typecheck.py`) are
-discovered and run in **any** consumer project — no need to copy test files
-or configure `testpaths`. The plugin's `pytest_collect_file` hook
+pykissembed's pytest plugin can inject the installed `pykissembed/checks/`
+directory into pytest's collection paths, so the check modules
+(`code_complexity.py`, `code_similarity.py`, `comment_density.py`,
+`docstring_format.py`, `lint_typecheck.py`) run without you copying test
+files or configuring `testpaths`. **This injection is opt-in**, not
+automatic — bare `pytest` collects nothing from pykissembed. Pick one:
+
+- `pytest --pykissembed-all` — collect and run every check module (the
+  full battery).
+- `pytest -m <marker>` (`lint`, `complexity`, `density`,
+  `docstring_format`, `similarity`) — a marker filter also triggers
+  injection, scoped by the marker.
+- `pytest <path>/pykissembed/checks/docstring_format.py::TestDocstringFormat::test_x`
+  — target a specific check NodeId directly (smart-restrict): only that
+  file/class/test is injected and collected.
+- Anything else (bare `pytest`, `-k` alone, `--deselect` alone) injects
+  nothing from pykissembed, so your own tests run untouched.
+
+The plugin's `pytest_collect_file` hook
 
 ### Baseline-and-ratchet workflow
 
@@ -67,11 +87,11 @@ diagnostics exceed them. The intended workflow:
 
 ```bash
 # 1. First time on an existing codebase — seed baselines
-pytest --update-baselines
+pytest --pykissembed-all --update-baselines
 git add tests/baselines && git commit -m "seed pykissembed baselines"
 
 # 2. Day-to-day — fix code; tests only fail on REGRESSIONS
-pytest              # any diagnostic above its baseline fails the build
+pytest --pykissembed-all   # any diagnostic above its baseline fails the build
 
 # 3. Periodic ratchet — lower baselines as you fix issues
 pykissembed ratchet  # scans tests/baselines/*.json for ratchetable data

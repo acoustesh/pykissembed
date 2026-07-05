@@ -16,8 +16,11 @@ pykissembed v0.1.4 is a full port of the mega-scrapper test infrastructure:
   `file_split`, `checks`, `populate_embeddings`
 - **9 embedding providers** — OpenAI-Text/AST, Codestral-Text/AST,
   Voyage-Text/AST, Gemini-Text/AST, Combined (8-way concatenation)
-- **Auto-collection** — check modules are discovered automatically by the
-  pytest plugin; no need to copy test files or configure `testpaths`
+- **Opt-in collection** — check modules are discovered by the pytest
+  plugin without copying test files or configuring `testpaths`, but (as of
+  v0.1.9) collection is opt-in: pass `--pykissembed-all` for the full
+  battery, use a marker (`-m complexity`, etc.), or target a specific
+  check NodeId. A bare `pytest` collects nothing from pykissembed.
 
 ## Steps
 
@@ -93,8 +96,9 @@ of each file. The data semantics are preserved; only the wrapper changes.
 
 ### 4. Delete the mega-scrapper test files
 
-The check modules are now auto-collected from the installed `pykissembed`
-package — you no longer need local copies:
+The check modules are collected from the installed `pykissembed` package
+(via `--pykissembed-all` or a marker filter, see "What you get" above) —
+you no longer need local copies:
 
 ```sh
 git rm tests/test_code_complexity.py \
@@ -122,7 +126,7 @@ Keep only project-specific fixtures (e.g. `run_workon`).
 
 ```sh
 uv sync
-pytest --update-baselines      # one-time seed
+pytest --pykissembed-all --update-baselines      # one-time seed
 git add tests/baselines/
 git commit -m "Migrate to pykissembed v0.1.4"
 ```
@@ -132,7 +136,7 @@ Note: `tests/.pykissembed_cache/` (embedding caches) should be **gitignored**.
 ### 7. Verify
 
 ```sh
-pytest                       # should match pre-migration diagnostic counts
+pytest --pykissembed-all     # should match pre-migration diagnostic counts
 pykissembed ratchet              # should be a no-op on a clean tree
 ```
 
@@ -144,13 +148,13 @@ existing codebase without breaking the build on day one.
 
 ```bash
 # A. Existing codebase with thousands of violations
-pytest --update-baselines          # captures current state as baseline
+pytest --pykissembed-all --update-baselines   # captures current state as baseline
 git add tests/baselines
 git commit -m "seed baselines"
 
 # B. Day-to-day development: only NEW regressions fail
-pytest                            # any count > baseline fails
-pytest -m complexity               # subset by marker
+pytest --pykissembed-all          # any count > baseline fails
+pytest -m complexity               # subset by marker (auto-injects on its own)
 
 # C. Periodic ratchet: lower baselines after fixing code
 pykissembed ratchet                # walks each baseline file interactively
@@ -165,10 +169,13 @@ A **new file** (no baseline yet) reports as "new violation" until seeded.
 To grandfather in lots of files at once:
 
 ```sh
-pytest --update-baselines -k "test_no_lint_or_type_errors"
-pytest --update-baselines -k "test_docstring_coverage"
-pytest --update-baselines -k "test_comment_density"
-pytest --update-baselines -k "test_providers_parallel"
+# `-k` alone does not trigger pykissembed's collection (v0.1.9+); combine
+# it with --pykissembed-all so the check battery is injected first, then
+# narrowed by the keyword filter.
+pytest --pykissembed-all --update-baselines -k "test_no_lint_or_type_errors"
+pytest --pykissembed-all --update-baselines -k "test_docstring_coverage"
+pytest --pykissembed-all --update-baselines -k "test_comment_density"
+pytest --pykissembed-all --update-baselines -k "test_providers_parallel"
 ```
 
 ---

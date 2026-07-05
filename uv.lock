@@ -1354,7 +1354,7 @@ wheels = [
 
 [[package]]
 name = "pykissembed"
-version = "0.1.13"
+version = "0.1.14"
 source = { editable = "." }
 dependencies = [
     { name = "click" },
@@ -1427,7 +1427,7 @@ dev = [
 
 [[package]]
 name = "pykissembed-cloud"
-version = "0.1.13"
+version = "0.1.14"
 source = { editable = "pykissembed_cloud" }
 dependencies = [
     { name = "openai" },
@@ -1454,7 +1454,7 @@ dev = [
 
 [[package]]
 name = "pykissembed-local"
-version = "0.1.13"
+version = "0.1.14"
 source = { editable = "pykissembed_local" }
 dependencies = [
     { name = "numpy" },

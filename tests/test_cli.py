@@ -111,6 +111,49 @@ class TestInit:
         assert 'paths = ["."]' in text
 
 
+class TestCheck:
+    """Tests for ``pykissembed check``."""
+
+    @staticmethod
+    def test_check_with_no_args_defaults_to_pykissembed_all(
+        monkeypatch: pytest.MonkeyPatch,
+    ) -> None:
+        """No args → forwards ``--pykissembed-all`` so the full battery still runs.
+
+        Regression test: since v0.1.9, bare ``pytest`` no longer
+        auto-collects pykissembed's check modules. Without this default,
+        ``pykissembed check`` (no args) would silently collect zero tests.
+        """
+        captured: list[str] = []
+
+        def _fake_call(cmd: list[str]) -> int:
+            captured.extend(cmd)
+            return 0
+
+        monkeypatch.setattr("pykissembed.cli.subprocess.call", _fake_call)
+        result = runner.invoke(app, ["check"])
+        assert result.exit_code == 0
+        assert "--pykissembed-all" in captured
+
+    @staticmethod
+    def test_check_with_explicit_args_passes_through_unchanged(
+        monkeypatch: pytest.MonkeyPatch,
+    ) -> None:
+        """Explicit args (e.g. a marker) are forwarded as-is, unmodified."""
+        captured: list[str] = []
+
+        def _fake_call(cmd: list[str]) -> int:
+            captured.extend(cmd)
+            return 0
+
+        monkeypatch.setattr("pykissembed.cli.subprocess.call", _fake_call)
+        result = runner.invoke(app, ["check", "--", "-m", "lint"])
+        assert result.exit_code == 0
+        assert "--pykissembed-all" not in captured
+        assert "-m" in captured
+        assert "lint" in captured
+
+
 class TestPopulateEmbeddingsMissingProvider:
     """Tests for populate-embeddings with unknown / unconfigured providers."""
 
