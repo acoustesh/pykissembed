@@ -1354,7 +1354,7 @@ wheels = [
 
 [[package]]
 name = "pykissembed"
-version = "0.1.12"
+version = "0.1.13"
 source = { editable = "." }
 dependencies = [
     { name = "click" },
@@ -1389,6 +1389,7 @@ local = [
 dev = [
     { name = "pytest-cov" },
     { name = "pytest-xdist" },
+    { name = "ruff" },
     { name = "twine" },
 ]
 
@@ -1420,12 +1421,13 @@ provides-extras = ["local", "cloud", "all"]
 dev = [
     { name = "pytest-cov", specifier = ">=5.0" },
     { name = "pytest-xdist", specifier = ">=3.6" },
+    { name = "ruff", specifier = ">=0.15.20" },
     { name = "twine", specifier = ">=6.0" },
 ]
 
 [[package]]
 name = "pykissembed-cloud"
-version = "0.1.12"
+version = "0.1.13"
 source = { editable = "pykissembed_cloud" }
 dependencies = [
     { name = "openai" },
@@ -1452,7 +1454,7 @@ dev = [
 
 [[package]]
 name = "pykissembed-local"
-version = "0.1.12"
+version = "0.1.13"
 source = { editable = "pykissembed_local" }
 dependencies = [
     { name = "numpy" },

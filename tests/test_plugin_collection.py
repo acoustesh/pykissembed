@@ -97,6 +97,48 @@ class TestDecideInjection:
         assert _decide_injection(cfg, fake_checks_dir) is None
 
     @staticmethod
+    def test_nodeid_from_elsewhere_preserves_test_selector(
+        fake_checks_dir: Path,
+        tmp_path: Path,
+    ) -> None:
+        """Smart-restrict must keep the ``::Class::test`` selector.
+
+        Regression test: when the user's NodeId points at a *different*
+        file that merely shares a check module's stem (e.g. a consumer's
+        own migrated copy of ``code_complexity.py``), the plugin must
+        inject ``<real_file>::TestFoo::test_bar`` — not the bare
+        ``<real_file>`` — so only the requested test runs instead of
+        every test class in the real module.
+        """
+        consumer_copy = tmp_path / "code_complexity.py"
+        consumer_copy.write_text("# consumer's own copy\n", encoding="utf-8")
+        cfg = _make_config(
+            args=[
+                f"{consumer_copy}::TestDocstringCoverage::test_docstring_coverage",
+            ],
+        )
+        candidate = fake_checks_dir / "code_complexity.py"
+        assert _decide_injection(cfg, fake_checks_dir) == (
+            f"{candidate}::TestDocstringCoverage::test_docstring_coverage"
+        )
+
+    @staticmethod
+    def test_nodeid_from_elsewhere_class_only_selector(
+        fake_checks_dir: Path,
+        tmp_path: Path,
+    ) -> None:
+        """A class-only selector (no test method) is preserved too."""
+        consumer_copy = tmp_path / "docstring_format.py"
+        consumer_copy.write_text("# consumer's own copy\n", encoding="utf-8")
+        cfg = _make_config(
+            args=[f"{consumer_copy}::TestDocstringFormat"],
+        )
+        candidate = fake_checks_dir / "docstring_format.py"
+        assert _decide_injection(cfg, fake_checks_dir) == (
+            f"{candidate}::TestDocstringFormat"
+        )
+
+    @staticmethod
     def test_nodeid_naming_a_check_with_other_args_still_skips(
         fake_checks_dir: Path,
     ) -> None:
@@ -457,6 +499,77 @@ class TestSubprocessCollection:
             f"but found {len(collected)} times:\n{chr(10).join(collected)}\n\n"
             f"stdout:\n{result.stdout}\nstderr:\n{result.stderr}"
         )
+
+    @staticmethod
+    def test_consumer_migrated_copy_does_not_run_whole_module(
+        tmp_path: Path,
+    ) -> None:
+        """Reproduces the reported bug of selecting one test running all.
+
+        Selecting one test in a consumer's migrated copy of
+        ``code_complexity.py`` must not also run the other four test
+        classes from the real installed module.
+
+        Mirrors the mega-scrapper migration pattern (see
+        ``tests/fixtures/sample_repo/tests/code_complexity.py``): a
+        consumer keeps its own copy of the check module (same class and
+        test names) alongside the installed pykissembed plugin. Running
+        ``pytest tests/code_complexity.py::TestDocstringCoverage::``
+        ``test_docstring_coverage`` must select only that test — not
+        ``TestLineCount``, ``TestCyclomaticComplexity``,
+        ``TestCognitiveComplexity``, or ``TestMaintainabilityIndex``.
+        """
+        import os
+        import shutil
+        import subprocess
+
+        repo = Path(__file__).resolve().parents[1]
+        consumer = tmp_path / "consumer"
+        (consumer / "tests").mkdir(parents=True)
+        shutil.copyfile(
+            repo
+            / "tests"
+            / "fixtures"
+            / "sample_repo"
+            / "tests"
+            / "code_complexity.py",
+            consumer / "tests" / "code_complexity.py",
+        )
+        (consumer / "pyproject.toml").write_text(
+            '[tool.pykissembed]\npaths = ["."]\n',
+            encoding="utf-8",
+        )
+
+        env = {**os.environ, "PYTHONPATH": str(repo)}
+        result = subprocess.run(
+            [
+                sys.executable,
+                "-m",
+                "pytest",
+                "tests/code_complexity.py::TestDocstringCoverage::"
+                "test_docstring_coverage",
+                "--collect-only",
+                "-q",
+            ],
+            cwd=consumer,
+            env=env,
+            capture_output=True,
+            text=True,
+            check=False,
+        )
+        assert result.returncode == 0, result.stderr
+        for other_class in (
+            "TestLineCount",
+            "TestCyclomaticComplexity",
+            "TestCognitiveComplexity",
+            "TestMaintainabilityIndex",
+        ):
+            assert other_class not in result.stdout, (
+                f"{other_class} must not be collected when only "
+                "TestDocstringCoverage::test_docstring_coverage was "
+                f"requested, got:\n{result.stdout}\nstderr:\n{result.stderr}"
+            )
+        assert "test_docstring_coverage" in result.stdout
 
 
 # The submodule guards against pytest auto-collecting this test file

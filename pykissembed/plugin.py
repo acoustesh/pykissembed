@@ -208,17 +208,20 @@ def pytest_configure(config: pytest.Config) -> None:
 def _decide_injection(
     config: pytest.Config,
     checks_dir: Path,
-) -> Path | None:
+) -> Path | str | None:
     """Decide which pykissembed check paths to append to ``config.args``.
 
     Returns
     -------
-    Path | None
+    Path | str | None
         * The whole ``checks_dir`` if the user passed ``--pykissembed-all``
           or a marker filter (``-m``).
         * A single file inside ``checks_dir`` whose stem matches a
           ``::NodeId`` filter pointing at a pykissembed check
-          (smart-restrict).
+          (smart-restrict). When the user's NodeId included a class or
+          test selector (``::TestFoo`` / ``::TestFoo::test_bar``), that
+          selector is preserved on the returned string so only the
+          matching test(s) are collected — not every test in the module.
         * ``None`` when the user's args already include a per-test filter
           that we cannot narrow further (``-k`` keyword, ``--deselect``,
           or any other filter that does not name a check stem).
@@ -261,7 +264,7 @@ def _decide_injection(
         # if its stem matches a known check, we can smart-restrict to that
         # file alone. This is what lets a user run *exactly* one check.
         if "::" in raw:
-            head = raw.split("::", 1)[0]
+            head, _, node_selector = raw.partition("::")
             head_stem = Path(head).stem
             if head_stem in _CHECK_STEMS:
                 candidate = checks_dir / f"{head_stem}.py"
@@ -274,6 +277,11 @@ def _decide_injection(
                         resolved = None
                     if resolved is not None and resolved == candidate.resolve():
                         return None  # already on the CLI; don't re-inject
+                    # Preserve the class/test selector so only the
+                    # requested test(s) are collected from the real check
+                    # module, instead of every test class it contains.
+                    if node_selector:
+                        return f"{candidate}::{node_selector}"
                     return candidate
             # NodeId present but does not name a pykissembed check. The
             # consumer is targeting something else — do not inject.
