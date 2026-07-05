@@ -22,17 +22,26 @@ import pytest
 from pykissembed.plugin import _CHECK_STEMS, _decide_injection
 
 
-def _make_config(args: list[str], *, all_flag: bool = False) -> MagicMock:
+def _make_config(
+    args: list[str], *, all_flag: bool = False, collect_only: bool = False
+) -> MagicMock:
     """Build a minimal mock of ``pytest.Config`` for ``_decide_injection``.
 
     The decision helper only reads three things from the config:
-    ``getoption('--pykissembed-all')`` and ``config.args``. Everything
-    else is stubbed out so the helper can run in isolation.
+    ``getoption('--pykissembed-all')``, ``getoption('--collect-only')``,
+    and ``config.args``. Everything else is stubbed out so the helper can
+    run in isolation.
     """
     cfg = MagicMock()
-    cfg.getoption = MagicMock(
-        side_effect=lambda name: all_flag if name == "--pykissembed-all" else None,
-    )
+
+    def _getoption(name: str) -> bool:
+        if name == "--pykissembed-all":
+            return all_flag
+        if name == "--collect-only":
+            return collect_only
+        return False
+
+    cfg.getoption = MagicMock(side_effect=_getoption)
     cfg.args = list(args)
     return cfg
 
@@ -60,6 +69,50 @@ class TestDecideInjection:
     def test_bare_pytest_injects_nothing(fake_checks_dir: Path) -> None:
         """``pytest`` alone (no args, no flag) does NOT inject the battery."""
         cfg = _make_config(args=[])
+        assert _decide_injection(cfg, fake_checks_dir) is None
+
+    @staticmethod
+    def test_collect_only_injects_full_battery(fake_checks_dir: Path) -> None:
+        """``--collect-only`` with no other filter → whole ``checks_dir``.
+
+        This is the shape IDE test explorers (VS Code's Python extension)
+        use to discover tests, so pykissembed's checks must show up in
+        the discovered tree even though a real run wouldn't auto-collect
+        them.
+        """
+        cfg = _make_config(args=["--collect-only"], collect_only=True)
+        assert _decide_injection(cfg, fake_checks_dir) == fake_checks_dir
+
+    @staticmethod
+    def test_collect_only_does_not_override_unrelated_nodeid(
+        fake_checks_dir: Path,
+    ) -> None:
+        """``--collect-only`` must not override a NodeId targeting a non-check file.
+
+        If the user (or IDE) is specifically discovering one of their own
+        tests, that NodeId already decides the outcome (nothing to
+        inject) — ``--collect-only`` alone must not widen it to the full
+        battery.
+        """
+        cfg = _make_config(
+            args=["tests/test_consumer.py::TestFoo::test_bar", "--collect-only"],
+            collect_only=True,
+        )
+        assert _decide_injection(cfg, fake_checks_dir) is None
+
+    @staticmethod
+    def test_collect_only_does_not_override_keyword_filter(
+        fake_checks_dir: Path,
+    ) -> None:
+        """``--collect-only`` combined with ``-k`` still injects nothing.
+
+        A keyword filter already expresses explicit intent to narrow the
+        run; ``--collect-only`` must not widen that to the full battery.
+        """
+        cfg = _make_config(
+            args=["-k", "test_docstring_format", "--collect-only"],
+            collect_only=True,
+        )
         assert _decide_injection(cfg, fake_checks_dir) is None
 
     @staticmethod
@@ -396,10 +449,66 @@ class TestSubprocessCollection:
             )
 
     @staticmethod
-    def test_bare_pytest_collects_nothing_from_plugin(
+    def test_bare_pytest_run_collects_nothing_from_plugin(
         tmp_path: Path,
     ) -> None:
-        """Bare ``pytest`` no longer auto-collects the check battery."""
+        """A real (non-discovery) bare ``pytest`` run does not execute the battery.
+
+        No ``--collect-only`` here: this is what happens when a consumer
+        just runs ``pytest`` to execute their own suite. It must not pull
+        in pykissembed's check battery as a side effect.
+        """
+        import os
+        import subprocess
+
+        consumer = tmp_path / "consumer"
+        consumer.mkdir()
+        (consumer / "pyproject.toml").write_text(
+            '[tool.pykissembed]\npaths = ["."]\n',
+            encoding="utf-8",
+        )
+
+        repo = Path(__file__).resolve().parents[1]
+        env = {**os.environ, "PYTHONPATH": str(repo)}
+        result = subprocess.run(
+            [
+                sys.executable,
+                "-m",
+                "pytest",
+                "-q",
+            ],
+            cwd=consumer,
+            env=env,
+            capture_output=True,
+            text=True,
+            check=False,
+        )
+        # Exit code 5 means "no tests collected" — exactly what we want.
+        assert result.returncode in (0, 5), result.stderr
+        # No check stem should appear in the collected output.
+        for stem in _CHECK_STEMS:
+            assert stem not in result.stdout, (
+                f"bare `pytest` should not auto-collect {stem}, got:\n{result.stdout}"
+            )
+
+    @staticmethod
+    def test_bare_collect_only_discovers_the_battery(
+        tmp_path: Path,
+    ) -> None:
+        """Bare ``pytest --collect-only`` DOES discover the check battery.
+
+        Regression test for a consumer report: "no pykissembed tests are
+        found on the pytest side panel". VS Code's Python Test Explorer
+        (and other IDE test explorers) discover tests by invoking pytest
+        with ``--collect-only`` and no other filter — the same shape as
+        the configured ``python.testing.pytestArgs`` plus ``--collect-only``.
+        Without this rule, that bare discovery collected nothing and
+        pykissembed's checks never appeared in the test tree, even though
+        a real execution run (see
+        ``test_bare_pytest_run_collects_nothing_from_plugin``) is correctly
+        unaffected — ``--collect-only`` never executes anything, so
+        showing the battery in the tree is safe.
+        """
         import os
         import subprocess
 
@@ -426,12 +535,11 @@ class TestSubprocessCollection:
             text=True,
             check=False,
         )
-        # Exit code 5 means "no tests collected" — exactly what we want.
-        assert result.returncode in (0, 5), result.stderr
-        # No check stem should appear in the collected output.
+        assert result.returncode == 0, result.stderr
         for stem in _CHECK_STEMS:
-            assert stem not in result.stdout, (
-                f"bare `pytest` should not auto-collect {stem}, got:\n{result.stdout}"
+            assert f"{stem}.py" in result.stdout, (
+                f"expected {stem} to be discoverable via --collect-only, "
+                f"got:\n{result.stdout}\nstderr:\n{result.stderr}"
             )
 
     @staticmethod

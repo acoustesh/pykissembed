@@ -214,8 +214,8 @@ def _decide_injection(
     Returns
     -------
     Path | str | None
-        * The whole ``checks_dir`` if the user passed ``--pykissembed-all``
-          or a marker filter (``-m``).
+        * The whole ``checks_dir`` if the user passed ``--pykissembed-all``,
+          ``--collect-only``/``--co``, or a marker filter (``-m``).
         * A single file inside ``checks_dir`` whose stem matches a
           ``::NodeId`` filter pointing at a pykissembed check
           (smart-restrict). When the user's NodeId included a class or
@@ -232,10 +232,20 @@ def _decide_injection(
     2. ``-m <marker>`` present → return the whole ``checks_dir`` so the
        marker filter can narrow the run.
     3. Any ``::NodeId`` whose non-class part is one of the
-       ``_CHECK_STEMS`` → return that single file.
+       ``_CHECK_STEMS`` → return that single file (smart-restrict).
     4. Any other filter present (``-k``, ``--deselect``) → return ``None``
        (the filter alone decides).
-    5. Otherwise → return ``None``. The consumer did not ask for the
+    5. Otherwise (no marker/NodeId/keyword/deselect at all) →
+       ``--collect-only``/``--co`` set → return the whole ``checks_dir``.
+       This is what IDE test explorers (e.g. VS Code's Python extension)
+       use to *discover* tests without running them, and it's normally a
+       bare invocation with no other filter. Without this rule, that
+       bare discovery collects nothing and pykissembed's checks never
+       appear in the test tree. Running an individual discovered test
+       later passes its NodeId explicitly (no ``--collect-only``), which
+       is handled by rule 3/the already-on-CLI guard above, so this rule
+       only affects what shows up during discovery, never what executes.
+    6. Otherwise → return ``None``. The consumer did not ask for the
        battery; respect that.
     """
     if config.getoption("--pykissembed-all"):
@@ -305,6 +315,13 @@ def _decide_injection(
 
     if has_keyword_filter or has_deselect:
         return None
+
+    # Nothing narrowed the request at all (no marker, NodeId, keyword, or
+    # deselect filter). If this is a pure discovery pass (--collect-only),
+    # show the full battery so IDE test explorers populate their tree —
+    # no tests are actually *executed* by a --collect-only invocation.
+    if config.getoption("--collect-only"):
+        return checks_dir
 
     return None
 

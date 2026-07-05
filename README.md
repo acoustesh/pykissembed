@@ -74,6 +74,12 @@ automatic — bare `pytest` collects nothing from pykissembed. Pick one:
 - `pytest <path>/pykissembed/checks/docstring_format.py::TestDocstringFormat::test_x`
   — target a specific check NodeId directly (smart-restrict): only that
   file/class/test is injected and collected.
+- `pytest --collect-only` (no other filter) — also shows the full battery.
+  This is the invocation shape IDE test explorers (e.g. VS Code's Python
+  extension) use to populate their test tree, so pykissembed's checks
+  appear there without any extra configuration. It never executes
+  anything, so this is safe: running an individual discovered test still
+  only runs that one test.
 - Anything else (bare `pytest`, `-k` alone, `--deselect` alone) injects
   nothing from pykissembed, so your own tests run untouched.
 
