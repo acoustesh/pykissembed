@@ -13,7 +13,7 @@ import os
 import sys
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import Any, cast
+from typing import Any
 
 if sys.version_info >= (3, 11):
     import tomllib
@@ -77,7 +77,7 @@ def _read_toml(path: Path) -> dict[str, Any]:
     if not path.exists():
         return {}
     with path.open("rb") as f:
-        return cast("dict[str, Any]", tomllib.load(f))
+        return tomllib.load(f)
 
 
 def _coerce_str_list(value: object, *, key: str) -> list[str]:

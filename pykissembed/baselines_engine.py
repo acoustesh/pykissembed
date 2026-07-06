@@ -22,18 +22,21 @@ import tempfile
 from dataclasses import dataclass
 from importlib import resources
 from pathlib import Path
-from typing import Any, cast
+from typing import TYPE_CHECKING, Any, TypeGuard, cast
 
 from jsonschema import Draft7Validator
+
+if TYPE_CHECKING:
+    from jsonschema.protocols import Validator
 
 SCHEMA_VERSION = "1.0"
 _KIND_TO_FIELD: dict[str, str] = {}  # populated lazily
 
 # Lazy-loaded validator — schemas are bundled in pykissembed/schemas/
-_VALIDATOR: Draft7Validator | None = None
+_VALIDATOR: Validator | None = None
 
 
-def _load_validator() -> Draft7Validator:
+def _load_validator() -> Validator:
     """Load and compile the v1 baseline schema (lazy, cached)."""
     global _VALIDATOR
     if _VALIDATOR is not None:
@@ -72,7 +75,7 @@ def _migrate_v0_to_v1(kind: str, raw: dict[str, Any]) -> dict[str, Any]:
     return {"schema_version": SCHEMA_VERSION, "kind": kind, "data": raw}
 
 
-def is_v1_envelope(value: object) -> bool:
+def is_v1_envelope(value: object) -> TypeGuard[dict[str, Any]]:
     """Return ``True`` if *value* is a valid v1 envelope."""
     if not isinstance(value, dict):
         return False
@@ -116,10 +119,9 @@ def load_envelope(path: Path, kind: str) -> BaselineEnvelope:
     if is_v1_envelope(raw):
         validator = _load_validator()
         validator.validate(raw)  # raises on error
-        envelope_dict = cast("dict[str, Any]", raw)
         return BaselineEnvelope(
-            kind=str(envelope_dict["kind"]),
-            data=dict(envelope_dict["data"]),
+            kind=str(raw["kind"]),
+            data=dict(raw["data"]),
             path=path,
         )
 
@@ -132,7 +134,7 @@ def load_envelope(path: Path, kind: str) -> BaselineEnvelope:
     if not isinstance(raw, dict):
         raw_dict: dict[str, Any] = {}
     else:
-        raw_dict = cast("dict[str, Any]", dict(raw))
+        raw_dict = dict(raw)
     migrated = _migrate_v0_to_v1(kind, raw_dict)
     envelope = BaselineEnvelope(kind=kind, data=raw_dict, path=path)
     # Write migrated envelope back so the next load is fast

@@ -84,7 +84,7 @@ def _truncate_to_token_limit(text: str, max_tokens: int, encoder: object) -> str
     if not callable(encode_fn) or not callable(decode_fn):
         return text
     raw_tokens: object = encode_fn(text)
-    tokens: list[int] = list(raw_tokens) if isinstance(raw_tokens, (list, tuple)) else []  # type: ignore[arg-type]
+    tokens: list[object] = list(raw_tokens) if isinstance(raw_tokens, (list, tuple)) else []
     if len(tokens) <= max_tokens:
         return text
     truncated_tokens = tokens[:max_tokens]
@@ -248,11 +248,11 @@ def _build_provider_caller(
         If *provider* is not a recognised embedding provider.
     """
     if provider == "gemini":
-        from google import genai  # type: ignore[import-not-found]
-        from google.genai import types  # type: ignore[import-not-found]
+        from google import genai
+        from google.genai import types
 
         api_key = _load_api_key_from_env("GOOGLE_API_KEY")
-        client = genai.Client(
+        gemini_client = genai.Client(
             api_key=api_key,
             http_options=types.HttpOptions(timeout=int(timeout * 1000)),
         )
@@ -275,8 +275,8 @@ def _build_provider_caller(
             ValueError
                 If the API response contains no embeddings.
             """
-            contents: types.ContentListUnion = truncated  # pyright: ignore[reportAssignmentType]
-            result = client.models.embed_content(
+            contents: list[types.ContentUnion] = [*truncated]
+            result = gemini_client.models.embed_content(
                 model=model,
                 contents=contents,
                 config=types.EmbedContentConfig(
@@ -308,16 +308,16 @@ def _build_provider_caller(
         return (_gemini_request, _gemini_is_retryable)
 
     if provider == "openai":
-        import openai  # type: ignore[import-not-found]
+        import openai
 
-        client = openai.OpenAI(
+        openai_client = openai.OpenAI(
             api_key=_load_api_key_from_env("OPENAI_API_KEY"),
             timeout=timeout,
         )
         return (
             lambda t: [
                 item.embedding
-                for item in client.embeddings.create(
+                for item in openai_client.embeddings.create(
                     input=t,
                     model=model,
                 ).data
@@ -385,9 +385,9 @@ def _build_provider_caller(
         )
 
     if provider == "voyage":
-        import voyageai  # type: ignore[import-not-found]
+        from voyageai.client import Client as VoyageClient
 
-        client = voyageai.Client(  # pyright: ignore[reportPrivateImportUsage]
+        voyage_client = VoyageClient(
             api_key=_require_api_key("VOYAGE_API_KEY"),
             timeout=timeout,
         )
@@ -411,7 +411,7 @@ def _build_provider_caller(
         return (
             lambda t: [
                 list(map(float, emb))
-                for emb in client.embed(
+                for emb in voyage_client.embed(
                     t,
                     model=model,
                     input_type="document",

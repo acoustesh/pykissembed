@@ -65,8 +65,11 @@ def _install_fake_sentence_transformers(
         def encode(self, inputs, **kwargs: Any) -> Any:
             return self._impl.encode(inputs, **kwargs)
 
-    fake_st = types.ModuleType("sentence_transformers")
-    fake_st.SentenceTransformer = _FakeSentenceTransformer  # type: ignore[attr-defined]
+    class _FakeSTModule(types.ModuleType):
+        SentenceTransformer: type[_FakeSentenceTransformer]
+
+    fake_st = _FakeSTModule("sentence_transformers")
+    fake_st.SentenceTransformer = _FakeSentenceTransformer
     monkeypatch.setitem(sys.modules, "sentence_transformers", fake_st)
 
     return captured

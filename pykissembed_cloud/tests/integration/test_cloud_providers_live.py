@@ -15,12 +15,17 @@ assertion on vector values — that would be flaky across model versions.
 
 from __future__ import annotations
 
+from typing import TYPE_CHECKING
+
 import pytest
 
 from pykissembed_cloud.dotenv import ensure_loaded
 from pykissembed_cloud.providers.gemini import GeminiProvider
 from pykissembed_cloud.providers.openai import OpenAIProvider
 from pykissembed_cloud.providers.qwen import QwenProvider
+
+if TYPE_CHECKING:
+    from pykissembed_cloud.providers._openai_compat import OpenAICompatProvider
 
 
 def _has_openrouter_key() -> bool:
@@ -52,14 +57,14 @@ pytestmark = [
     "provider",
     [OpenAIProvider(), GeminiProvider(), QwenProvider()],
 )
-def test_embed_returns_one_vector_per_input(provider: object) -> None:
+def test_embed_returns_one_vector_per_input(provider: OpenAICompatProvider) -> None:
     """Each provider returns one vector per input text.
 
     Tagged ``smoke`` (and ``live`` via the module-level ``pytestmark``)
     so CI can run a fast subset with ``pytest -m "live and smoke"``.
     """
-    assert provider.is_configured()  # type: ignore[attr-defined]
-    vectors = provider.embed(["hello world", "goodbye world"])  # type: ignore[attr-defined]
+    assert provider.is_configured()
+    vectors = provider.embed(["hello world", "goodbye world"])
     assert len(vectors) == 2
     for vec in vectors:
         assert isinstance(vec, list)
