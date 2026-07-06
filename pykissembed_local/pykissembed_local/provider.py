@@ -10,10 +10,11 @@ transparently (the registry keeps the last-registered entry per name).
 from __future__ import annotations
 
 import os
-from collections.abc import Sequence
 from typing import TYPE_CHECKING, Any
 
 if TYPE_CHECKING:
+    from collections.abc import Sequence
+
     from sentence_transformers import SentenceTransformer
 
 # Default model id. Override at populate-time via ``PYQTEST_LOCAL_MODEL``.
