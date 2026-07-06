@@ -87,6 +87,7 @@ dev = [
     "pytest-xdist>=3.6",
     "ruff>=0.15.20",
     "twine>=6.0",
+    "mcp[cli]>=1.28,<2.0",  # advisor-mcp server deps (ty resolution)
 ]
 
 [tool.hatch.build.targets.wheel]
