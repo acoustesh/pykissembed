@@ -44,7 +44,8 @@ def _build_payload(prompt: str, advisor: str) -> dict[str, Any]:
         prompt: The question or decision the caller needs guidance on.
         advisor: The OpenRouter model slug to use as the advisor.
 
-    Returns:
+    Returns
+    -------
         The JSON-serialisable request body.
     """
     return {
@@ -59,7 +60,8 @@ def _extract_content(data: dict[str, Any]) -> str:
     Args:
         data: The decoded JSON body returned by OpenRouter.
 
-    Returns:
+    Returns
+    -------
         The assistant message content, or a human-readable fallback.
     """
     choices: list[dict[str, Any]] = data.get("choices", [])
@@ -79,7 +81,8 @@ async def consult_advisor(prompt: str) -> str:
     Args:
         prompt: The question or decision the caller needs guidance on.
 
-    Returns:
+    Returns
+    -------
         The advisor model's reply, or an error message describing why the
         consultation failed.
     """

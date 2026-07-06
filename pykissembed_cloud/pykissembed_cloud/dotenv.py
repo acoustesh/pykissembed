@@ -162,7 +162,7 @@ def ensure_loaded(
         module-level cache).
     """
     key = _cache_key(start)
-    if _loaded_for.get(key, False):
+    if _loaded_for.get(key):
         return None
     _loaded_for[key] = True
     return load_into_environ(keys, start=start)

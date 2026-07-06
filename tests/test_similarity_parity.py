@@ -28,8 +28,6 @@ from __future__ import annotations
 import numpy as np
 import pytest
 
-from pykissembed.similarity.types import FunctionInfo
-
 # Sibling helper module; pytest's default import mode prepends the test
 # file's directory to ``sys.path``, so the bare name resolves correctly.
 # A previous version used ``from tests._similarity_backend import …``,
@@ -42,6 +40,7 @@ from _similarity_backend import (
     compute_similarity_matrix_cpu,
     has_cuml,
 )
+from pykissembed.similarity.types import FunctionInfo
 
 
 # Small enough to keep the CPU test fast; large enough that the GPU path
@@ -67,26 +66,24 @@ def _make_function_infos(
     norms = np.linalg.norm(raw, axis=1, keepdims=True)
     normalised = (raw / norms).astype(np.float32)
 
-    functions: list[FunctionInfo] = []
-    for i in range(n_samples):
-        # The hash/loc/text fields are unused by compute_similarity_matrix
-        # but the dataclass requires them; supply stable sentinels.
-        functions.append(
-            FunctionInfo(
-                name=f"fixture_fn_{i}",
-                file=f"fixture_{i}.py",
-                start_line=1,
-                end_line=2,
-                loc=2,
-                hash=f"hash_{i}",
-                text=f"def fixture_fn_{i}(): pass",
-                text_for_embedding=f"def fixture_fn_{i}(): pass",
-                text_hash=f"text_hash_{i}",
-                ast_text=f"def fixture_fn_{i}(): pass",
-                embedding=normalised[i].tolist(),
-            ),
+    # The hash/loc/text fields are unused by compute_similarity_matrix
+    # but the dataclass requires them; supply stable sentinels.
+    return [
+        FunctionInfo(
+            name=f"fixture_fn_{i}",
+            file=f"fixture_{i}.py",
+            start_line=1,
+            end_line=2,
+            loc=2,
+            hash=f"hash_{i}",
+            text=f"def fixture_fn_{i}(): pass",
+            text_for_embedding=f"def fixture_fn_{i}(): pass",
+            text_hash=f"text_hash_{i}",
+            ast_text=f"def fixture_fn_{i}(): pass",
+            embedding=normalised[i].tolist(),
         )
-    return functions
+        for i in range(n_samples)
+    ]
 
 
 def test_cpu_similarity_matrix_has_zero_diagonal() -> None:

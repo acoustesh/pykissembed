@@ -64,7 +64,7 @@ def has_cuml() -> bool:
 
 def compute_similarity_matrix_cpu(
     functions: list,
-) -> "NDArray[np.float32]":
+) -> NDArray[np.float32]:
     """Compute the N×N cosine-similarity matrix using the CPU path.
 
     Calls the existing ``pykissembed.similarity.refactor_index.compute_similarity_matrix``
@@ -83,7 +83,7 @@ def compute_similarity_matrix_cpu(
 
 def compute_similarity_matrix_accel(
     functions: list,
-) -> "NDArray[np.float32]":
+) -> NDArray[np.float32]:
     """Compute the N×N cosine-similarity matrix with ``cuml.accel`` active.
 
     Activates ``cuml.accel.install()`` once, then re-runs the same
@@ -115,8 +115,8 @@ def compute_similarity_matrix_accel(
 
 
 def assert_matrix_parity(
-    cpu: "NDArray[np.float32]",
-    gpu: "NDArray[np.float32]",
+    cpu: NDArray[np.float32],
+    gpu: NDArray[np.float32],
     *,
     atol: float = _MATRIX_ATOL,
 ) -> None:

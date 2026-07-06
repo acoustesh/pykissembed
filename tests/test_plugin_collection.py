@@ -484,7 +484,7 @@ class TestSubprocessCollection:
             check=False,
         )
         # Exit code 5 means "no tests collected" — exactly what we want.
-        assert result.returncode in (0, 5), result.stderr
+        assert result.returncode in {0, 5}, result.stderr
         # No check stem should appear in the collected output.
         for stem in _CHECK_STEMS:
             assert stem not in result.stdout, (
@@ -654,8 +654,10 @@ class TestSubprocessCollection:
                 sys.executable,
                 "-m",
                 "pytest",
-                "tests/code_complexity.py::TestDocstringCoverage::"
-                "test_docstring_coverage",
+                (
+                    "tests/code_complexity.py::TestDocstringCoverage::"
+                    "test_docstring_coverage"
+                ),
                 "--collect-only",
                 "-q",
             ],
