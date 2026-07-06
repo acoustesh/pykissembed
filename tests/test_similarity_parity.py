@@ -40,8 +40,8 @@ from _similarity_backend import (
     compute_similarity_matrix_cpu,
     has_cuml,
 )
-from pykissembed.similarity.types import FunctionInfo
 
+from pykissembed.similarity.types import FunctionInfo
 
 # Small enough to keep the CPU test fast; large enough that the GPU path
 # actually does meaningful work in the pixi env.
