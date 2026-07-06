@@ -88,6 +88,8 @@ dev = [
     "ruff>=0.15.20",
     "twine>=6.0",
     "mcp[cli]>=1.28,<2.0",  # advisor-mcp server deps (ty resolution)
+    "google-genai>=1.0",    # optional gemini provider in similarity/embeddings.py (ty resolution)
+    "voyageai>=0.3",        # optional voyage provider in similarity/embeddings.py (ty resolution)
 ]
 
 [tool.hatch.build.targets.wheel]
@@ -204,3 +206,13 @@ convention = "numpy"
 include = ["pykissembed", "src/pykissembed", "tests"]
 pythonVersion = "3.12"
 extraPaths = ["src"]
+
+# ty (editor type checker). The extra path resolves cuml from the RAPIDS pixi
+# env (machine-specific; harmlessly absent elsewhere — cuml just won't resolve).
+[tool.ty.environment]
+extra-paths = ["/home/alvaro/rapids-playground/.pixi/envs/test/lib/python3.12/site-packages"]
+
+# tests/fixtures/sample_repo is a self-contained sample project (own pyproject,
+# src/example_pkg); its imports can never resolve against this venv.
+[tool.ty.src]
+exclude = ["tests/fixtures/sample_repo"]
