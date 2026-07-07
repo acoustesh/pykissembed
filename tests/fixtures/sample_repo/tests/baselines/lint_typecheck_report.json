@@ -27,16 +27,45 @@
           "col": 64
         }
       ],
-      "pyright": []
+      "pyright": [
+        {
+          "code": "reportUnsupportedDunderAll",
+          "message": "\"add\" is specified in __all__ but is not present in module",
+          "line": 6,
+          "col": 26,
+          "severity": "warning"
+        },
+        {
+          "code": "reportUnsupportedDunderAll",
+          "message": "\"greet\" is specified in __all__ but is not present in module",
+          "line": 6,
+          "col": 33,
+          "severity": "warning"
+        },
+        {
+          "code": "reportUnsupportedDunderAll",
+          "message": "\"no_docstring_func\" is specified in __all__ but is not present in module",
+          "line": 6,
+          "col": 42,
+          "severity": "warning"
+        },
+        {
+          "code": "reportUnsupportedDunderAll",
+          "message": "\"too_complex\" is specified in __all__ but is not present in module",
+          "line": 6,
+          "col": 63,
+          "severity": "warning"
+        }
+      ]
     }
   },
   "summary": {
     "total_files": 1,
     "ruff_errors": 4,
     "pyright_errors": 0,
-    "pyright_warnings": 0,
+    "pyright_warnings": 4,
     "pyright_information": 0,
     "pyright_hints": 0,
-    "total": 4
+    "total": 8
   }
 }

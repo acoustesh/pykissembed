@@ -85,7 +85,8 @@ ignore = [
     "D100",
     "D104",
     "T201",   # print() usage — allowed in scripts
-    "PLR09",  # too many of things
+    "PLR09",  # too many of things,
+    "C901",  # too complex
 ]
 
 [tool.ruff.lint.pydocstyle]
