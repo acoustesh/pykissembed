@@ -193,7 +193,7 @@ def _auto_detect(root: Path) -> PyqtestConfig:
         paths = ["src"]
     return PyqtestConfig(
         paths=paths,
-        mode=os.environ.get("pykissembed_MODE", "ratchet"),
+        mode=os.environ.get("PYKISSEMBED_MODE", "ratchet"),
         baseline_dir="tests/baselines",
         cache_dir="tests/.pykissembed_cache",
         include_notebooks=False,

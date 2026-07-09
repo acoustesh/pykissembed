@@ -8,7 +8,7 @@ verifies the drop-in accelerator gives equivalent results to vanilla
 NumPy, which is what production users would get by enabling the
 accelerator.
 
-Why this targets ``compute_similarity_matrix`` (the N×N matmul) instead
+Why this targets ``compute_similarity_matrix`` (the NxN matmul) instead
 of a hypothetical KNN path: pykissembed's similarity hot loop is
 ``refactor_index.compute_similarity_matrix`` + ``compute_max_similarities``
 + ``checks._check_against_others``, none of which call
@@ -25,6 +25,7 @@ is restricted at collection time.
 
 from __future__ import annotations
 
+import importlib
 import importlib.util
 from typing import TYPE_CHECKING
 
@@ -56,8 +57,8 @@ def has_cuml() -> bool:
     if importlib.util.find_spec("cuml") is not None:
         return True
     try:
-        import cuml  # noqa: F401  # pylint: disable=import-outside-toplevel
-    except ImportError:
+        importlib.import_module("cuml")
+    except ModuleNotFoundError:
         return False
     return True
 
@@ -65,7 +66,7 @@ def has_cuml() -> bool:
 def compute_similarity_matrix_cpu(
     functions: list,
 ) -> NDArray[np.float32]:
-    """Compute the N×N cosine-similarity matrix using the CPU path.
+    """Compute the NxN cosine-similarity matrix using the CPU path.
 
     Calls the existing ``pykissembed.similarity.refactor_index.compute_similarity_matrix``
     directly. This is the reference implementation that pykissembed's
@@ -84,7 +85,7 @@ def compute_similarity_matrix_cpu(
 def compute_similarity_matrix_accel(
     functions: list,
 ) -> NDArray[np.float32]:
-    """Compute the N×N cosine-similarity matrix with ``cuml.accel`` active.
+    """Compute the NxN cosine-similarity matrix with ``cuml.accel`` active.
 
     Activates ``cuml.accel.install()`` once, then re-runs the same
     pykissembed code path. ``cuml.accel`` patches sklearn/numpy dispatch
@@ -105,12 +106,12 @@ def compute_similarity_matrix_accel(
         raise RuntimeError(msg)
     # Lazy import: cuml pulls in cudf, which pulls in the CUDA runtime.
     # Importing it only inside the GPU path keeps the CPU-only run clean.
-    # The import is intentionally unguarded — callers must gate on
-    # ``has_cuml()`` first. pyright/pylint see the import-not-found
-    # diagnostic; we suppress it because cuml is opt-in (pixi env only).
-    import cuml.accel  # type: ignore[import-not-found]  # pylint: disable=import-outside-toplevel
-
-    cuml.accel.install()
+    accel_module = importlib.import_module("cuml.accel")
+    install_fn = getattr(accel_module, "install", None)
+    if not callable(install_fn):
+        msg = "cuml.accel.install is missing or not callable"
+        raise TypeError(msg)
+    install_fn()
     return compute_similarity_matrix_cpu(functions)
 
 
@@ -134,12 +135,14 @@ def assert_matrix_parity(
         beyond ``atol``.
     """
     if cpu.shape != gpu.shape:
+        msg = f"shape mismatch: cpu {cpu.shape} vs gpu {gpu.shape}"
         raise AssertionError(
-            f"shape mismatch: cpu {cpu.shape} vs gpu {gpu.shape}",
+            msg,
         )
     if cpu.ndim != 2 or cpu.shape[0] != cpu.shape[1]:
+        msg = f"expected square matrices, got cpu shape {cpu.shape}"
         raise AssertionError(
-            f"expected square matrices, got cpu shape {cpu.shape}",
+            msg,
         )
 
     n = cpu.shape[0]
@@ -152,10 +155,13 @@ def assert_matrix_parity(
         diff = np.abs(cpu_off - gpu_off)
         max_diff = float(diff.max())
         worst_idx = int(diff.argmax())
-        raise AssertionError(
+        msg = (
             f"off-diagonal similarity drift exceeds atol={atol}: "
             f"max |cpu-gpu|={max_diff:.3e} at flat index {worst_idx} "
-            f"(row={worst_idx // (n - 1)}, col={worst_idx % (n - 1)})",
+            f"(row={worst_idx // (n - 1)}, col={worst_idx % (n - 1)})"
+        )
+        raise AssertionError(
+            msg,
         )
 
     # Also check symmetry: cosine similarity is symmetric, so cpu and gpu
@@ -163,4 +169,5 @@ def assert_matrix_parity(
     # bug (very common in matrix-multiplication code).
     for label, matrix in (("cpu", cpu), ("gpu", gpu)):
         if not np.allclose(matrix, matrix.T, atol=atol, rtol=1e-4, equal_nan=True):
-            raise AssertionError(f"{label} matrix is not symmetric within atol={atol}")
+            msg = f"{label} matrix is not symmetric within atol={atol}"
+            raise AssertionError(msg)

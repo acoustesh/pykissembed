@@ -22,7 +22,7 @@ from pykissembed.baselines_engine import (
 from pykissembed.config import get_config
 
 if TYPE_CHECKING:
-    from collections.abc import Iterator
+    from collections.abc import Callable, Iterator
 
 
 class _BaselineConfig(TypedDict, total=False):
@@ -39,7 +39,7 @@ class _BaselineConfig(TypedDict, total=False):
 # ---------------------------------------------------------------------------
 
 
-def _load_callable(module_name: str, attribute: str) -> object | None:
+def _load_callable(module_name: str, attribute: str) -> Callable[..., object] | None:
     try:
         module = importlib.import_module(module_name)
     except ImportError:
@@ -98,13 +98,13 @@ def _get_cc(file_path: Path) -> list[tuple[str, int, int]]:
         return []
     source = file_path.read_text(encoding="utf-8")
     try:
-        raw_blocks = cast("object", cc_visit_fn(source))
+        raw_blocks = cc_visit_fn(source)
     except SyntaxError:
         return []
     if not isinstance(raw_blocks, list):
         return []
     out: list[tuple[str, int, int]] = []
-    for block in cast("list[object]", raw_blocks):
+    for block in raw_blocks:
         name = getattr(block, "name", None)
         lineno = getattr(block, "lineno", None)
         complexity = getattr(block, "complexity", None)
@@ -135,7 +135,7 @@ def _get_mi(file_path: Path) -> float:
         return 0.0
     source = file_path.read_text(encoding="utf-8")
     try:
-        score = cast("object", mi_visit_fn(source, multi=False))
+        score = mi_visit_fn(source, multi=False)
     except Exception:
         return 0.0
     if isinstance(score, (int, float)):

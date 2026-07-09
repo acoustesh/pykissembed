@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+from .core import add, greet, no_docstring_func, too_complex
+
 __version__ = "0.1.0"
 
 __all__ = ["__version__", "add", "greet", "no_docstring_func", "too_complex"]

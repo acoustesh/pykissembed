@@ -175,7 +175,7 @@ class TestEmbed:
         assert state == {"model_id": DEFAULT_MODEL_ID, "_model": None}
         # Round-trip through pickle to confirm both dunders are correct.
         # Safe here: we control the bytes — this is a self-pickle in a test.
-        import pickle  # noqa: S403
+        import pickle
 
         restored = pickle.loads(pickle.dumps(p))  # noqa: S301
         assert restored._model is None

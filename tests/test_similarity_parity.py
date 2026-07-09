@@ -1,7 +1,7 @@
 """Parity tests: cosine-similarity matmul CPU (NumPy) vs GPU (``cuml.accel``).
 
 These tests verify that pykissembed's similarity gate produces equivalent
-results whether the N×N cosine-similarity matmul runs on CPU (vanilla
+results whether the NxN cosine-similarity matmul runs on CPU (vanilla
 NumPy, fp32/fp64) or GPU (``cuml.accel``-accelerated, fp32 BLAS). They do
 **not** test the similarity test surface that ``pykissembed`` auto-
 collects (that lives in ``pykissembed/checks/code_similarity.py`` and is
@@ -112,7 +112,7 @@ def test_cpu_similarity_matrix_entries_in_unit_interval() -> None:
 
 @pytest.mark.skipif(not has_cuml(), reason="cuml not available in this environment")
 def test_cuml_accel_matches_cpu_similarity_matrix() -> None:
-    """CPU and GPU paths must agree on the full N×N similarity matrix.
+    """CPU and GPU paths must agree on the full NxN similarity matrix.
 
     This is the regression-guard test: if ``cuml.accel`` changes anything
     in pykissembed's hot loop, this fails.
