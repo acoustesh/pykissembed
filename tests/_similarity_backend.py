@@ -55,6 +55,11 @@ def has_cuml() -> bool:
     ``sys.path`` is restricted at collection time (e.g. pytest's
     collection-time sys.path may not include the pixi env's
     site-packages even when the interpreter has cuml installed).
+
+    Returns
+    -------
+    bool
+        ``True`` if ``cuml`` can be found or imported, else ``False``.
     """
     if importlib.util.find_spec("cuml") is not None:
         return True
@@ -95,6 +100,11 @@ def compute_similarity_matrix_accel(
     the path is identical to the CPU path. This is intentional: the
     test exists to verify that **enabling the accelerator does not
     change the numerical result**.
+
+    Returns
+    -------
+    NDArray[np.float32]
+        Square similarity matrix with the diagonal zeroed out.
 
     Raises
     ------

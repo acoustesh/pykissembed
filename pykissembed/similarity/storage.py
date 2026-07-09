@@ -298,7 +298,16 @@ class EmbeddingRegistry:
         baselines: dict[str, object],
         providers: tuple[ProviderEntry, ...] | None = None,
     ) -> list[tuple[ProviderEntry, set[str], dict[str, list[float]]]]:
-        """Resolve each provider to its valid-hash set and live cache."""
+        """Resolve each provider to its valid-hash set and live cache.
+
+        Returns
+        -------
+        list[tuple[ProviderEntry, set[str], dict[str, list[float]]]]
+            One tuple per provider in *providers* (or all registered
+            providers if not given), pairing the provider with the
+            valid-hash set matching its ``hash_type`` and its live
+            on-disk cache dict.
+        """
         valid_text, valid_ast, _ = get_valid_hashes(baselines)
         return [
             (

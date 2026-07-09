@@ -71,13 +71,25 @@ def pytest_addoption(parser: pytest.Parser) -> None:
 
 @pytest.fixture
 def update_baselines(request: pytest.FixtureRequest) -> bool:
-    """Fixture returning the ``--update-baselines`` flag value."""
+    """Fixture returning the ``--update-baselines`` flag value.
+
+    Returns
+    -------
+    bool
+        ``True`` if ``--update-baselines`` was passed on the command line.
+    """
     return bool(request.config.getoption("--update-baselines"))
 
 
 @pytest.fixture
 def cached_only(request: pytest.FixtureRequest) -> bool:
-    """Fixture returning the ``--cached-only`` flag value."""
+    """Fixture returning the ``--cached-only`` flag value.
+
+    Returns
+    -------
+    bool
+        ``True`` if ``--cached-only`` was passed on the command line.
+    """
     return bool(request.config.getoption("--cached-only"))
 
 
@@ -330,7 +342,15 @@ def _decide_injection(
 
 
 def _checks_dir() -> Path | None:
-    """Return the path to the installed ``pykissembed/checks/`` directory."""
+    """Return the path to the installed ``pykissembed/checks/`` directory.
+
+    Returns
+    -------
+    Path | None
+        The directory containing ``pykissembed/checks/__init__.py``, or
+        ``None`` if ``pykissembed.checks`` can't be imported or is a
+        namespace package with no ``__file__``.
+    """
     try:
         # Defensive: unlike the other lazy imports in this file, this one
         # guards against a corrupted/partial install rather than perf —
@@ -378,6 +398,13 @@ def pytest_collect_file(
     To avoid collecting the same test twice, we defer to the default hook
     for init paths by returning ``None`` when
     ``parent.session.isinitpath(file_path)`` is ``True``.
+
+    Returns
+    -------
+    pytest.Module | None
+        A ``Module`` collector for *file_path* if it is a not-yet-collected,
+        non-init-path check module living under ``pykissembed/checks/``;
+        ``None`` otherwise (deferring to pytest's default collection).
     """
     if file_path.suffix != ".py":
         return None

@@ -42,7 +42,14 @@ def _get_int_attr(obj: object, attr_name: str) -> int:
 
 
 def _comment_density_from_source(source: str) -> CommentStats:
-    """Compute comment density from source code (radon)."""
+    """Compute comment density from source code (radon).
+
+    Returns
+    -------
+    CommentStats
+        Source lines of code, comment count, and comment density as a
+        percentage of code lines (``0.0`` if there are no code lines).
+    """
     metrics = analyze(source)
     loc = _get_int_attr(metrics, "loc")
     multi = _get_int_attr(metrics, "multi")
@@ -54,7 +61,15 @@ def _comment_density_from_source(source: str) -> CommentStats:
 
 
 def _code_body_lines(node: ast.FunctionDef | ast.AsyncFunctionDef) -> int:
-    """Count lines of code in a function body, excluding the docstring."""
+    """Count lines of code in a function body, excluding the docstring.
+
+    Returns
+    -------
+    int
+        Number of lines in *node*, minus the signature line and the
+        docstring's lines (if the first body statement is one).
+        Never negative.
+    """
     total = (node.end_lineno or node.lineno) - node.lineno + 1
     code_lines = total - 1
     body = node.body
@@ -72,7 +87,16 @@ def _code_body_lines(node: ast.FunctionDef | ast.AsyncFunctionDef) -> int:
 def _all_functions_short(
     file_path: Path, max_lines: int = SMALL_FUNCTION_THRESHOLD
 ) -> bool:
-    """Return True if every function's code body is shorter than *max_lines*."""
+    """Return True if every function's code body is shorter than *max_lines*.
+
+    Returns
+    -------
+    bool
+        ``True`` if the file has at least one function/async function
+        and every one has a code body under *max_lines*. ``False`` if
+        the file can't be read as UTF-8, fails to parse, or defines no
+        functions.
+    """
     try:
         source = file_path.read_text(encoding="utf-8")
     except (UnicodeDecodeError, OSError) as exc:

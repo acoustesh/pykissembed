@@ -35,6 +35,13 @@ def _make_config(
     ``getoption('--pykissembed-all')``, ``getoption('--collect-only')``,
     and ``config.args``. Everything else is stubbed out so the helper can
     run in isolation.
+
+    Returns
+    -------
+    MagicMock
+        A mock ``pytest.Config`` whose ``getoption`` returns *all_flag*
+        for ``--pykissembed-all``, *collect_only* for ``--collect-only``,
+        and ``False`` otherwise, and whose ``.args`` is a copy of *args*.
     """
     cfg = MagicMock()
 
@@ -58,6 +65,12 @@ def fake_checks_dir(tmp_path: Path) -> Path:
     file so the smart-restrict branch of ``_decide_injection`` can find
     a real file to return. Anything that does not exist on disk is
     treated as "not injectable" by the helper.
+
+    Returns
+    -------
+    Path
+        The created ``checks/`` directory under *tmp_path*, populated
+        with one ``<stem>.py`` touch file per check stem.
     """
     d = tmp_path / "checks"
     d.mkdir()

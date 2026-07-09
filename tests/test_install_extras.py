@@ -43,7 +43,14 @@ def _build_wheels(destination: Path, sources: list[Path]) -> None:
 
 
 def _make_consumer_project(tmp_path: Path, find_links: Path) -> Path:
-    """Scaffold a minimal consumer project that depends on ``pykissembed[local]``."""
+    """Scaffold a minimal consumer project that depends on ``pykissembed[local]``.
+
+    Returns
+    -------
+    Path
+        The scaffolded consumer project directory (containing a
+        ``pyproject.toml`` under *tmp_path*).
+    """
     project = tmp_path / "consumer"
     project.mkdir()
     pyproject = textwrap.dedent(
@@ -66,7 +73,15 @@ def _make_consumer_project(tmp_path: Path, find_links: Path) -> Path:
 
 
 def _list_local_entry_points(venv_python: Path) -> list[str]:
-    """Return all entry-point values registered under ``local`` in the consumer venv."""
+    """Return all entry-point values registered under ``local`` in the consumer venv.
+
+    Returns
+    -------
+    list[str]
+        The ``value`` (dotted import path) of each entry point in the
+        ``pykissembed.providers`` group named ``local``, as reported by
+        *venv_python*'s ``importlib.metadata``.
+    """
     code = textwrap.dedent(
         """
         from importlib.metadata import entry_points
@@ -86,7 +101,15 @@ def _list_local_entry_points(venv_python: Path) -> list[str]:
 
 
 def _active_local_provider(venv_python: Path) -> str | None:
-    """Return the dotted path of the provider that wins in the registry."""
+    """Return the dotted path of the provider that wins in the registry.
+
+    Returns
+    -------
+    str | None
+        ``"<module>:<class name>"`` of the provider registered under
+        ``"local"`` after running discovery in *venv_python*, or
+        ``None`` if the subprocess prints nothing (no such provider).
+    """
     code = textwrap.dedent(
         """
         from pykissembed.providers import registry

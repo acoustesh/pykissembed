@@ -60,6 +60,13 @@ def _make_function_infos(
     The ``embedding`` attribute is the only field exercised by
     ``compute_similarity_matrix``. Other fields are filled with stable
     sentinels so the dataclass doesn't reject the input.
+
+    Returns
+    -------
+    list[FunctionInfo]
+        *n_samples* fixtures, each with an L2-normalised random
+        ``embedding`` of *n_features* dimensions (seeded by *seed*) and
+        stable sentinel ``name``/``file``/``loc``/``hash``/``text`` fields.
     """
     rng = np.random.default_rng(seed=seed)
     raw = rng.standard_normal(size=(n_samples, n_features))

@@ -149,6 +149,13 @@ def ratchet_cmd(
 def _compute_current_for(baseline_name: str) -> dict[str, Any]:
     """Dispatch to the right current-diagnostics computer based on filename.
 
+    Returns
+    -------
+    dict[str, Any]
+        For ``"lint_typecheck.json"``: a ``{"per_file": {...}}`` dict
+        mapping each file to its current ruff+pyright diagnostic count
+        (empty dict if no ``[tool.pykissembed]`` paths are configured).
+
     Raises
     ------
     NotImplementedError
@@ -365,6 +372,12 @@ def _auto_detect_paths(root: Path, pyproject_text: str) -> list[str]:
     2. ``[project]`` ``packages`` (hatchling ``packages`` list)
     3. ``src/`` directory if it exists
     4. ``.`` (current directory) as fallback
+
+    Returns
+    -------
+    list[str]
+        The detected source directory path(s), taken from the first
+        matching priority rule above.
     """
     try:
         data = tomllib.loads(pyproject_text)

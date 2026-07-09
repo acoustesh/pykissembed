@@ -55,7 +55,17 @@ def _load_callable(module_name: str, attribute: str) -> Callable[..., object] | 
 def _extract_items_with_docstrings(
     file_path: Path,
 ) -> list[tuple[str, int, bool, str]]:
-    """Return ``[(name, line_no, has_docstring, kind), ...]`` for a file."""
+    """Return ``[(name, line_no, has_docstring, kind), ...]`` for a file.
+
+    Returns
+    -------
+    list[tuple[str, int, bool, str]]
+        One tuple per top-level and nested function/class definition
+        (``@overload``-decorated functions excluded), giving its name,
+        line number, whether it has a docstring, and its kind
+        (``"class"`` or ``"function"``). Empty if the file can't be read
+        as UTF-8 or fails to parse as valid Python.
+    """
     results: list[tuple[str, int, bool, str]] = []
     try:
         source = file_path.read_text(encoding="utf-8")
@@ -92,7 +102,16 @@ def _get_line_count(file_path: Path) -> int:
 
 
 def _get_cc(file_path: Path) -> list[tuple[str, int, int]]:
-    """Return ``[(name, lineno, cc), ...]`` using radon."""
+    """Return ``[(name, lineno, cc), ...]`` using radon.
+
+    Returns
+    -------
+    list[tuple[str, int, int]]
+        One tuple per block radon reports, giving its name, line
+        number, and cyclomatic complexity. Empty if radon isn't
+        installed, the file can't be read as UTF-8, or the file fails
+        to parse.
+    """
     cc_visit_fn = _load_callable("radon.complexity", "cc_visit")
     if cc_visit_fn is None:
         return []
@@ -123,7 +142,16 @@ def _get_cc(file_path: Path) -> list[tuple[str, int, int]]:
 
 
 def _get_cog(file_path: Path) -> list[tuple[str, int, int]]:
-    """Return ``[(name, lineno, cognitive_complexity), ...]`` using complexipy."""
+    """Return ``[(name, lineno, cognitive_complexity), ...]`` using complexipy.
+
+    Returns
+    -------
+    list[tuple[str, int, int]]
+        One tuple per function complexipy reports, giving its name,
+        starting line number, and cognitive complexity. Empty if
+        complexipy isn't installed, its analysis raises, or the result
+        has no ``functions`` attribute.
+    """
     try:
         # Lazy: complexipy is a compiled (Rust) analyzer; deferring the
         # import avoids its cost for test runs that never touch cognitive
@@ -155,7 +183,15 @@ def _get_cog(file_path: Path) -> list[tuple[str, int, int]]:
 
 
 def _get_mi(file_path: Path) -> float:
-    """Return the Maintainability Index for *file_path* using radon."""
+    """Return the Maintainability Index for *file_path* using radon.
+
+    Returns
+    -------
+    float
+        The Maintainability Index score, or ``0.0`` if radon isn't
+        installed, the file can't be read as UTF-8, radon's analysis
+        raises, or the returned score isn't numeric.
+    """
     mi_visit_fn = _load_callable("radon.metrics", "mi_visit")
     if mi_visit_fn is None:
         return 0.0

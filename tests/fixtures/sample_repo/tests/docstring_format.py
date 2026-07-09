@@ -35,7 +35,15 @@ class DocstringViolation:
 
 
 def _run_ruff_docstring_check(target_dir: Path) -> list[DocstringViolation]:
-    """Run ``ruff check --select=D --output-format=json`` on *target_dir*."""
+    """Run ``ruff check --select=D --output-format=json`` on *target_dir*.
+
+    Returns
+    -------
+    list[DocstringViolation]
+        One entry per D-rule violation ruff reports. Empty if ruff
+        isn't on PATH, produces no stdout, or the stdout isn't a
+        parseable JSON list of well-formed diagnostic objects.
+    """
     ruff = shutil.which("ruff")
     if ruff is None:
         return []

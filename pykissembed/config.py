@@ -57,7 +57,13 @@ class PyqtestConfig:
         return self.root / self.cache_dir
 
     def resolved_paths(self) -> list[Path]:
-        """Return ``self.paths`` as absolute Path objects."""
+        """Return ``self.paths`` as absolute Path objects.
+
+        Returns
+        -------
+        list[Path]
+            Each entry in ``self.paths`` joined onto ``self.root``.
+        """
         return [self.root / p for p in self.paths]
 
 
@@ -201,6 +207,12 @@ def get_config() -> PyqtestConfig:
 
     Uses :func:`load_config` on first call and caches the result in
     ``pykissembed_CONFIG_CACHE`` for subsequent calls within the same process.
+
+    Returns
+    -------
+    PyqtestConfig
+        The configuration for the current working directory, loaded
+        fresh on first call per cwd and cached thereafter.
     """
     cache: dict[str, PyqtestConfig] = globals().setdefault("pykissembed_CONFIG_CACHE", {})  # type: ignore[var-annotated]
     key = str(Path.cwd())

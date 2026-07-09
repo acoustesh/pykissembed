@@ -12,8 +12,10 @@ providers, since they share the same OpenRouter base URL.
 from __future__ import annotations
 
 import os
-from collections.abc import Sequence
-from typing import Any
+from typing import TYPE_CHECKING, Any
+
+if TYPE_CHECKING:
+    from collections.abc import Sequence
 
 # OpenRouter exposes an OpenAI-compatible API at this base URL.
 # See https://openrouter.ai/docs for the upstream contract.

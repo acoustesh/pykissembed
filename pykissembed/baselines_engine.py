@@ -36,7 +36,13 @@ _KIND_TO_FIELD: dict[str, str] = {}  # populated lazily
 
 @functools.cache
 def _load_validator() -> Validator:
-    """Load and compile the v1 baseline schema (lazy, cached on first use)."""
+    """Load and compile the v1 baseline schema (lazy, cached on first use).
+
+    Returns
+    -------
+    Validator
+        Compiled ``Draft7Validator`` for the v1 baseline schema.
+    """
     schema_text = (
         resources.files("pykissembed.schemas").joinpath("baselines.v1.json").read_text("utf-8")
     )
@@ -66,7 +72,14 @@ class BaselineEnvelope:
 
 
 def is_v1_envelope(value: object) -> TypeGuard[dict[str, Any]]:
-    """Return ``True`` if *value* is a valid v1 envelope."""
+    """Return ``True`` if *value* is a valid v1 envelope.
+
+    Returns
+    -------
+    bool
+        ``True`` if *value* is a dict with a matching ``schema_version``,
+        a string ``kind``, and a dict ``data``; ``False`` otherwise.
+    """
     if not isinstance(value, dict):
         return False
     return (

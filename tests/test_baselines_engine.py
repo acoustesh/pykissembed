@@ -110,5 +110,11 @@ class TestRatchet:
 
 
 def _read_json(path: Path) -> object:
-    """Helper: read JSON file as object (typed via cast)."""
+    """Helper: read JSON file as object (typed via cast).
+
+    Returns
+    -------
+    object
+        The value parsed from *path*'s JSON contents.
+    """
     return json.loads(path.read_text(encoding="utf-8"))

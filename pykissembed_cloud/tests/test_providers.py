@@ -7,10 +7,8 @@ of an OpenAI ``CreateEmbeddingResponse``.
 
 from __future__ import annotations
 
-from collections.abc import Sequence
 from dataclasses import dataclass
-from pathlib import Path
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
 import pytest
 from pykissembed.providers import Provider
@@ -20,6 +18,10 @@ from pykissembed_cloud.dotenv import find_dotenv as _real_find_dotenv
 from pykissembed_cloud.providers.gemini import GeminiProvider
 from pykissembed_cloud.providers.openai import OpenAIProvider
 from pykissembed_cloud.providers.qwen import QwenProvider
+
+if TYPE_CHECKING:
+    from collections.abc import Sequence
+    from pathlib import Path
 
 
 @pytest.fixture(autouse=True)

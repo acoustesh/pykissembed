@@ -26,7 +26,15 @@ from pykissembed.paths import include_notebooks
 
 
 def _resolve_tool(name: str) -> str:
-    """Return ``name`` if it exists on PATH, else ``name`` (PATH-resolved at call)."""
+    """Return ``name`` if it exists on PATH, else ``name`` (PATH-resolved at call).
+
+    Returns
+    -------
+    str
+        The absolute path to *name* if found on ``PATH``, otherwise
+        *name* unchanged so the caller's subprocess call still attempts
+        PATH resolution itself.
+    """
     return shutil.which(name) or name  # pragma: no cover — defensive
 
 
@@ -37,6 +45,13 @@ def _run_ruff(paths: list[Path]) -> list[dict[str, Any]]:
     contain exploratory code that isn't held to the same hygiene standards
     as production source. Consumers can override this by setting
     ``include_notebooks = true`` in ``[tool.pykissembed]``.
+
+    Returns
+    -------
+    list[dict[str, Any]]
+        The parsed JSON diagnostics from ``ruff check``. Empty if the
+        subprocess errors out or times out, ruff produces no stdout, or
+        the parsed JSON isn't a list.
     """
     cmd = [
         _resolve_tool("ruff"),
@@ -65,7 +80,15 @@ def _run_ruff(paths: list[Path]) -> list[dict[str, Any]]:
 
 
 def _run_pyright(paths: list[Path]) -> list[dict[str, Any]]:
-    """Run ``pyright --outputjson`` and return ``generalDiagnostics``."""
+    """Run ``pyright --outputjson`` and return ``generalDiagnostics``.
+
+    Returns
+    -------
+    list[dict[str, Any]]
+        The ``generalDiagnostics`` list from pyright's JSON output.
+        Empty if the subprocess errors out or times out, pyright
+        produces no stdout, or the parsed JSON isn't a dict.
+    """
     cmd = [_resolve_tool("pyright"), "--outputjson", *[str(p) for p in paths]]
     try:
         # S603: fixed argv (resolved pyright binary + literal flags +
@@ -89,7 +112,19 @@ def _build_report(
     *,
     root: Path,
 ) -> dict[str, Any]:
-    """Aggregate diagnostics into a per-file JSON report."""
+    """Aggregate diagnostics into a per-file JSON report.
+
+    Returns
+    -------
+    dict[str, Any]
+        A dict with two keys: ``"files"`` mapping each file's path
+        (relative to *root*, or the raw reported path if it isn't
+        under *root*) to its ``"ruff"`` and ``"pyright"`` diagnostic
+        lists (files with no diagnostics in either are omitted), and
+        ``"summary"`` with aggregate counts (``total_files``,
+        ``ruff_errors``, ``pyright_errors``, ``pyright_warnings``,
+        ``pyright_information``, ``pyright_hints``, ``total``).
+    """
     files: dict[str, dict[str, list[dict[str, Any]]]] = {}
     ruff_total = 0
     for d in ruff_diags:

@@ -35,7 +35,13 @@ class LocalProvider:
         raise RuntimeError(msg)
 
     def is_configured(self) -> bool:
-        """Return True only if the real ``pykissembed-local`` package is installed."""
+        """Return True only if the real ``pykissembed-local`` package is installed.
+
+        Returns
+        -------
+        bool
+            ``True`` if ``pykissembed_local`` can be imported, else ``False``.
+        """
         try:
             import pykissembed_local  # noqa: F401, PLC0415 — presence probe, must not hard-depend
         except ImportError:

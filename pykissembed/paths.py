@@ -116,7 +116,13 @@ def resolve_paths() -> list[Path]:
 
 
 def root() -> Path:
-    """Return the project root (parent of ``pyproject.toml``)."""
+    """Return the project root (parent of ``pyproject.toml``).
+
+    Returns
+    -------
+    Path
+        ``get_config().root``.
+    """
     return get_config().root
 
 
@@ -125,6 +131,11 @@ def include_notebooks() -> bool:
 
     Reads ``[tool.pykissembed] include_notebooks`` from ``pyproject.toml``.
     Defaults to ``False``.
+
+    Returns
+    -------
+    bool
+        ``get_config().include_notebooks``.
     """
     return bool(get_config().include_notebooks)
 

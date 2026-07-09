@@ -60,11 +60,24 @@ class ProviderRegistry:
                 self.register(instance)
 
     def all(self) -> list[Provider]:
-        """Return all registered providers as a sorted list."""
+        """Return all registered providers as a sorted list.
+
+        Returns
+        -------
+        list[Provider]
+            Registered providers ordered by name.
+        """
         return [self._providers[n] for n in sorted(self._providers)]
 
     def get(self, name: str) -> Provider | None:
-        """Return the provider named *name* or ``None``."""
+        """Return the provider named *name* or ``None``.
+
+        Returns
+        -------
+        Provider | None
+            The registered provider for *name*, or ``None`` if no
+            provider is registered under that name.
+        """
         return self._providers.get(name)
 
     def __contains__(self, name: object) -> bool:
@@ -89,14 +102,29 @@ def discover_builtin() -> None:
 
 
 def discover_all() -> ProviderRegistry:
-    """Discover built-in + entry-point providers and return the registry."""
+    """Discover built-in + entry-point providers and return the registry.
+
+    Returns
+    -------
+    ProviderRegistry
+        The global :data:`REGISTRY`, now populated with built-in and
+        entry-point providers.
+    """
     discover_builtin()
     REGISTRY.discover()
     return REGISTRY
 
 
 def get(name: str) -> Provider | None:
-    """Convenience helper: get a provider by name, registering built-ins on demand."""
+    """Convenience helper: get a provider by name, registering built-ins on demand.
+
+    Returns
+    -------
+    Provider | None
+        The registered provider for *name*, or ``None`` if no provider
+        is registered under that name (after running discovery once if
+        the registry was empty).
+    """
     if not REGISTRY:
         discover_all()
     return REGISTRY.get(name)
@@ -109,6 +137,11 @@ def cache_key(provider: Provider, content_hash: str) -> str:
 
     Including ``schema_version`` is mandatory — it prevents silent cache
     corruption when a provider's vector shape changes between releases.
+
+    Returns
+    -------
+    str
+        The pipe-delimited cache key string.
     """
     return f"{provider.name}|{provider.model_id}|{provider.schema_version}|{content_hash}"
 
