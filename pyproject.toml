@@ -18,7 +18,7 @@ description = "Generic Python code-quality test library: lint, type, complexity,
 readme = "README.md"
 license = "MIT"
 license-files = ["LICENSE"]
-requires-python = ">=3.12"
+requires-python = ">=3.14"
 keywords = ["pytest", "lint", "ruff", "pyright", "complexity", "docstring", "similarity"]
 authors = [{ name = "Alvaro" }]
 classifiers = [
@@ -28,8 +28,6 @@ classifiers = [
     "License :: OSI Approved :: MIT License",
     "Operating System :: OS Independent",
     "Programming Language :: Python :: 3",
-    "Programming Language :: Python :: 3.12",
-    "Programming Language :: Python :: 3.13",
     "Programming Language :: Python :: 3.14",
     "Topic :: Software Development :: Quality Assurance",
     "Topic :: Software Development :: Testing",
@@ -38,7 +36,6 @@ classifiers = [
 dependencies = [
     "pytest>=8.0",
     "pyyaml>=6.0",
-    "tomli>=2.0; python_version < '3.11'",
     "rich>=13.0",
     "typer>=0.21",
     "click>=8.1",
@@ -153,7 +150,7 @@ exclude_lines = [
 
 [tool.ruff]
 line-length = 100
-target-version = "py312"
+target-version = "py314"
 
 [tool.ruff.lint]
 select = ["ALL"]
@@ -167,6 +164,7 @@ ignore = [
     "D401",    # non-imperative-mood — first docstring word need not be imperative ("Returns…" is fine in NumPy style)
     "D102", "D103", "D105", "D107",  # undocumented public method / public function / magic method / __init__ — docstrings optional on test helpers and dunders
     # --- Size / complexity thresholds (complexity is governed by pykissembed's own gate) ---
+    "PLR1702", # too-many-nested-blocks
     "PLR0911", # too-many-return-statements
     "PLR0912", # too-many-branches
     "PLR0913", # too-many-arguments
@@ -198,7 +196,6 @@ ignore = [
     "S112",    # try-except-continue — continuing past per-item errors is deliberate in scan loops
     "PERF403", # manual-dict-comprehension — explicit dict-building loops kept for readability
     "PLW0603", # global-statement — `global` used for module-level lazy caches (e.g. _VALIDATOR)
-    "UP036",   # outdated-version-block — sys.version_info fallback blocks kept (tomli import for Python < 3.11)
     "SLF001",  # private-member-access — tests reach into private members by design
     "PYI049",  # unused-private-typed-dict — private TypedDicts kept as structural documentation
     "F841",    # unused-variable — unused locals tolerated in early-return / defensive paths
@@ -220,12 +217,14 @@ ignore = [
 convention = "numpy"
 
 [tool.ruff.lint.per-file-ignores]
-"tests/**" = ["ANN001", "ANN201", "ANN202", "S101", "PLR2004"]
+# S404 (suspicious-subprocess-import, preview-only) — test helpers legitimately
+# `import subprocess` to shell out and exercise the CLI end-to-end.
+"tests/**" = ["ANN001", "ANN201", "ANN202", "S101", "PLR2004", "S404"]
 "pykissembed/tests/fixtures/**" = ["ALL"]
 
 [tool.pyright]
 include = ["pykissembed", "src/pykissembed", "tests"]
-pythonVersion = "3.12"
+pythonVersion = "3.14"
 extraPaths = ["src"]
 
 # ty (editor type checker). The extra path resolves cuml from the RAPIDS pixi

@@ -49,7 +49,7 @@ def _make_consumer_project(tmp_path: Path, find_links: Path) -> Path:
         [project]
         name = "consumer"
         version = "0.0.0"
-        requires-python = ">=3.12"
+        requires-python = ">=3.14"
         dependencies = ["pykissembed[local]"]
 
         [tool.uv]

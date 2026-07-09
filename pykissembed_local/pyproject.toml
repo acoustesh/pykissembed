@@ -21,7 +21,7 @@ description = "Local sentence-transformers embedding provider for pykissembed (B
 readme = "README.md"
 license = "MIT"
 license-files = ["LICENSE"]
-requires-python = ">=3.12"
+requires-python = ">=3.14"
 keywords = ["pykissembed", "sentence-transformers", "embeddings", "local"]
 authors = [{ name = "Alvaro" }]
 classifiers = [
@@ -30,8 +30,6 @@ classifiers = [
     "License :: OSI Approved :: MIT License",
     "Operating System :: OS Independent",
     "Programming Language :: Python :: 3",
-    "Programming Language :: Python :: 3.12",
-    "Programming Language :: Python :: 3.13",
     "Programming Language :: Python :: 3.14",
     "Topic :: Software Development :: Quality Assurance",
     "Topic :: Software Development :: Testing",
@@ -77,7 +75,7 @@ exclude_lines = [
 
 [tool.ruff]
 line-length = 100
-target-version = "py312"
+target-version = "py314"
 
 [tool.ruff.lint]
 select = ["ALL"]
@@ -87,6 +85,7 @@ ignore = [
     "T201",   # print() usage — allowed in scripts
     "PLR09",  # too many of things,
     "C901",  # too complex
+    "PLC0415", # import-outside-top-level — lazy in-function imports are deliberate: sentence-transformers/tiktoken are heavy/optional and deferred (mirrors the root pykissembed config)
 ]
 
 [tool.ruff.lint.pydocstyle]
@@ -125,4 +124,4 @@ python_functions = ["test_*"]
 
 [tool.pyright]
 include = ["pykissembed_local", "tests"]
-pythonVersion = "3.12"
+pythonVersion = "3.14"

@@ -347,7 +347,6 @@ class TestSubprocessCollection:
     @staticmethod
     def test_specific_nodeid_only_collects_that_test(
         tmp_path: Path,
-        monkeypatch: pytest.MonkeyPatch,
     ) -> None:
         """``pytest <file>::Test::test_x`` collects exactly one test, not 11."""
         import subprocess

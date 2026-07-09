@@ -23,7 +23,7 @@ name: pykissembed
         description: "Python version"
         required: false
         type: string
-        default: "3.12"
+        default: "3.14"
       mode:
         description: "pykissembed mode (ratchet or strict)"
         required: true

@@ -11,13 +11,16 @@ filesystem and writes a cache; the rest of the package is just the
 
 from __future__ import annotations
 
+import functools
 import hashlib
 import json
 from pathlib import Path
-from typing import TYPE_CHECKING, Any, Protocol, cast
+from typing import TYPE_CHECKING, Protocol
 
 if TYPE_CHECKING:
     from collections.abc import Iterable, Sequence
+
+    from tiktoken import Encoding
 
 
 class ProviderLike(Protocol):
@@ -29,35 +32,34 @@ class ProviderLike(Protocol):
     max_tokens: int
     batch_size: int
 
-    def embed(self, texts: Sequence[str]) -> list[list[float]]: ...
+    def embed(self, texts: Sequence[str]) -> list[list[float]]:
+        """Return one embedding vector per input text."""
+        ...
 
 
-# Lazy module reference — tiktoken is the only mandatory dep beyond numpy.
-_tiktoken: Any = None
+@functools.cache
+def _get_encoding() -> Encoding:
+    """Lazy-load the ``cl100k_base`` tiktoken encoding (cached on first use).
 
-
-def _get_tiktoken() -> Any:
-    """Lazy-import tiktoken so the provider is usable without it (tests).
+    Deferring the import keeps this module importable without ``tiktoken``
+    (e.g. in tests that never call the token-aware paths).
 
     Returns
     -------
-    Any
-        The ``tiktoken`` module.
+    Encoding
+        The ``cl100k_base`` tiktoken encoding.
 
     Raises
     ------
     RuntimeError
         If ``tiktoken`` is not installed.
     """
-    global _tiktoken
-    if _tiktoken is None:
-        try:
-            import tiktoken
-        except ImportError as exc:
-            msg = "pykissembed-local requires tiktoken for token-aware truncation"
-            raise RuntimeError(msg) from exc
-        _tiktoken = tiktoken
-    return _tiktoken
+    try:
+        import tiktoken
+    except ImportError as exc:
+        msg = "pykissembed-local requires tiktoken for token-aware truncation"
+        raise RuntimeError(msg) from exc
+    return tiktoken.get_encoding("cl100k_base")
 
 
 def iter_py_files(base_dir: Path) -> Iterable[Path]:
@@ -92,8 +94,7 @@ def truncate_to_tokens(text: str, *, max_tokens: int) -> str:
         The original text if it fits in *max_tokens*; otherwise a
         prefix decoded from the first ``max_tokens`` tokens.
     """
-    tiktoken = _get_tiktoken()
-    enc = tiktoken.get_encoding("cl100k_base")
+    enc = _get_encoding()
     token_ids = enc.encode(text, disallowed_special=())
     if len(token_ids) <= max_tokens:
         return text
@@ -197,12 +198,13 @@ def populate(
         with cache_file.open(encoding="utf-8") as f:
             for line in f:
                 try:
-                    rec = cast("dict[str, Any]", json.loads(line))
+                    rec = json.loads(line)
                 except json.JSONDecodeError:
                     continue
-                key = rec.get("key")
-                if isinstance(key, str):
-                    existing.add(key)
+                if isinstance(rec, dict):
+                    key = rec.get("key")
+                    if isinstance(key, str):
+                        existing.add(key)
 
     inputs = _collect_inputs(paths, project_root=root)
     if not inputs:
