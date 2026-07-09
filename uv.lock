@@ -1653,7 +1653,7 @@ crypto = [
 
 [[package]]
 name = "pykissembed"
-version = "0.1.15"
+version = "0.1.16"
 source = { editable = "." }
 dependencies = [
     { name = "click" },
@@ -1731,7 +1731,7 @@ dev = [
 
 [[package]]
 name = "pykissembed-cloud"
-version = "0.1.15"
+version = "0.1.16"
 source = { editable = "pykissembed_cloud" }
 dependencies = [
     { name = "openai" },
@@ -1758,7 +1758,7 @@ dev = [
 
 [[package]]
 name = "pykissembed-local"
-version = "0.1.15"
+version = "0.1.16"
 source = { editable = "pykissembed_local" }
 dependencies = [
     { name = "numpy" },

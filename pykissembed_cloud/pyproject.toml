@@ -17,7 +17,7 @@ build-backend = "hatchling.build"
 
 [project]
 name = "pykissembed-cloud"
-version = "0.1.15"
+version = "0.1.16"
 description = "Cloud embedding providers for pykissembed (OpenRouter-routed: openai, gemini, qwen)."
 readme = "README.md"
 license = "MIT"
