@@ -10,8 +10,10 @@ from __future__ import annotations
 from pathlib import Path
 from textwrap import dedent
 
+import numpy as np
 import pytest
 
+from pykissembed.plugin import _CHECK_STEMS, _checks_dir
 from pykissembed.similarity.ast_helpers import (
     compute_content_hash,
     extract_function_infos_from_file,
@@ -294,7 +296,7 @@ class TestProviderEntry:
             name="test_text",
             label="Test-Text",
             cache_key="test_text_embeddings",
-            file_path=Path("/tmp/test.json.zlib"),
+            file_path=Path("test.json.zlib"),  # never read; dataclass field placeholder
             hash_type=HashType.TEXT,
         )
         assert entry.hash_field == "text_hash"
@@ -306,7 +308,7 @@ class TestProviderEntry:
             name="test_ast",
             label="Test-AST",
             cache_key="test_ast_embeddings",
-            file_path=Path("/tmp/test.json.zlib"),
+            file_path=Path("test.json.zlib"),  # never read; dataclass field placeholder
             hash_type=HashType.AST,
         )
         assert entry.hash_field == "hash"
@@ -318,7 +320,7 @@ class TestProviderEntry:
             name="openai_text",
             label="OpenAI-Text",
             cache_key="openai_text_embeddings",
-            file_path=Path("/tmp/test.json.zlib"),
+            file_path=Path("test.json.zlib"),  # never read; dataclass field placeholder
             hash_type=HashType.TEXT,
         )
         assert entry.threshold_pair_key == "openai_text_similarity_threshold_pair"
@@ -354,8 +356,6 @@ class TestRefactorIndex:
     @staticmethod
     def test_max_similarities() -> None:
         """Max similarities returns per-row max."""
-        import numpy as np
-
         matrix = np.array([[0.0, 0.5, 0.8], [0.5, 0.0, 0.3], [0.8, 0.3, 0.0]], dtype=np.float32)
         max_sims = compute_max_similarities(matrix)
         assert max_sims[0] == pytest.approx(0.8)
@@ -365,8 +365,6 @@ class TestRefactorIndex:
     @staticmethod
     def test_similarity_indices_formula() -> None:
         """Similarity index = 25.403 * max_sim^5."""
-        import numpy as np
-
         max_sims = np.array([1.0, 0.5], dtype=np.float64)
         indices = compute_similarity_indices(max_sims)
         assert indices[0] == pytest.approx(25.403)
@@ -375,8 +373,6 @@ class TestRefactorIndex:
     @staticmethod
     def test_refactor_indices_formula() -> None:
         """Refactor index = 0.25*CC + 0.15*COG + 0.6*similarity_index."""
-        import numpy as np
-
         cc = np.array([10.0], dtype=np.float32)
         cog = np.array([5.0], dtype=np.float32)
         sim_idx = np.array([20.0], dtype=np.float64)
@@ -396,8 +392,6 @@ class TestPluginCollection:
         the _CHECK_STEMS set, and that the _checks_dir() function returns
         a valid directory.
         """
-        from pykissembed.plugin import _CHECK_STEMS, _checks_dir
-
         assert "code_complexity" in _CHECK_STEMS
         assert "code_similarity" in _CHECK_STEMS
         assert "comment_density" in _CHECK_STEMS

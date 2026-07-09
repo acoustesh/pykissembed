@@ -7,9 +7,11 @@ declared in their own ``pyproject.toml``.
 
 from __future__ import annotations
 
+import warnings
 from importlib import metadata
 
 from pykissembed.providers.base import Provider
+from pykissembed.providers.local import LocalProvider
 
 _BUILTIN_GROUP = "pykissembed.providers"
 
@@ -26,6 +28,10 @@ class ProviderRegistry:
         """Register *provider*. Overwrites any existing provider with the same name."""
         self._providers[provider.name] = provider
 
+    def clear(self) -> None:
+        """Remove all registered providers."""
+        self._providers.clear()
+
     def discover(self) -> None:
         """Discover third-party providers via entry points and register them.
 
@@ -40,7 +46,14 @@ class ProviderRegistry:
         for ep in reversed(eps):
             try:
                 loaded = ep.load()
-            except Exception:  # pragma: no cover — defensive
+            except Exception as exc:  # noqa: BLE001
+                # A broken third-party entry point (bad install, incompatible
+                # version) must not crash discovery for every other provider.
+                warnings.warn(  # pragma: no cover — defensive
+                    f"pykissembed: failed to load provider entry point {ep.name!r}: {exc}",
+                    RuntimeWarning,
+                    stacklevel=2,
+                )
                 continue
             instance = loaded() if isinstance(loaded, type) else loaded
             if isinstance(instance, Provider):
@@ -57,6 +70,9 @@ class ProviderRegistry:
     def __contains__(self, name: object) -> bool:
         return isinstance(name, str) and name in self._providers
 
+    def __len__(self) -> int:
+        return len(self._providers)
+
     def __repr__(self) -> str:
         names = ", ".join(sorted(self._providers))
         return f"<ProviderRegistry providers={names!r}>"
@@ -69,8 +85,6 @@ REGISTRY = ProviderRegistry()
 
 def discover_builtin() -> None:
     """Register the providers bundled with pykissembed itself."""
-    from pykissembed.providers.local import LocalProvider
-
     REGISTRY.register(LocalProvider())
 
 
@@ -83,7 +97,7 @@ def discover_all() -> ProviderRegistry:
 
 def get(name: str) -> Provider | None:
     """Convenience helper: get a provider by name, registering built-ins on demand."""
-    if not REGISTRY._providers:
+    if not REGISTRY:
         discover_all()
     return REGISTRY.get(name)
 

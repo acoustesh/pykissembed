@@ -15,8 +15,15 @@ from pykissembed.similarity.embeddings import (
     compute_cosine_similarity,
     get_cached_embedding,
 )
+from pykissembed.similarity.pca import fit_pca, transform_embeddings_with_pca
+from pykissembed.similarity.populate_embeddings import get_provider_populator
 from pykissembed.similarity.refactor_index import get_refactor_priority_message
-from pykissembed.similarity.storage import REGISTRY, ProviderEntry
+from pykissembed.similarity.storage import (
+    REGISTRY,
+    ProviderEntry,
+    load_provider_embeddings,
+    save_baselines,
+)
 
 if TYPE_CHECKING:
     from collections.abc import Callable
@@ -26,6 +33,11 @@ if TYPE_CHECKING:
 type Baselines = dict[str, object]
 type NeighborEntry = tuple[str, str, int, float]
 type PcaCache = dict[str, tuple[PCAModel | None, int, bool]]
+
+_MAX_SHOWN_UNCACHED = 10
+_EXCLUSION_PAIR_SIZE = 2
+_MIN_NEIGHBORS_FOR_VIOLATION = 2
+_MIN_FUNCTIONS_TO_COMPARE = 2
 
 # Provider aliases — single source of truth is REGISTRY in storage.py
 OPENAI_TEXT_PROVIDER = REGISTRY.by_cache_key("openai_text_embeddings")
@@ -65,8 +77,12 @@ def _load_cached_embeddings(
 
 def _skip_missing_embeddings(uncached: list[FunctionInfo], provider: ProviderEntry) -> None:
     """Skip test if any functions lack cached embeddings."""
-    uncached_names = [f"{f.file}:{f.name}" for f in uncached[:10]]
-    more_msg = f"\n  ... and {len(uncached) - 10} more" if len(uncached) > 10 else ""
+    uncached_names = [f"{f.file}:{f.name}" for f in uncached[:_MAX_SHOWN_UNCACHED]]
+    more_msg = (
+        f"\n  ... and {len(uncached) - _MAX_SHOWN_UNCACHED} more"
+        if len(uncached) > _MAX_SHOWN_UNCACHED
+        else ""
+    )
     pytest.skip(
         f"{len(uncached)} functions lack cached {provider.label} embeddings.\n"
         f"Run: pykissembed populate-embeddings --provider "
@@ -119,7 +135,7 @@ def _is_excluded_pair(
     """
     # Check file-level exclusions
     for pair in excluded_file_pairs:
-        if len(pair) != 2:
+        if len(pair) != _EXCLUSION_PAIR_SIZE:
             continue
         pattern_a, pattern_b = pair
         if (pattern_a in func_a.file and pattern_b in func_b.file) or (
@@ -131,7 +147,7 @@ def _is_excluded_pair(
     func_a_key = f"{func_a.file}:{func_a.name}"
     func_b_key = f"{func_b.file}:{func_b.name}"
     for pair in excluded_function_pairs:
-        if len(pair) != 2:
+        if len(pair) != _EXCLUSION_PAIR_SIZE:
             continue
         pattern_a, pattern_b = pair
         if (pattern_a in func_a_key and pattern_b in func_b_key) or (
@@ -215,7 +231,7 @@ def _find_violations(
         )
         pair_violations.extend(func_pair_viols)
 
-        if len(similar_neighbors) >= 2:
+        if len(similar_neighbors) >= _MIN_NEIGHBORS_FOR_VIOLATION:
             neighbor_violations.append(_format_neighbor_violation(func_a, similar_neighbors))
 
     return pair_violations, neighbor_violations
@@ -254,7 +270,9 @@ def run_provider_similarity_checks(
     *,
     baselines: Baselines,
     functions: list[FunctionInfo],
-    update_baselines: bool,
+    update_baselines: bool,  # noqa: ARG001 — accepted for call-site symmetry with
+    # cached_only; currently unused (embeddings are always auto-populated when not
+    # cached_only, regardless of this flag).
     cached_only: bool,
     provider: ProviderEntry,
     threshold_pair: float,
@@ -275,7 +293,9 @@ def run_provider_similarity_checks(
     ----------
     baselines: Dict with function_hashes, config, and embeddings (lazy-loaded).
     functions: List of FunctionInfo objects to check.
-    update_baselines: Whether to auto-populate missing embeddings.
+    update_baselines: Currently unused — embeddings are always auto-populated
+        when not cached_only, regardless of this flag. Kept for call-site
+        symmetry with cached_only.
     cached_only: If True, skip test when embeddings are missing.
     provider: ProviderEntry with label, cache_key, etc.
     threshold_pair: Similarity threshold for pair violations.
@@ -283,11 +303,7 @@ def run_provider_similarity_checks(
     load_complexity_maps_fn: Callable returning (cc_map, cog_map) for refactor index.
     pca_cache: Optional session-scoped cache for fitted PCA models.
     """
-    from pykissembed.similarity.pca import fit_pca, transform_embeddings_with_pca
-    from pykissembed.similarity.populate_embeddings import get_provider_populator
-    from pykissembed.similarity.storage import load_provider_embeddings, save_baselines
-
-    if len(functions) < 2:
+    if len(functions) < _MIN_FUNCTIONS_TO_COMPARE:
         pytest.skip("Not enough functions to compare")
 
     # Lazy-load this provider's embeddings if not already loaded
@@ -327,7 +343,7 @@ def run_provider_similarity_checks(
         cache_key=provider.cache_key if pca_cache is not None else "",
     )
     if pca_model is not None:
-        transform_embeddings_with_pca(functions, pca_model, n_components, is_gpu)
+        transform_embeddings_with_pca(functions, pca_model, n_components, is_gpu=is_gpu)
 
     # Load exclusion lists (intentionally similar pairs to skip)
     excluded_file_pairs = _extract_excluded_pairs(config, "excluded_file_pairs")

@@ -16,6 +16,8 @@ import numpy.typing as npt
 if TYPE_CHECKING:
     from pykissembed.similarity.types import FunctionInfo, PCAModel
 
+_MIN_EMBEDDINGS_FOR_PCA = 10
+
 
 class _CupyArray(Protocol):
     """Minimal CuPy array protocol used at dynamic boundaries."""
@@ -177,10 +179,11 @@ def _get_pca_class() -> tuple[type, bool]:
 
         # Test that cuML actually works (catches version mismatches)
         _ = pca_gpu_cls(n_components=2)
-        return pca_gpu_cls, True
     except (ImportError, AttributeError):
         # AttributeError catches cuML version incompatibilities
         return _load_sklearn_pca_class(), False
+    else:
+        return pca_gpu_cls, True
 
 
 def fit_pca(
@@ -206,7 +209,7 @@ def fit_pca(
         if full_key in pca_cache:
             return pca_cache[full_key]
 
-    if len(embeddings_cache) < 10:
+    if len(embeddings_cache) < _MIN_EMBEDDINGS_FOR_PCA:
         return None, 0, False
 
     pca_class, is_gpu = _get_pca_class()
@@ -248,6 +251,7 @@ def transform_embeddings_with_pca(
     functions: list[FunctionInfo],
     pca_model: PCAModel,
     n_components: int,
+    *,
     is_gpu: bool = True,
 ) -> None:
     """Transform function embeddings using pre-fitted PCA model in-place."""
@@ -299,7 +303,7 @@ def _make_kmeans(
     random_state: int,
     n_init: object,
     max_iter: int,
-) -> Any:
+) -> Any:  # noqa: ANN401 — cls is a dynamically-loaded, type-erased sklearn class
     """Construct a KMeans instance with validated int ``n_init``.
 
     Returns

@@ -2,10 +2,12 @@
 
 from __future__ import annotations
 
+import sys
 from typing import cast
 
 import pytest
 
+import pykissembed.providers.registry as reg_mod
 from pykissembed.providers import REGISTRY, Provider
 from pykissembed.providers.local import LocalProvider
 from pykissembed.providers.registry import cache_key, discover_all
@@ -33,8 +35,6 @@ class TestLocalProviderStub:
     def test_stub_embed_raises_when_local_missing(monkeypatch: pytest.MonkeyPatch) -> None:
         """embed() must raise a clear RuntimeError when pykissembed-local is missing."""
         # Hide pykissembed_local from the import system
-        import sys
-
         monkeypatch.setitem(sys.modules, "pykissembed_local", None)
         p = LocalProvider()
         with pytest.raises(RuntimeError, match="pykissembed-local"):
@@ -43,8 +43,6 @@ class TestLocalProviderStub:
     @staticmethod
     def test_is_configured_false_when_missing(monkeypatch: pytest.MonkeyPatch) -> None:
         """is_configured() returns False when pykissembed_local isn't installed."""
-        import sys
-
         monkeypatch.setitem(sys.modules, "pykissembed_local", None)
         assert LocalProvider().is_configured() is False
 
@@ -54,11 +52,11 @@ class TestRegistry:
 
     def setup_method(self) -> None:
         """Start each test with an empty registry."""
-        REGISTRY._providers.clear()
+        REGISTRY.clear()
 
     def teardown_method(self) -> None:
         """Restore the registry after each test."""
-        REGISTRY._providers.clear()
+        REGISTRY.clear()
 
     @staticmethod
     def test_register_and_get() -> None:
@@ -100,9 +98,11 @@ class TestRegistry:
 
         eps = [_BrokenEP()]
 
-        import pykissembed.providers.registry as reg_mod
-
-        monkeypatch.setattr(reg_mod.metadata, "entry_points", lambda group=None: eps)
+        monkeypatch.setattr(
+            reg_mod.metadata,
+            "entry_points",
+            lambda group=None: eps,  # noqa: ARG005 — must accept `group=` to match the real entry_points(group=...) call
+        )
         registry = reg_mod.discover_all()
         # Built-in still registers despite the broken entry point
         assert "local" in registry
@@ -128,7 +128,7 @@ class TestRegistry:
             max_tokens = 256
             batch_size = 32
 
-            def embed(self, texts):  # type: ignore[no-untyped-def]
+            def embed(self, _texts):  # type: ignore[no-untyped-def]
                 return []
 
             def is_configured(self) -> bool:
@@ -141,7 +141,7 @@ class TestRegistry:
             max_tokens = 512
             batch_size = 16
 
-            def embed(self, texts):  # type: ignore[no-untyped-def]
+            def embed(self, _texts):  # type: ignore[no-untyped-def]
                 return []
 
             def is_configured(self) -> bool:
@@ -162,15 +162,17 @@ class TestRegistry:
             _EP("local", _StubProvider()),
         ]
 
-        import pykissembed.providers.registry as reg_mod
-
-        REGISTRY._providers.clear()
-        monkeypatch.setattr(reg_mod.metadata, "entry_points", lambda group=None: eps)
+        REGISTRY.clear()
+        monkeypatch.setattr(
+            reg_mod.metadata,
+            "entry_points",
+            lambda group=None: eps,  # noqa: ARG005 — must accept `group=` to match the real entry_points(group=...) call
+        )
         reg_mod.discover_all()
         winner = REGISTRY.get("local")
         assert winner is not None
         assert cast("_OverrideProvider", winner).model_id == "override-model"
-        REGISTRY._providers.clear()
+        REGISTRY.clear()
 
 
 class TestCacheKey:

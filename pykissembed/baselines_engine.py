@@ -16,6 +16,7 @@ are wrapped in the envelope on first load.
 
 from __future__ import annotations
 
+import functools
 import json
 import os
 import tempfile
@@ -32,21 +33,15 @@ if TYPE_CHECKING:
 SCHEMA_VERSION = "1.0"
 _KIND_TO_FIELD: dict[str, str] = {}  # populated lazily
 
-# Lazy-loaded validator — schemas are bundled in pykissembed/schemas/
-_VALIDATOR: Validator | None = None
 
-
+@functools.cache
 def _load_validator() -> Validator:
-    """Load and compile the v1 baseline schema (lazy, cached)."""
-    global _VALIDATOR
-    if _VALIDATOR is not None:
-        return _VALIDATOR
+    """Load and compile the v1 baseline schema (lazy, cached on first use)."""
     schema_text = (
         resources.files("pykissembed.schemas").joinpath("baselines.v1.json").read_text("utf-8")
     )
     schema = cast("dict[str, Any]", json.loads(schema_text))
-    _VALIDATOR = Draft7Validator(schema)
-    return _VALIDATOR
+    return Draft7Validator(schema)
 
 
 @dataclass(slots=True)
@@ -68,11 +63,6 @@ class BaselineEnvelope:
     kind: str
     data: dict[str, Any]
     path: Path | None = None
-
-
-def _migrate_v0_to_v1(kind: str, raw: dict[str, Any]) -> dict[str, Any]:
-    """Wrap a v0 (un-enveloped) baseline payload into a v1 envelope."""
-    return {"schema_version": SCHEMA_VERSION, "kind": kind, "data": raw}
 
 
 def is_v1_envelope(value: object) -> TypeGuard[dict[str, Any]]:
@@ -135,7 +125,6 @@ def load_envelope(path: Path, kind: str) -> BaselineEnvelope:
         raw_dict: dict[str, Any] = {}
     else:
         raw_dict = dict(raw)
-    migrated = _migrate_v0_to_v1(kind, raw_dict)
     envelope = BaselineEnvelope(kind=kind, data=raw_dict, path=path)
     # Write migrated envelope back so the next load is fast
     save_envelope(path, envelope)
@@ -200,7 +189,7 @@ def ratchet(data: dict[str, Any], current: dict[str, Any]) -> dict[str, Any]:
             # Unknown shape — pass through unchanged
             result[key] = baseline_value
     # Add new keys (observed diagnostics that have no baseline yet)
-    for key, current_value in current.items():
-        if key not in data:
-            result[key] = current_value
+    result.update(
+        {key: current_value for key, current_value in current.items() if key not in data}
+    )
     return result

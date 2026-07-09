@@ -101,11 +101,14 @@ def _get_complexities(
             return []
 
     # cognitive
-    from complexipy import file_complexity
+    # Lazy: complexipy is a compiled (Rust) analyzer; deferring the import
+    # avoids its cost for callers that only need cyclomatic complexity.
+    from complexipy import file_complexity  # noqa: PLC0415
 
     try:
         result = file_complexity(str(file_path))
-    except Exception:
+    except Exception:  # noqa: BLE001 — third-party analyzer; any failure on arbitrary
+        # user source degrades to "no cognitive-complexity data" rather than crashing.
         return []
     return [(f.name, f.line_start, f.complexity) for f in result.functions]
 

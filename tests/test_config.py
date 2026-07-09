@@ -2,12 +2,16 @@
 
 from __future__ import annotations
 
-from pathlib import Path
 from textwrap import dedent
+from typing import TYPE_CHECKING
 
 import pytest
 
 from pykissembed.config import _auto_detect, _coerce_str_list, load_config
+from pykissembed.paths import iter_py_files
+
+if TYPE_CHECKING:
+    from pathlib import Path
 
 
 class TestCoerceStrList:
@@ -178,8 +182,6 @@ class TestIterPyFiles:
     @staticmethod
     def test_iter_py_files_skips_ipynb(tmp_path: Path) -> None:
         """iter_py_files() only yields .py files, never .ipynb."""
-        from pykissembed.paths import iter_py_files
-
         (tmp_path / "real_module.py").write_text("x = 1\n", encoding="utf-8")
         (tmp_path / "notebook.ipynb").write_text("{}", encoding="utf-8")
         files = sorted(p.name for p in iter_py_files(tmp_path))

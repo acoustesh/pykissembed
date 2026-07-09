@@ -2,23 +2,27 @@
 
 from __future__ import annotations
 
-from pathlib import Path
+from typing import TYPE_CHECKING
 
 import pytest
 
+from pykissembed.baselines_engine import BaselineEnvelope, save_envelope
+from pykissembed.config import PyqtestConfig, load_config
+
+if TYPE_CHECKING:
+    from collections.abc import Callable
+    from pathlib import Path
+
 
 @pytest.fixture(scope="session")
-def pykissembed_config():
+def pykissembed_config() -> PyqtestConfig:
     """Resolved ``[tool.pykissembed]`` config."""
-    from pykissembed.config import load_config
-
     return load_config()
 
 
 @pytest.fixture
-def baseline_factory(tmp_path: Path):
+def baseline_factory(tmp_path: Path) -> Callable[..., Path]:
     """Factory for writing a v1 envelope to a temp file."""
-    from pykissembed.baselines_engine import BaselineEnvelope, save_envelope
 
     def _make(kind: str, data: dict[str, object], *, name: str = "baseline.json") -> Path:
         path = tmp_path / name

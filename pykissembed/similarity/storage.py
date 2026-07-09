@@ -21,6 +21,7 @@ from typing import cast
 import numpy as np
 
 from pykissembed.similarity import constants as _constants
+from pykissembed.similarity.embeddings import compute_combined_embedding
 
 
 def _as_float_list(value: object, *, context: str) -> list[float]:
@@ -375,8 +376,6 @@ class EmbeddingRegistry:
         int
             Number of combined embeddings built.
         """
-        from pykissembed.similarity.embeddings import compute_combined_embedding
-
         valid_text, _, text_to_ast = get_valid_hashes(baselines)
 
         text_caches: dict[str, dict[str, list[float]]] = {

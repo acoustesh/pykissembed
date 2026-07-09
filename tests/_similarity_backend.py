@@ -31,6 +31,8 @@ from typing import TYPE_CHECKING
 
 import numpy as np
 
+from pykissembed.similarity.refactor_index import compute_similarity_matrix
+
 if TYPE_CHECKING:
     from numpy.typing import NDArray
 
@@ -77,8 +79,6 @@ def compute_similarity_matrix_cpu(
     NDArray[np.float32]
         Square similarity matrix with the diagonal zeroed out.
     """
-    from pykissembed.similarity.refactor_index import compute_similarity_matrix
-
     return compute_similarity_matrix(functions)
 
 

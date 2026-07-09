@@ -49,7 +49,9 @@ def _run_ruff(paths: list[Path]) -> list[dict[str, Any]]:
         cmd.extend(["--extend-exclude", "*.ipynb"])
     cmd.extend([str(p) for p in paths])
     try:
-        result = subprocess.run(
+        # S603: fixed argv (resolved ruff binary + literal flags + configured
+        # directory paths); no shell involved.
+        result = subprocess.run(  # noqa: S603
             cmd, capture_output=True, text=True, check=False, timeout=120
         )
     except (OSError, subprocess.TimeoutExpired):
@@ -66,7 +68,9 @@ def _run_pyright(paths: list[Path]) -> list[dict[str, Any]]:
     """Run ``pyright --outputjson`` and return ``generalDiagnostics``."""
     cmd = [_resolve_tool("pyright"), "--outputjson", *[str(p) for p in paths]]
     try:
-        result = subprocess.run(
+        # S603: fixed argv (resolved pyright binary + literal flags +
+        # configured directory paths); no shell involved.
+        result = subprocess.run(  # noqa: S603
             cmd, capture_output=True, text=True, check=False, timeout=120
         )
     except (OSError, subprocess.TimeoutExpired):
@@ -149,6 +153,7 @@ def _build_report(
 @pytest.mark.lint
 def test_no_lint_or_type_errors(
     pykissembed_paths: list[Path],
+    *,
     update_baselines: bool,
 ) -> None:
     """All configured paths must pass ruff + pyright with zero diagnostics."""

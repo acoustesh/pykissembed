@@ -2,13 +2,17 @@
 
 from __future__ import annotations
 
-from pathlib import Path
 from textwrap import dedent
+from typing import TYPE_CHECKING
 
 import pytest
 from typer.testing import CliRunner
 
+from pykissembed import config as config_mod
 from pykissembed.cli import app
+
+if TYPE_CHECKING:
+    from pathlib import Path
 
 runner = CliRunner()
 
@@ -178,6 +182,4 @@ class TestPopulateEmbeddingsMissingProvider:
 @pytest.fixture
 def reset_config_cache() -> None:
     """Reset the config cache before/after CLI tests that change cwd."""
-    from pykissembed import config as config_mod
-
     config_mod.reset_config_cache()

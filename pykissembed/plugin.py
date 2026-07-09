@@ -17,10 +17,13 @@ Loaded automatically by pytest when pykissembed is installed (via the
 from __future__ import annotations
 
 import os
+import sys
 from pathlib import Path
 
 import pytest
 from _pytest.stash import StashKey
+
+from pykissembed.paths import resolve_paths
 
 # Modules inside pykissembed/checks/ that contain test classes/functions.
 # These are collected by the plugin and run in the consumer's pytest session.
@@ -88,8 +91,6 @@ def pykissembed_paths() -> list[Path]:
         Resolved, existing directories. Empty list if nothing configured
         or nothing exists on disk.
     """
-    from pykissembed.paths import resolve_paths
-
     return resolve_paths()
 
 
@@ -107,13 +108,18 @@ def shared_baselines() -> dict[str, object]:
     dict[str, object]
         The loaded baselines dictionary.
     """
-    from pykissembed.similarity.storage import load_minimal_baselines
+    # Lazy: plugin.py loads unconditionally in every consumer's pytest
+    # session; avoid the numpy/pandas-backed storage module's import cost
+    # for sessions that never touch similarity checks.
+    from pykissembed.similarity.storage import load_minimal_baselines  # noqa: PLC0415
 
     return load_minimal_baselines()
 
 
 @pytest.fixture(scope="session")
-def shared_functions(shared_baselines: dict[str, object]) -> list:
+def shared_functions(
+    shared_baselines: dict[str, object],  # noqa: ARG001 — fixture name is an external contract; requested only to sequence loading, not to read its value
+) -> list:
     """Session-scoped list of FunctionInfo objects extracted from workspace.
 
     Returns
@@ -121,7 +127,8 @@ def shared_functions(shared_baselines: dict[str, object]) -> list:
     list[FunctionInfo]
         The extracted function info objects.
     """
-    from pykissembed.similarity.ast_helpers import extract_all_function_infos
+    # Lazy: same rationale as shared_baselines above.
+    from pykissembed.similarity.ast_helpers import extract_all_function_infos  # noqa: PLC0415
 
     return extract_all_function_infos(min_loc=1)
 
@@ -174,19 +181,15 @@ def pytest_configure(config: pytest.Config) -> None:
         "experimental: unstable APIs — refactor_index, file_split",
     )
 
-    # Ensure source dirs are importable for similarity/refactor tests
+    # Ensure source dirs are importable for similarity/refactor tests.
+    # `resolve_paths` is imported unconditionally at module level above, so
+    # by the time this hook runs it has already succeeded — no import
+    # guard needed here.
     if not os.environ.get("PYQTEST_SKIP_PATH_INJECTION"):
-        try:
-            from pykissembed.paths import resolve_paths
-        except ImportError:  # pragma: no cover — defensive
-            pass
-        else:
-            import sys
-
-            for p in resolve_paths():
-                sp = str(p)
-                if sp not in sys.path and p.exists():
-                    sys.path.insert(0, sp)
+        for p in resolve_paths():
+            sp = str(p)
+            if sp not in sys.path and p.exists():
+                sys.path.insert(0, sp)
 
     # Inject the installed pykissembed/checks/ directory (or a single
     # check file) into pytest's collection args. Default policy: do NOT
@@ -329,7 +332,12 @@ def _decide_injection(
 def _checks_dir() -> Path | None:
     """Return the path to the installed ``pykissembed/checks/`` directory."""
     try:
-        import pykissembed.checks as checks_pkg
+        # Defensive: unlike the other lazy imports in this file, this one
+        # guards against a corrupted/partial install rather than perf —
+        # plugin.py loads unconditionally for every consumer's pytest
+        # session, so a broken checks subpackage must degrade to "no
+        # auto-collection" rather than crash the whole plugin.
+        import pykissembed.checks as checks_pkg  # noqa: PLC0415
     except ImportError:  # pragma: no cover — defensive
         return None
     # checks_pkg.__file__ is .../pykissembed/checks/__init__.py

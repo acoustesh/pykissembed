@@ -12,7 +12,11 @@ verify the policy without spawning subprocess pytest invocations.
 
 from __future__ import annotations
 
+import os
+import shutil
+import subprocess
 import sys
+import tomllib
 from pathlib import Path
 from types import SimpleNamespace
 from unittest.mock import MagicMock
@@ -325,8 +329,6 @@ class TestPluginEntryPoint:
     @staticmethod
     def test_plugin_registers_pytest11_entry() -> None:
         """``pyproject.toml`` still registers the plugin via ``pytest11``."""
-        import tomllib
-
         with (Path(__file__).resolve().parents[1] / "pyproject.toml").open("rb") as f:
             data = tomllib.load(f)
         eps = data["project"]["entry-points"]["pytest11"]
@@ -349,8 +351,6 @@ class TestSubprocessCollection:
         tmp_path: Path,
     ) -> None:
         """``pytest <file>::Test::test_x`` collects exactly one test, not 11."""
-        import subprocess
-
         # Build a minimal consumer project that has pykissembed installed
         # in editable mode. ``pip install -e .`` is too slow; instead we set
         # PYTHONPATH so the plugin is importable.
@@ -409,9 +409,6 @@ class TestSubprocessCollection:
         tmp_path: Path,
     ) -> None:
         """``--pykissembed-all`` collects every check module, even on bare pytest."""
-        import os
-        import subprocess
-
         consumer = tmp_path / "consumer"
         consumer.mkdir()
         (consumer / "pyproject.toml").write_text(
@@ -457,9 +454,6 @@ class TestSubprocessCollection:
         just runs ``pytest`` to execute their own suite. It must not pull
         in pykissembed's check battery as a side effect.
         """
-        import os
-        import subprocess
-
         consumer = tmp_path / "consumer"
         consumer.mkdir()
         (consumer / "pyproject.toml").write_text(
@@ -508,9 +502,6 @@ class TestSubprocessCollection:
         unaffected — ``--collect-only`` never executes anything, so
         showing the battery in the tree is safe.
         """
-        import os
-        import subprocess
-
         consumer = tmp_path / "consumer"
         consumer.mkdir()
         (consumer / "pyproject.toml").write_text(
@@ -551,9 +542,6 @@ class TestSubprocessCollection:
         path into ``config.args`` even though the user already passed it
         on the CLI, causing pytest to collect the test twice.
         """
-        import os
-        import subprocess
-
         consumer = tmp_path / "consumer"
         consumer.mkdir()
         (consumer / "pyproject.toml").write_text(
@@ -579,7 +567,8 @@ class TestSubprocessCollection:
         checks_dir = Path(result.stdout.strip())
         target = checks_dir / "docstring_format.py"
 
-        result = subprocess.run(
+        # S603: fixed argv (sys.executable + literal flags + a path built above).
+        result = subprocess.run(  # noqa: S603
             [
                 sys.executable,
                 "-m",
@@ -626,10 +615,6 @@ class TestSubprocessCollection:
         ``TestLineCount``, ``TestCyclomaticComplexity``,
         ``TestCognitiveComplexity``, or ``TestMaintainabilityIndex``.
         """
-        import os
-        import shutil
-        import subprocess
-
         repo = Path(__file__).resolve().parents[1]
         consumer = tmp_path / "consumer"
         (consumer / "tests").mkdir(parents=True)

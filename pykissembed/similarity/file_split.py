@@ -13,6 +13,9 @@ from pykissembed.similarity.pca import cluster_functions_kmeans_with_pca, fit_pc
 if TYPE_CHECKING:
     from pathlib import Path
 
+_MIN_FUNCTIONS_FOR_SPLIT = 4
+_SPLIT_CLUSTER_COUNT = 2
+
 
 def _as_embeddings_cache(value: object) -> dict[str, list[float]]:
     """Cast a dictionary to an embeddings cache.
@@ -62,7 +65,7 @@ def generate_file_split_proposal(file_path: Path, baselines: dict[str, object]) 
     """
     functions = extract_function_infos_from_file(file_path, min_loc=1)
 
-    if len(functions) < 4:
+    if len(functions) < _MIN_FUNCTIONS_FOR_SPLIT:
         return None
 
     embeddings_cache = _as_embeddings_cache(baselines.get("embeddings"))
@@ -74,7 +77,7 @@ def generate_file_split_proposal(file_path: Path, baselines: dict[str, object]) 
             func.embedding = cached
 
     funcs_with_embeddings = [f for f in functions if f.embedding is not None]
-    if len(funcs_with_embeddings) < 4:
+    if len(funcs_with_embeddings) < _MIN_FUNCTIONS_FOR_SPLIT:
         return f"  (Cannot generate split proposal: only {len(funcs_with_embeddings)} functions have cached embeddings)"
 
     config = _as_config(baselines.get("config"))
@@ -90,10 +93,10 @@ def generate_file_split_proposal(file_path: Path, baselines: dict[str, object]) 
         funcs_with_embeddings,
         pca_model,
         n_components,
-        n_clusters=2,
+        n_clusters=_SPLIT_CLUSTER_COUNT,
     )
 
-    if len(clusters) < 2 or not clusters[0] or not clusters[1]:
+    if len(clusters) < _SPLIT_CLUSTER_COUNT or not clusters[0] or not clusters[1]:
         return None
 
     base_name = file_path.stem

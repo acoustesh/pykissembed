@@ -30,14 +30,14 @@ class LocalProvider:
     max_tokens = 256
     batch_size = 32
 
-    def embed(self, texts: Sequence[str]) -> list[list[float]]:
+    def embed(self, texts: Sequence[str]) -> list[list[float]]:  # noqa: ARG002 — param name is part of the Provider Protocol contract
         msg = f"The local provider requires the pykissembed-local subpackage.\n  {_INSTALL_HINT}"
         raise RuntimeError(msg)
 
     def is_configured(self) -> bool:
         """Return True only if the real ``pykissembed-local`` package is installed."""
         try:
-            import pykissembed_local  # noqa: F401
+            import pykissembed_local  # noqa: F401, PLC0415 — presence probe, must not hard-depend
         except ImportError:
             return False
         return True

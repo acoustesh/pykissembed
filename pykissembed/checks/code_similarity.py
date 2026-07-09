@@ -167,11 +167,12 @@ def _extract_float(config: dict[str, object], key: str, default: float) -> float
 
 def _run_similarity_test(
     provider: ProviderEntry,
-    update_baselines: bool,
-    cached_only: bool,
     shared_baselines: SharedBaselines,
     shared_functions: list[FunctionInfo],
     pca_cache: SimilarityPcaCache,
+    *,
+    update_baselines: bool,
+    cached_only: bool,
 ) -> None:
     """Common logic for all similarity tests.
 
@@ -258,11 +259,12 @@ _PARALLEL_PROVIDERS: list[ProviderEntry] = [
 
 @pytest.mark.similarity
 def test_providers_parallel(
-    update_baselines: bool,
-    cached_only: bool,
     shared_baselines: SharedBaselines,
     shared_functions: list[FunctionInfo],
     pca_cache: SimilarityPcaCache,
+    *,
+    update_baselines: bool,
+    cached_only: bool,
 ) -> None:
     """Run all non-combined embedding providers in parallel.
 
@@ -285,11 +287,11 @@ def test_providers_parallel(
     def _run_one(provider: ProviderEntry) -> None:
         _run_similarity_test(
             provider,
-            update_baselines,
-            cached_only,
             shared_baselines,
             shared_functions,
             pca_cache,
+            update_baselines=update_baselines,
+            cached_only=cached_only,
         )
 
     errors: dict[str, BaseException] = {}
@@ -304,7 +306,9 @@ def test_providers_parallel(
                 skips[provider.label] = str(exc)
             except (KeyboardInterrupt, SystemExit, GeneratorExit):
                 raise
-            except BaseException as exc:
+            except BaseException as exc:  # noqa: BLE001 — deliberately broad: aggregates every
+                # provider's failure (network, API, assertion) so one provider's error doesn't
+                # hide the others'; process-exit signals are already re-raised above.
                 errors[provider.label] = exc
 
     if errors:
@@ -321,11 +325,12 @@ def test_providers_parallel(
 @pytest.mark.similarity
 @pytest.mark.experimental
 def test_combined_similarity(
-    update_baselines: bool,
-    cached_only: bool,
     shared_baselines: SharedBaselines,
     shared_functions: list[FunctionInfo],
     pca_cache: SimilarityPcaCache,
+    *,
+    update_baselines: bool,
+    cached_only: bool,
 ) -> None:
     """Run combined provider after all individual providers have finished.
 
@@ -346,9 +351,9 @@ def test_combined_similarity(
         pytest.skip("No [tool.pykissembed] paths configured")
     _run_similarity_test(
         COMBINED_PROVIDER,
-        update_baselines,
-        cached_only,
         shared_baselines,
         shared_functions,
         pca_cache,
+        update_baselines=update_baselines,
+        cached_only=cached_only,
     )

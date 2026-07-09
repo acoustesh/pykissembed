@@ -13,12 +13,16 @@ Subcommands
 from __future__ import annotations
 
 import json
+import re
 import shutil
 import subprocess
 import sys
-from collections.abc import Callable
-from pathlib import Path
-from typing import Any, cast
+import tomllib
+from pathlib import Path  # noqa: TC003 — Typer resolves annotations at runtime via reflection
+from typing import TYPE_CHECKING, Any, cast
+
+if TYPE_CHECKING:
+    from collections.abc import Callable
 
 import typer
 from rich.console import Console
@@ -40,7 +44,16 @@ console = Console()
 @app.callback(invoke_without_command=True)
 def _main_callback(
     ctx: typer.Context,
-    version: bool = typer.Option(False, "--version", help="Show pykissembed version and exit."),
+    *,
+    # FBT001/FBT003: Typer's `Option(default, *param_decls, ...)` signature
+    # requires the default positionally when param_decls follow it; the
+    # parameter itself is keyword-only so Typer's own keyword-based
+    # invocation (never positional) is unaffected.
+    version: bool = typer.Option(
+        False,  # noqa: FBT003
+        "--version",
+        help="Show pykissembed version and exit.",
+    ),
 ) -> None:
     """Print the pykissembed version and exit if --version is passed."""
     if version:
@@ -54,7 +67,11 @@ def _main_callback(
 
 @app.command()
 def check(
-    pytest_args: list[str] | None = typer.Argument(None, help="Extra args forwarded to pytest."),
+    # B008: Typer requires the `Argument(...)`/`Option(...)` call in the
+    # default itself — that's how it discovers CLI parameter metadata.
+    pytest_args: list[str] | None = typer.Argument(  # noqa: B008
+        None, help="Extra args forwarded to pytest."
+    ),
 ) -> None:
     """Run the same gate that ``pytest`` runs (lint + type + complexity + ...).
 
@@ -73,12 +90,15 @@ def check(
     args = list(pytest_args) if pytest_args else ["--pykissembed-all"]
     cmd = [sys.executable, "-m", "pytest", *args]
     typer.echo(f"$ {' '.join(cmd)}")
-    raise typer.Exit(subprocess.call(cmd))
+    # S603: fixed argv list (sys.executable + literal flags + the CLI's own
+    # forwarded args); this command's entire purpose is to forward args to
+    # pytest, so there is no narrower "trusted" input to require.
+    raise typer.Exit(subprocess.call(cmd))  # noqa: S603
 
 
 @app.command(name="ratchet")
 def ratchet_cmd(
-    baseline_dir: Path | None = typer.Option(
+    baseline_dir: Path | None = typer.Option(  # noqa: B008 — Typer requires the call in the default
         None,
         "--baseline-dir",
         help="Override the configured baseline directory.",
@@ -107,7 +127,7 @@ def ratchet_cmd(
         except NotImplementedError:
             typer.echo(f"  skip {path.name}: no current-diagnostics computer implemented")
             continue
-        except Exception as exc:
+        except Exception as exc:  # noqa: BLE001 — per-file resilience: one bad baseline shouldn't abort the whole ratchet run
             typer.echo(f"  skip {path.name}: {exc}")
             continue
         with path.open(encoding="utf-8") as f:
@@ -135,8 +155,13 @@ def _compute_current_for(baseline_name: str) -> dict[str, Any]:
         If no computer is implemented for *baseline_name*.
     """
     if baseline_name == "lint_typecheck.json":
-        # Reuse the check module's helpers — round-trip through the gate
-        from pykissembed.checks.lint_typecheck import _build_report, _run_pyright, _run_ruff
+        # Lazy: avoids importing the checks module (and its pytest/ruff/
+        # pyright invocation helpers) for CLI invocations that never ratchet.
+        from pykissembed.checks.lint_typecheck import (  # noqa: PLC0415
+            _build_report,
+            _run_pyright,
+            _run_ruff,
+        )
 
         paths = get_config().resolved_paths()
         if not paths:
@@ -146,7 +171,8 @@ def _compute_current_for(baseline_name: str) -> dict[str, Any]:
         return {
             "per_file": {f: len(d["ruff"]) + len(d["pyright"]) for f, d in report["files"].items()}
         }
-    raise NotImplementedError(f"No current-diagnostics computer for {baseline_name}")
+    msg = f"No current-diagnostics computer for {baseline_name}"
+    raise NotImplementedError(msg)
 
 
 # ---------------------------------------------------------------------------
@@ -159,7 +185,10 @@ providers_app = typer.Typer(help="Inspect installed embedding providers.", no_ar
 @providers_app.command("list")
 def providers_list() -> None:
     """List all installed embedding providers (built-in + entry points)."""
-    from pykissembed.providers.registry import discover_all
+    # Lazy: discovery imports entry-point providers, which may pull in heavy
+    # optional deps (torch via pykissembed-local) — avoid that cost for
+    # every CLI invocation, not just `providers list`.
+    from pykissembed.providers.registry import discover_all  # noqa: PLC0415
 
     registry = discover_all()
     if not registry.all():
@@ -174,7 +203,7 @@ def providers_list() -> None:
     for provider in registry.all():
         try:
             configured = provider.is_configured()
-        except Exception:
+        except Exception:  # noqa: BLE001 — is_configured() implementations are third-party; any failure means "not configured"
             configured = False
         table.add_row(
             provider.name,
@@ -199,15 +228,19 @@ def populate_embeddings(
     provider_name: str = typer.Option(
         ..., "--provider", help="Provider name (e.g. local, openai)."
     ),
-    paths: list[Path] | None = typer.Option(
+    paths: list[Path] | None = typer.Option(  # noqa: B008 — Typer requires the call in the default
         None, "--path", help="Directories to scan (default: [tool.pykissembed].paths)."
     ),
+    *,
     cached_only: bool = typer.Option(
-        False, "--cached-only", help="Skip API calls; only read cache."
+        False,  # noqa: FBT003 — Typer's Option(default, *param_decls) requires this positional
+        "--cached-only",
+        help="Skip API calls; only read cache.",
     ),
 ) -> None:
     """Populate the embedding cache for *provider_name*."""
-    from pykissembed.providers.registry import get as get_provider
+    # Lazy: same rationale as providers_list — avoid eager provider discovery.
+    from pykissembed.providers.registry import get as get_provider  # noqa: PLC0415
 
     provider = get_provider(provider_name)
     if provider is None:
@@ -222,7 +255,10 @@ def populate_embeddings(
         )
         raise typer.Exit(1)
     try:
-        import pykissembed_local.runner as _local_runner  # type: ignore[import-not-found]
+        # Lazy: the optional pykissembed-local subpackage (torch/
+        # sentence-transformers); importing it eagerly would force those
+        # heavy deps onto every pykissembed CLI invocation.
+        import pykissembed_local.runner as _local_runner  # type: ignore[import-not-found]  # noqa: PLC0415
     except ImportError:
         typer.echo(
             "populate-embeddings requires pykissembed-local for now.\n  pip install pykissembed-local",
@@ -245,7 +281,7 @@ def populate_embeddings(
 
 @app.command()
 def type_review(
-    report: Path = typer.Option(
+    report: Path = typer.Option(  # noqa: B008 — Typer requires the call in the default
         ..., "--json", help="Path to a lint_typecheck_report.json produced by the lint gate."
     ),
 ) -> None:
@@ -266,7 +302,9 @@ def type_review(
     pyright = shutil.which("pyright") or "pyright"
     for fp in pyright_files:
         typer.echo(f"\n=== {fp} ===")
-        subprocess.call([pyright, fp])
+        # S603: fixed 2-element argv (resolved pyright binary + a file path
+        # already validated against the loaded report); no shell involved.
+        subprocess.call([pyright, fp])  # noqa: S603
 
 
 # ---------------------------------------------------------------------------
@@ -276,8 +314,11 @@ def type_review(
 
 @app.command()
 def init(
+    *,
     force: bool = typer.Option(
-        False, "--force", help="Overwrite existing [tool.pykissembed] block."
+        False,  # noqa: FBT003 — Typer's Option(default, *param_decls) requires this positional
+        "--force",
+        help="Overwrite existing [tool.pykissembed] block.",
     ),
 ) -> None:
     """Scaffold a ``[tool.pykissembed]`` block in ``pyproject.toml``.
@@ -309,8 +350,6 @@ def init(
     )
     if "[tool.pykissembed]" in text:
         # Replace the existing block (very simple; assumes our own format)
-        import re
-
         text = re.sub(r"\[tool\.pykissembed\][^\[]*", block.strip() + "\n", text, count=1)
     else:
         text = text.rstrip() + "\n" + block
@@ -327,11 +366,9 @@ def _auto_detect_paths(root: Path, pyproject_text: str) -> list[str]:
     3. ``src/`` directory if it exists
     4. ``.`` (current directory) as fallback
     """
-    import tomllib
-
     try:
         data = tomllib.loads(pyproject_text)
-    except Exception:
+    except tomllib.TOMLDecodeError:
         data = {}
 
     # 1. setuptools packages.find.where

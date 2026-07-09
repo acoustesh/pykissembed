@@ -9,7 +9,6 @@ from __future__ import annotations
 
 import ast
 import importlib
-from pathlib import Path
 from typing import TYPE_CHECKING, TypedDict, cast
 
 import pytest
@@ -23,6 +22,7 @@ from pykissembed.config import get_config
 
 if TYPE_CHECKING:
     from collections.abc import Callable, Iterator
+    from pathlib import Path
 
 
 class _BaselineConfig(TypedDict, total=False):
@@ -116,12 +116,15 @@ def _get_cc(file_path: Path) -> list[tuple[str, int, int]]:
 def _get_cog(file_path: Path) -> list[tuple[str, int, int]]:
     """Return ``[(name, lineno, cognitive_complexity), ...]`` using complexipy."""
     try:
-        from complexipy import file_complexity  # type: ignore[import-untyped]
+        # Lazy: complexipy is a compiled (Rust) analyzer; deferring the
+        # import avoids its cost for test runs that never touch cognitive
+        # complexity (e.g. -m complexity without the COG check selected).
+        from complexipy import file_complexity  # type: ignore[import-untyped]  # noqa: PLC0415
     except ImportError:
         return []
     try:
         result = file_complexity(str(file_path))
-    except Exception:  # pragma: no cover
+    except Exception:  # noqa: BLE001 — pragma: no cover — third-party analyzer; any failure on arbitrary user source degrades to "no cognitive-complexity data" rather than crashing the whole check
         return []
     if not hasattr(result, "functions"):
         return []
@@ -136,7 +139,7 @@ def _get_mi(file_path: Path) -> float:
     source = file_path.read_text(encoding="utf-8")
     try:
         score = mi_visit_fn(source, multi=False)
-    except Exception:
+    except Exception:  # noqa: BLE001 — third-party analyzer; any failure on arbitrary user source degrades to "no MI data" rather than crashing the whole check
         return 0.0
     if isinstance(score, (int, float)):
         return float(score)
@@ -159,15 +162,13 @@ class TestDocstringCoverage:
 
     @staticmethod
     @pytest.mark.complexity
-    def test_docstring_coverage(pykissembed_paths: list[Path], update_baselines: bool) -> None:
+    def test_docstring_coverage(pykissembed_paths: list[Path], *, update_baselines: bool) -> None:
         """Fail if any directory has more missing docstrings than its baseline."""
         if not pykissembed_paths:
             pytest.skip("No [tool.pykissembed] paths configured")
         baseline_file, envelope = _load_envelope()
-        max_missing_default = cast(
-            "int",
-            envelope.data.get("max_missing_docstrings", 0),
-        )
+        config_data = cast("_BaselineConfig", envelope.data)
+        max_missing_default = config_data.get("max_missing_docstrings", 0)
         per_dir_baseline = cast("dict[str, int]", envelope.data.get("per_dir", {}))
 
         all_missing: dict[str, list[str]] = {}
@@ -208,7 +209,7 @@ class TestLineCount:
 
     @staticmethod
     @pytest.mark.complexity
-    def test_file_line_counts(pykissembed_paths: list[Path], update_baselines: bool) -> None:
+    def test_file_line_counts(pykissembed_paths: list[Path], *, update_baselines: bool) -> None:
         """Fail if any file exceeds its line-count baseline."""
         if not pykissembed_paths:
             pytest.skip("No [tool.pykissembed] paths configured")
@@ -240,13 +241,14 @@ class TestCyclomaticComplexity:
     @pytest.mark.complexity
     def test_cyclomatic_complexity(
         pykissembed_paths: list[Path],
+        *,
         update_baselines: bool,
     ) -> None:
         """Fail if any function exceeds the CC threshold or its baseline."""
         if not pykissembed_paths:
             pytest.skip("No [tool.pykissembed] paths configured")
         baseline_file, envelope = _load_envelope()
-        threshold = cast("int", envelope.data.get("cc_threshold", 15))
+        threshold = cast("_BaselineConfig", envelope.data).get("cc_threshold", 15)
         cc_baselines = cast("dict[str, int]", envelope.data.get("cc_baselines", {}))
         violations: list[str] = []
         current_cc: dict[str, int] = {}
@@ -282,13 +284,14 @@ class TestCognitiveComplexity:
     @pytest.mark.complexity
     def test_cognitive_complexity(
         pykissembed_paths: list[Path],
+        *,
         update_baselines: bool,
     ) -> None:
         """Fail if any function exceeds the COG threshold or its baseline."""
         if not pykissembed_paths:
             pytest.skip("No [tool.pykissembed] paths configured")
         baseline_file, envelope = _load_envelope()
-        threshold = cast("int", envelope.data.get("cog_threshold", 15))
+        threshold = cast("_BaselineConfig", envelope.data).get("cog_threshold", 15)
         cog_baselines = cast("dict[str, int]", envelope.data.get("cog_baselines", {}))
         violations: list[str] = []
         current_cog: dict[str, int] = {}
@@ -324,13 +327,14 @@ class TestMaintainabilityIndex:
     @pytest.mark.complexity
     def test_maintainability_index(
         pykissembed_paths: list[Path],
+        *,
         update_baselines: bool,
     ) -> None:
         """Fail if any file's MI drops below threshold or its baseline."""
         if not pykissembed_paths:
             pytest.skip("No [tool.pykissembed] paths configured")
         baseline_file, envelope = _load_envelope()
-        threshold = cast("float", envelope.data.get("mi_threshold", 13.0))
+        threshold = cast("_BaselineConfig", envelope.data).get("mi_threshold", 13.0)
         mi_baselines = cast("dict[str, float]", envelope.data.get("mi_baselines", {}))
         violations: list[str] = []
         current_mi: dict[str, float] = {}

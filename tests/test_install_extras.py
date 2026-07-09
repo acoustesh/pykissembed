@@ -15,6 +15,7 @@ import shutil
 import subprocess
 import sys
 import textwrap
+import tomllib
 from pathlib import Path
 
 import pytest
@@ -33,7 +34,8 @@ def _build_wheels(destination: Path, sources: list[Path]) -> None:
     """Build wheels for each source directory into *destination*."""
     destination.mkdir(parents=True, exist_ok=True)
     for src in sources:
-        subprocess.run(
+        # S603: fixed argv (resolved uv binary + literal flags + repo-internal paths).
+        subprocess.run(  # noqa: S603
             [_require_uv(), "build", "--wheel", "--out-dir", str(destination), str(src)],
             cwd=REPO_ROOT,
             check=True,
@@ -73,7 +75,8 @@ def _list_local_entry_points(venv_python: Path) -> list[str]:
         print("\\n".join(str(ep.value) for ep in matches))
         """,
     )
-    result = subprocess.run(
+    # S603: fixed argv (a venv's own python + a literal -c script).
+    result = subprocess.run(  # noqa: S603
         [str(venv_python), "-c", code],
         capture_output=True,
         text=True,
@@ -93,7 +96,8 @@ def _active_local_provider(venv_python: Path) -> str | None:
         print(type(provider).__module__ + ":" + type(provider).__name__)
         """,
     )
-    result = subprocess.run(
+    # S603: fixed argv (a venv's own python + a literal -c script).
+    result = subprocess.run(  # noqa: S603
         [str(venv_python), "-c", code],
         capture_output=True,
         text=True,
@@ -116,7 +120,8 @@ def test_local_extra_resolves_and_registers_provider(tmp_path: Path) -> None:
 
     # Allow normal network resolution for transitive deps; ``--find-links``
     # only short-circuits the two local wheels we just built.
-    subprocess.run(
+    # S603: fixed argv (resolved uv binary + literal flags).
+    subprocess.run(  # noqa: S603
         [uv, "sync", "--no-dev"],
         cwd=consumer,
         check=True,
@@ -143,8 +148,6 @@ def test_local_extra_resolves_and_registers_provider(tmp_path: Path) -> None:
 
 def test_extras_declared_in_pyproject() -> None:
     """Regression guard: ``local`` and ``cloud`` (and ``all``) must be declared."""
-    import tomllib
-
     data = tomllib.loads((REPO_ROOT / "pyproject.toml").read_text(encoding="utf-8"))
     extras = data["project"]["optional-dependencies"]
     for name in ("local", "cloud", "all"):

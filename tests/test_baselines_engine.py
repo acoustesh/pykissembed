@@ -2,10 +2,14 @@
 
 from __future__ import annotations
 
-from pathlib import Path
+import json
+from typing import TYPE_CHECKING
 
 import pytest
 from jsonschema import ValidationError
+
+if TYPE_CHECKING:
+    from pathlib import Path
 
 from pykissembed.baselines_engine import (
     SCHEMA_VERSION,
@@ -107,6 +111,4 @@ class TestRatchet:
 
 def _read_json(path: Path) -> object:
     """Helper: read JSON file as object (typed via cast)."""
-    import json
-
     return json.loads(path.read_text(encoding="utf-8"))

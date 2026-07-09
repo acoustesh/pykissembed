@@ -151,6 +151,11 @@ exclude_lines = [
 [tool.ruff]
 line-length = 100
 target-version = "py314"
+# advisor-mcp/ is a standalone MCP tool mirrored byte-for-byte from the
+# speechtext repo (own venv/requirements.txt, not part of the pykissembed
+# package or uv workspace) — its hyphenated directory name can't be a valid
+# Python package (N999), so it can't satisfy INP001 by adding __init__.py.
+extend-exclude = ["advisor-mcp"]
 
 [tool.ruff.lint]
 select = ["ALL"]
@@ -173,44 +178,7 @@ ignore = [
     "PLR0916", # too-many-boolean-expressions
     "PLR0917", # too-many-positional-arguments
     "C901",    # complex-structure — McCabe complexity; tracked by pykissembed's complexity check instead
-    # --- Deliberate idioms in this codebase ---
-    "PLR2004", # magic-value-comparison — bare literals in comparisons are fine in tooling/tests (thresholds, counts, exit codes)
-    "ERA001",  # commented-out-code — commented code kept as inline notes/examples
-    "G004",    # logging-f-string — f-strings in logging calls accepted over lazy %-formatting
-    "S101",    # assert — pytest tests rely on bare `assert`
-    "S603",    # subprocess-without-shell-equals-true — subprocess calls use fixed argv lists (ruff/pyright), not untrusted input
-    "TRY300",  # try-consider-else — returning from the `try` body instead of an `else` block is accepted style
-    "TRY401",  # verbose-log-message — passing the caught exception object to logging.exception() is tolerated
-    "FBT001",  # boolean-type-hint-positional-argument — bool positional params are idiomatic in Typer/Click apps
-    "FBT003",  # boolean-positional-value-in-call — passing literal True/False positionally is accepted
-    "PLC0415", # import-outside-top-level — lazy in-function imports are deliberate for optional providers (openai, genai, voyageai)
-    "TC003",   # typing-only-standard-library-import — stdlib typing-only imports may stay at module level instead of a TYPE_CHECKING block
-    "BLE001",  # blind-except — catching broad Exception is OK at the CLI boundary where errors become exit codes
-    "INP001",  # implicit-namespace-package — test/fixture dirs intentionally have no __init__.py
-    "B008",    # function-call-in-default-argument — calls in defaults OK for module-level Path constants
-    "ANN201",  # missing-return-type-undocumented-public-function — return annotations optional on helpers
-    "ANN401",  # any-type — typing.Any allowed at dynamic boundaries (kwargs, JSON payloads)
-    "ARG002",  # unused-method-argument — unused args kept on monkeypatch fixtures to match required signatures
-    "ARG005",  # unused-lambda-argument — unused lambda params kept to match callback signatures
-    "EM102",   # f-string-in-exception — f-string literals directly in `raise X(f"…")` accepted without a msg variable
-    "S112",    # try-except-continue — continuing past per-item errors is deliberate in scan loops
-    "PERF403", # manual-dict-comprehension — explicit dict-building loops kept for readability
-    "PLW0603", # global-statement — `global` used for module-level lazy caches (e.g. _VALIDATOR)
-    "SLF001",  # private-member-access — tests reach into private members by design
-    "PYI049",  # unused-private-typed-dict — private TypedDicts kept as structural documentation
-    "F841",    # unused-variable — unused locals tolerated in early-return / defensive paths
-    # --- Suppressions for ported similarity code (mega-scrapper heritage) ---
-    "DOC501",  # docstring-missing-exception — raised exceptions (KeyboardInterrupt etc.) not all listed in Raises sections
-    "DOC201",  # docstring-missing-returns — returns documented mega-scrapper style, not always as a Returns section
-    "ARG001",  # unused-function-argument — pytest fixture args (shared_baselines etc.) received but unused
-    "B028",    # no-explicit-stacklevel — warnings.warn() calls without stacklevel= accepted
-    "FBT002",  # boolean-default-value-positional-argument — bool defaults on positional params accepted
-    "S108",    # hardcoded-temp-file — test fixtures use literal /tmp paths on purpose
-    "PLC2701", # import-private-name — tests import private names (e.g. _CHECK_STEMS) to inspect internals
-    "TC006",   # runtime-cast-value — unquoted type expressions inside typing.cast() accepted
-    "TRY301",  # raise-within-try — raising directly inside a `try` body (instead of an inner helper) accepted in ported code
-    "RUF069",  # float-equality-comparison — tests assert exact float values on purpose
-    "PLW2901", # redefined-loop-name — loop variable reassigned in body (`line` reuse in .env parsing)
+   
 ]
 
 [tool.ruff.lint.pydocstyle]
@@ -219,7 +187,14 @@ convention = "numpy"
 [tool.ruff.lint.per-file-ignores]
 # S404 (suspicious-subprocess-import, preview-only) — test helpers legitimately
 # `import subprocess` to shell out and exercise the CLI end-to-end.
-"tests/**" = ["ANN001", "ANN201", "ANN202", "S101", "PLR2004", "S404"]
+# INP001 (implicit-namespace-package) — root tests/ must NOT get an __init__.py:
+# pykissembed_local/tests/__init__.py and pykissembed_cloud/tests/__init__.py
+# already make `tests` a real package name in this workspace; a root
+# tests/__init__.py would collide with them on sys.path (this exact
+# regression is documented in tests/test_similarity_parity.py). Verified by
+# testing the __init__.py addition directly: it broke `from
+# _similarity_backend import ...`'s bare-name resolution — see git history.
+"tests/**" = ["ANN001", "ANN201", "ANN202", "S101", "PLR2004", "S404", "INP001"]
 "pykissembed/tests/fixtures/**" = ["ALL"]
 
 [tool.pyright]

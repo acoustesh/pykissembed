@@ -7,9 +7,12 @@ so the same code works in any consumer project.
 
 from __future__ import annotations
 
-from pathlib import Path
+from typing import TYPE_CHECKING
 
 from pykissembed.config import get_config
+
+if TYPE_CHECKING:
+    from pathlib import Path
 
 # Refactor index defaults (can be overridden in config)
 DEFAULT_REFACTOR_INDEX_THRESHOLD = 15.0

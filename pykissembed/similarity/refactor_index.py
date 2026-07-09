@@ -25,6 +25,8 @@ if TYPE_CHECKING:
 Float32Array = npt.NDArray[np.float32]
 Float64Array = npt.NDArray[np.float64]
 
+_MIN_FUNCTIONS_FOR_REFACTOR_INDEX = 2
+
 
 class _RefactorConfig(TypedDict):
     """Configuration for refactoring index."""
@@ -204,7 +206,7 @@ def get_refactor_priority_message(
     -------
         Formatted message string, or ``None`` if no functions exceed the threshold.
     """
-    if len(functions) < 2 or not any(f.embedding is not None for f in functions):
+    if len(functions) < _MIN_FUNCTIONS_FOR_REFACTOR_INDEX or not any(f.embedding is not None for f in functions):
         return None
 
     similarity_matrix: Float32Array = compute_similarity_matrix(functions)
@@ -281,9 +283,12 @@ def get_refactor_priority_message_for_complexity() -> str:
         Refactoring priority message, or empty string if unavailable.
     """
     try:
-        from pykissembed.similarity.ast_helpers import extract_all_function_infos
-        from pykissembed.similarity.complexity import load_all_complexity_maps
-        from pykissembed.similarity.storage import load_baselines
+        # Lazy: this helper is only invoked when a complexity check has
+        # already failed, so avoid the ast_helpers/complexity/storage import
+        # cost on the (common) happy path where nothing fails.
+        from pykissembed.similarity.ast_helpers import extract_all_function_infos  # noqa: PLC0415
+        from pykissembed.similarity.complexity import load_all_complexity_maps  # noqa: PLC0415
+        from pykissembed.similarity.storage import load_baselines  # noqa: PLC0415
 
         baselines = _as_str_object_mapping(load_baselines())
         config = _parse_refactor_config(baselines.get("config"))
@@ -293,7 +298,7 @@ def get_refactor_priority_message_for_complexity() -> str:
         embeddings = _parse_cached_embeddings(baselines.get("embeddings"))
 
         functions = extract_all_function_infos(min_loc=min_loc)
-        if len(functions) < 2:
+        if len(functions) < _MIN_FUNCTIONS_FOR_REFACTOR_INDEX:
             return ""
 
         for func in functions:
@@ -312,6 +317,8 @@ def get_refactor_priority_message_for_complexity() -> str:
             threshold=threshold,
             top_n=top_n,
         )
-        return msg or ""
-    except Exception:
+    except Exception:  # noqa: BLE001 — best-effort supplementary message; any
+        # failure here must not mask the underlying complexity-check failure.
         return ""
+    else:
+        return msg or ""

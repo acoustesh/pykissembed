@@ -7,8 +7,7 @@ from __future__ import annotations
 
 import ast
 from dataclasses import dataclass
-from pathlib import Path
-from typing import cast
+from typing import TYPE_CHECKING, cast
 
 import pytest
 from radon.raw import analyze  # type: ignore[import-untyped]
@@ -17,6 +16,9 @@ from pykissembed.baselines_engine import load_envelope, save_envelope
 from pykissembed.config import get_config
 from pykissembed.paths import iter_py_files as _iter_py_files
 from pykissembed.paths import warn_non_utf8
+
+if TYPE_CHECKING:
+    from pathlib import Path
 
 DEFAULT_MIN_DENSITY = 5.0
 DEFAULT_MAX_DENSITY = 40.0
@@ -106,6 +108,7 @@ class TestCommentDensity:
     @pytest.mark.density
     def test_comment_density(
         pykissembed_paths: list[Path],
+        *,
         update_baselines: bool,
     ) -> None:
         """Fail if any file's density is outside its configured range."""
@@ -165,6 +168,7 @@ class TestCommentDensity:
     @pytest.mark.density
     def test_aggregate_comment_density(
         pykissembed_paths: list[Path],
+        *,
         update_baselines: bool,
     ) -> None:
         """Fail if aggregate density falls outside configured range."""

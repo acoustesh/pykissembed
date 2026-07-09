@@ -62,7 +62,9 @@ def _run_ruff_docstring_check(
     if not include_notebooks():
         cmd.extend(["--extend-exclude", "*.ipynb"])
     cmd.extend([str(target_dir), "--select=D", "--output-format=json"])
-    result = subprocess.run(cmd, capture_output=True, text=True, check=False)
+    # S603: fixed argv (resolved ruff binary + literal flags + a configured
+    # directory path); no shell involved.
+    result = subprocess.run(cmd, capture_output=True, text=True, check=False)  # noqa: S603
     if not result.stdout.strip():
         return []
     try:
@@ -115,6 +117,7 @@ class TestDocstringFormat:
     @pytest.mark.docstring_format
     def test_docstring_format(
         pykissembed_paths: list[Path],
+        *,
         update_baselines: bool,
     ) -> None:
         """Fail if any file has more docstring violations than its baseline."""

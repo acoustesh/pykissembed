@@ -7,7 +7,6 @@ from __future__ import annotations
 
 import ast
 from dataclasses import dataclass
-from pathlib import Path
 from typing import TYPE_CHECKING, cast
 
 import pytest
@@ -18,6 +17,7 @@ from pykissembed.config import get_config
 
 if TYPE_CHECKING:
     from collections.abc import Iterator
+    from pathlib import Path
 
 
 DEFAULT_MIN_DENSITY = 5.0
@@ -101,6 +101,7 @@ class TestCommentDensity:
     @pytest.mark.density
     def test_comment_density(
         pykissembed_paths: list[Path],
+        *,
         update_baselines: bool,
     ) -> None:
         """Fail if any file's density is outside its configured range."""
@@ -157,6 +158,7 @@ class TestCommentDensity:
     @pytest.mark.density
     def test_aggregate_comment_density(
         pykissembed_paths: list[Path],
+        *,
         update_baselines: bool,
     ) -> None:
         """Fail if aggregate density falls outside configured range."""

@@ -9,10 +9,12 @@ import json
 import shutil
 import subprocess
 from dataclasses import dataclass
-from pathlib import Path
-from typing import cast
+from typing import TYPE_CHECKING, cast
 
 import pytest
+
+if TYPE_CHECKING:
+    from pathlib import Path
 
 from pykissembed.baselines_engine import load_envelope, save_envelope
 from pykissembed.config import get_config
@@ -37,7 +39,8 @@ def _run_ruff_docstring_check(target_dir: Path) -> list[DocstringViolation]:
     ruff = shutil.which("ruff")
     if ruff is None:
         return []
-    result = subprocess.run(
+    # S603: fixed argv (resolved ruff binary + literal flags + a configured directory).
+    result = subprocess.run(  # noqa: S603
         [ruff, "check", str(target_dir), "--select=D", "--output-format=json"],
         capture_output=True,
         text=True,
@@ -91,6 +94,7 @@ class TestDocstringFormat:
     @pytest.mark.docstring_format
     def test_docstring_format(
         pykissembed_paths: list[Path],
+        *,
         update_baselines: bool,
     ) -> None:
         """Fail if any file has more docstring violations than its baseline."""

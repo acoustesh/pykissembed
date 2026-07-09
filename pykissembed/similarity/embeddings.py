@@ -15,6 +15,8 @@ from typing import TYPE_CHECKING, TypeGuard, cast
 
 import numpy as np
 
+from pykissembed.config import get_config
+
 if TYPE_CHECKING:
     from collections.abc import Callable
 
@@ -55,7 +57,7 @@ def _get_tiktoken_encoding() -> object:
         If ``tiktoken`` is not installed.
     """
     try:
-        import tiktoken
+        import tiktoken  # noqa: PLC0415 — presence probe, kept lazy for a clearer error message
     except ImportError as exc:
         msg = "tiktoken is required for token-aware truncation"
         raise RuntimeError(msg) from exc
@@ -121,16 +123,14 @@ def _load_api_key_from_env(
     """
     api_key = os.environ.get(env_var)
     if not api_key:
-        from pykissembed.config import get_config
-
         env_file = get_config().root / ".env"
         if env_file.exists():
             prefix = f"{env_var}="
             with env_file.open(encoding="utf-8") as f:
-                for line in f:
-                    line = line.strip()
-                    if line.startswith(prefix):
-                        api_key = line.split("=", 1)[1].strip()
+                for raw_line in f:
+                    stripped_line = raw_line.strip()
+                    if stripped_line.startswith(prefix):
+                        api_key = stripped_line.split("=", 1)[1].strip()
                         break
 
     if not api_key:
@@ -248,8 +248,10 @@ def _build_provider_caller(
         If *provider* is not a recognised embedding provider.
     """
     if provider == "gemini":
-        from google import genai
-        from google.genai import types
+        # Optional cloud SDK: not a pykissembed core/cloud dependency, only
+        # needed if the caller actually requests the gemini provider.
+        from google import genai  # noqa: PLC0415
+        from google.genai import types  # noqa: PLC0415
 
         api_key = _load_api_key_from_env("GOOGLE_API_KEY")
         gemini_client = genai.Client(
@@ -308,7 +310,9 @@ def _build_provider_caller(
         return (_gemini_request, _gemini_is_retryable)
 
     if provider == "openai":
-        import openai
+        # Optional cloud SDK: not a pykissembed core dependency, only needed
+        # if the caller actually requests the openai provider.
+        import openai  # noqa: PLC0415
 
         openai_client = openai.OpenAI(
             api_key=_load_api_key_from_env("OPENAI_API_KEY"),
@@ -329,7 +333,9 @@ def _build_provider_caller(
         )
 
     if provider == "codestral":
-        import requests
+        # Optional cloud SDK: not a pykissembed core dependency, only needed
+        # if the caller actually requests the codestral provider.
+        import requests  # noqa: PLC0415
 
         api_key = _require_api_key("OPENROUTER_API_KEY")
         headers = {
@@ -364,8 +370,6 @@ def _build_provider_caller(
                 json={"model": model, "input": truncated},
                 timeout=timeout,
             )
-            if response.status_code == 429:
-                response.raise_for_status()
             response.raise_for_status()
             data = response.json()
             if "data" not in data:
@@ -385,7 +389,9 @@ def _build_provider_caller(
         )
 
     if provider == "voyage":
-        from voyageai.client import Client as VoyageClient
+        # Optional cloud SDK: not a pykissembed core dependency, only needed
+        # if the caller actually requests the voyage provider.
+        from voyageai.client import Client as VoyageClient  # noqa: PLC0415
 
         voyage_client = VoyageClient(
             api_key=_require_api_key("VOYAGE_API_KEY"),

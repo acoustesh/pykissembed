@@ -19,8 +19,20 @@ from __future__ import annotations
 import argparse
 import os
 import sys
+import time
 from dataclasses import dataclass
 from typing import TYPE_CHECKING, TypedDict, TypeGuard, cast
+
+import pytest
+
+from pykissembed.config import get_config
+from pykissembed.similarity.ast_helpers import extract_all_function_infos
+from pykissembed.similarity.embeddings import (
+    compute_combined_embedding,
+    get_cached_embedding,
+    get_embeddings_batch,
+)
+from pykissembed.similarity.storage import load_baselines, save_baselines
 
 if TYPE_CHECKING:
     from collections.abc import Callable
@@ -29,6 +41,8 @@ if TYPE_CHECKING:
 
 type Baselines = dict[str, object]
 type PopulateFn = Callable[[Baselines, list[FunctionInfo]], int]
+
+_MIN_API_KEY_LENGTH = 20
 
 
 class _FunctionHashEntry(TypedDict):
@@ -138,23 +152,21 @@ def _load_api_key(env_var: str, invalid_prefixes: tuple[str, ...]) -> str | None
     """
     api_key = os.environ.get(env_var)
     if not api_key:
-        from pykissembed.config import get_config
-
         env_file = get_config().root / ".env"
         if env_file.exists():
             prefix = f"{env_var}="
             with env_file.open(encoding="utf-8") as handle:
-                for line in handle:
-                    line = line.strip()
-                    if line.startswith(prefix):
-                        api_key = line.split("=", 1)[1].strip()
+                for raw_line in handle:
+                    stripped_line = raw_line.strip()
+                    if stripped_line.startswith(prefix):
+                        api_key = stripped_line.split("=", 1)[1].strip()
                         break
 
     if not api_key:
         return None
     if api_key.startswith(invalid_prefixes):
         return None
-    if len(api_key) < 20:
+    if len(api_key) < _MIN_API_KEY_LENGTH:
         return None
     return api_key
 
@@ -184,8 +196,6 @@ def _find_uncached(
     list[FunctionInfo]
         Functions whose embeddings are not yet cached.
     """
-    from pykissembed.similarity.embeddings import get_cached_embedding
-
     return [
         f
         for f in functions
@@ -229,12 +239,9 @@ def _populate_provider(
     try:
         text_attr = "text_for_embedding" if cfg.use_text else "ast_text"
         texts = [getattr(f, text_attr) for f in uncached]
-        from pykissembed.similarity.embeddings import get_embeddings_batch
 
         # For Gemini API, use smaller batches with delays due to free tier quota limits
         if cfg.provider == "gemini":
-            import time
-
             embeddings: list[list[float]] = []
             batch_size = 50  # Gemini free tier: 100 requests/minute, use 50 to be safe
             for i in range(0, len(texts), batch_size):
@@ -252,7 +259,8 @@ def _populate_provider(
             cache[getattr(func, hash_attr)] = emb
         print(f"{cfg.label}: cached {len(uncached)} new embeddings")  # noqa: T201
         return len(uncached)
-    except Exception as e:
+    except Exception as e:  # noqa: BLE001 — external API boundary: network/auth/rate-limit
+        # failures for one provider must not abort populating the rest.
         print(f"{cfg.label}: failed to fetch embeddings: {e}")  # noqa: T201
         return 0
 
@@ -345,10 +353,6 @@ def _populate_combined(
     int
         Number of newly computed combined embeddings.
     """
-    from pykissembed.similarity.embeddings import (
-        compute_combined_embedding,
-    )
-
     uncached = _find_uncached(baselines, functions, "combined_embeddings", "text_hash")
     if not uncached:
         return 0
@@ -368,8 +372,6 @@ def _populate_combined(
         raw = baselines.get(cache_key)
         if raw is None or not raw or not _is_embedding_cache(raw):
             provider = cache_key.removesuffix("_embeddings").replace("_", "-")
-            import pytest
-
             pytest.skip(
                 f"Cannot build combined embeddings: {cache_key} is missing or invalid. "
                 f"Run: pykissembed populate-embeddings --provider {provider}",
@@ -479,9 +481,6 @@ def populate_embeddings(provider: str = "all") -> None:
     provider : str
         One of the 9 providers or ``"all"``.
     """
-    from pykissembed.similarity.ast_helpers import extract_all_function_infos
-    from pykissembed.similarity.storage import load_baselines, save_baselines
-
     print("Loading baselines and extracting functions...")  # noqa: T201
     baselines = load_baselines()
     functions = extract_all_function_infos(min_loc=1)

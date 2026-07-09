@@ -12,10 +12,13 @@ Implements the layered discovery model from the design notes:
 from __future__ import annotations
 
 import warnings
-from collections.abc import Iterator
-from pathlib import Path
+from typing import TYPE_CHECKING
 
 from pykissembed.config import get_config
+
+if TYPE_CHECKING:
+    from collections.abc import Iterator
+    from pathlib import Path
 
 _COMMON_DIRS = ("src", "scripts", "lib")
 
