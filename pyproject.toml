@@ -164,6 +164,11 @@ ignore = [
     "E501",    # line-too-long — enforcing line length is the formatter's job, not the linter's
     "CPY001",  # missing-copyright-notice — files don't carry per-file copyright headers in this project
     "COM812",  # missing-trailing-comma — owned by the ruff formatter; the lint rule fights it
+    "S404",    # subprocess imports use fixed argv lists without a shell
+    "S403",    # controlled pickle use is limited to the provider round-trip test
+    "PLC2701", # private imports are intentional for pytest internals and project tests
+    "PLR6301", # provider protocol methods and pytest hooks need instance signatures
+    "PLW0717", # broad try boundaries preserve failure isolation at tool/API boundaries
     "D203",    # incorrect-blank-line-before-class — wants a blank line before class docstrings; mutually exclusive with D211 (no blank line), which this project follows
     "D213",    # multi-line-summary-second-line — wants the summary to start on line 2; mutually exclusive with D212 (summary on line 1, the NumPy-docstring style used here)
     "D401",    # non-imperative-mood — first docstring word need not be imperative ("Returns…" is fine in NumPy style)
@@ -194,7 +199,7 @@ convention = "numpy"
 # regression is documented in tests/test_similarity_parity.py). Verified by
 # testing the __init__.py addition directly: it broke `from
 # _similarity_backend import ...`'s bare-name resolution — see git history.
-"tests/**" = ["ANN001", "ANN201", "ANN202", "S101", "PLR2004", "S404", "INP001"]
+"tests/**" = ["ANN001", "ANN201", "ANN202", "S101", "PLR2004", "S404", "INP001", "PLC2701", "PLR6301"]
 "pykissembed/tests/fixtures/**" = ["ALL"]
 
 [tool.pyright]

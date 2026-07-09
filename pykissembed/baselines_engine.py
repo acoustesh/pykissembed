@@ -108,10 +108,10 @@ def load_envelope(path: Path, kind: str) -> BaselineEnvelope:
     BaselineEnvelope
         Loaded (or freshly-minted) envelope.
 
-    Raises
-    ------
-    jsonschema.ValidationError
-        If the file contains an invalid envelope.
+    Notes
+    -----
+    Invalid envelopes raise ``jsonschema.ValidationError`` during schema
+    validation.
     """
     if not path.exists():
         return BaselineEnvelope(kind=kind, data={}, path=path)
@@ -202,7 +202,5 @@ def ratchet(data: dict[str, Any], current: dict[str, Any]) -> dict[str, Any]:
             # Unknown shape — pass through unchanged
             result[key] = baseline_value
     # Add new keys (observed diagnostics that have no baseline yet)
-    result.update(
-        {key: current_value for key, current_value in current.items() if key not in data}
-    )
+    result.update({key: current_value for key, current_value in current.items() if key not in data})
     return result

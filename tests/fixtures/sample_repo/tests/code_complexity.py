@@ -49,7 +49,13 @@ def _load_callable(module_name: str, attribute: str) -> Callable[..., object] | 
 
 
 def _iter_py_files(base_dir: Path) -> Iterator[Path]:
-    """Yield every ``.py`` file under *base_dir* (recursive)."""
+    """Yield every ``.py`` file under *base_dir* (recursive).
+
+    Yields
+    ------
+    Path
+        A Python file below *base_dir*.
+    """
     for py_file in sorted(base_dir.rglob("*.py")):
         if py_file.name.startswith("__") or "__pycache__" in py_file.parts:
             continue

@@ -125,10 +125,10 @@ def load_config(start: Path | None = None) -> PyqtestConfig:
     PyqtestConfig
         Frozen configuration dataclass.
 
-    Raises
-    ------
-    FileNotFoundError
-        If no ``pyproject.toml`` is found and auto-detection fails.
+    Notes
+    -----
+    If no ``pyproject.toml`` is found and auto-detection fails, the lookup
+    raises ``FileNotFoundError``.
     """
     cursor = (start or Path.cwd()).resolve()
     root = cursor

@@ -30,7 +30,7 @@ class LocalProvider:
     max_tokens = 256
     batch_size = 32
 
-    def embed(self, texts: Sequence[str]) -> list[list[float]]:  # noqa: ARG002 — param name is part of the Provider Protocol contract
+    def embed(self, texts: Sequence[str]) -> list[list[float]]:  # noqa: ARG002 — Provider protocol parameter
         msg = f"The local provider requires the pykissembed-local subpackage.\n  {_INSTALL_HINT}"
         raise RuntimeError(msg)
 

@@ -6,7 +6,13 @@ import importlib
 
 
 def test_add() -> None:
-    """Verify the sample ``add`` function works."""
+    """Verify the sample ``add`` function works.
+
+    Raises
+    ------
+    TypeError
+        If the sample function is missing or not callable.
+    """
     module = importlib.import_module("example_pkg.core")
     add = getattr(module, "add", None)
     if not callable(add):

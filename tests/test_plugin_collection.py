@@ -23,7 +23,10 @@ from unittest.mock import MagicMock
 
 import pytest
 
-from pykissembed.plugin import _CHECK_STEMS, _decide_injection
+from pykissembed.plugin import (
+    _CHECK_STEMS,
+    _decide_injection,
+)
 
 
 def _make_config(
@@ -204,9 +207,7 @@ class TestDecideInjection:
             args=[f"{consumer_copy}::TestDocstringFormat"],
         )
         candidate = fake_checks_dir / "docstring_format.py"
-        assert _decide_injection(cfg, fake_checks_dir) == (
-            f"{candidate}::TestDocstringFormat"
-        )
+        assert _decide_injection(cfg, fake_checks_dir) == (f"{candidate}::TestDocstringFormat")
 
     @staticmethod
     def test_nodeid_naming_a_check_with_other_args_still_skips(
@@ -632,12 +633,7 @@ class TestSubprocessCollection:
         consumer = tmp_path / "consumer"
         (consumer / "tests").mkdir(parents=True)
         shutil.copyfile(
-            repo
-            / "tests"
-            / "fixtures"
-            / "sample_repo"
-            / "tests"
-            / "code_complexity.py",
+            repo / "tests" / "fixtures" / "sample_repo" / "tests" / "code_complexity.py",
             consumer / "tests" / "code_complexity.py",
         )
         (consumer / "pyproject.toml").write_text(
@@ -651,10 +647,7 @@ class TestSubprocessCollection:
                 sys.executable,
                 "-m",
                 "pytest",
-                (
-                    "tests/code_complexity.py::TestDocstringCoverage::"
-                    "test_docstring_coverage"
-                ),
+                ("tests/code_complexity.py::TestDocstringCoverage::test_docstring_coverage"),
                 "--collect-only",
                 "-q",
             ],

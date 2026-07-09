@@ -110,6 +110,8 @@ def compute_similarity_matrix_accel(
     ------
     RuntimeError
         If cuml is not importable.
+    TypeError
+        If ``cuml.accel.install`` is missing or not callable.
     """
     if not has_cuml():
         msg = "cuml is not importable in this environment — call has_cuml() first."

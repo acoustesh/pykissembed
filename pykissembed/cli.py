@@ -55,7 +55,13 @@ def _main_callback(
         help="Show pykissembed version and exit.",
     ),
 ) -> None:
-    """Print the pykissembed version and exit if --version is passed."""
+    """Print the pykissembed version and exit if --version is passed.
+
+    Raises
+    ------
+    typer.Exit
+        When the version is printed or no subcommand was provided.
+    """
     if version:
         typer.echo(f"pykissembed {__version__}")
         raise typer.Exit
@@ -86,6 +92,11 @@ def check(
     runs the full battery as documented. If the caller passes their own
     args (e.g. a marker or a specific check NodeId), forward them
     unchanged so their scoping is respected.
+
+    Raises
+    ------
+    typer.Exit
+        With pytest's exit status after the gate completes.
     """
     args = list(pytest_args) if pytest_args else ["--pykissembed-all"]
     cmd = [sys.executable, "-m", "pytest", *args]
@@ -112,6 +123,11 @@ def ratchet_cmd(
     captured at their current value.
 
     This is the recommended post-commit hook target.
+
+    Raises
+    ------
+    typer.Exit
+        If the baseline directory is missing or ratcheting completes.
     """
     config = get_config()
     bdir = baseline_dir or config.baseline_path
@@ -191,7 +207,13 @@ providers_app = typer.Typer(help="Inspect installed embedding providers.", no_ar
 
 @providers_app.command("list")
 def providers_list() -> None:
-    """List all installed embedding providers (built-in + entry points)."""
+    """List all installed embedding providers (built-in + entry points).
+
+    Raises
+    ------
+    typer.Exit
+        If no providers are installed.
+    """
     # Lazy: discovery imports entry-point providers, which may pull in heavy
     # optional deps (torch via pykissembed-local) — avoid that cost for
     # every CLI invocation, not just `providers list`.
@@ -245,7 +267,14 @@ def populate_embeddings(
         help="Skip API calls; only read cache.",
     ),
 ) -> None:
-    """Populate the embedding cache for *provider_name*."""
+    """Populate the embedding cache for *provider_name*.
+
+    Raises
+    ------
+    typer.Exit
+        If the provider is unknown, unconfigured, or its optional package is
+        unavailable.
+    """
     # Lazy: same rationale as providers_list — avoid eager provider discovery.
     from pykissembed.providers.registry import get as get_provider  # noqa: PLC0415
 
@@ -296,6 +325,11 @@ def type_review(
 
     For each file with pyright errors, runs ``pyright`` against just that
     file so the developer can focus on the failing diagnostics.
+
+    Raises
+    ------
+    typer.Exit
+        If the report is missing or the subprocess completes.
     """
     if not report.exists():
         typer.echo(f"Report not found: {report}")
@@ -333,6 +367,12 @@ def init(
     Auto-detects source directories from the project layout (``src/``,
     ``[tool.setuptools]`` packages, or ``.`` as fallback). Use ``--force``
     to overwrite an existing block.
+
+    Raises
+    ------
+    typer.Exit
+        If the project file is missing or an existing configuration would be
+        overwritten without ``--force``.
     """
     config = get_config()
     pyproject = config.root / "pyproject.toml"

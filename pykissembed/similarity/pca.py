@@ -179,7 +179,7 @@ def _get_pca_class() -> tuple[type, bool]:
 
         # Test that cuML actually works (catches version mismatches)
         _ = pca_gpu_cls(n_components=2)
-    except (ImportError, AttributeError):
+    except ImportError, AttributeError:
         # AttributeError catches cuML version incompatibilities
         return _load_sklearn_pca_class(), False
     else:

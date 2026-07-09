@@ -13,7 +13,10 @@ from textwrap import dedent
 import numpy as np
 import pytest
 
-from pykissembed.plugin import _CHECK_STEMS, _checks_dir
+from pykissembed.plugin import (
+    _CHECK_STEMS,
+    _checks_dir,
+)
 from pykissembed.similarity.ast_helpers import (
     compute_content_hash,
     extract_function_infos_from_file,
@@ -201,7 +204,7 @@ class TestComputeCosineSimilarity:
     @staticmethod
     def test_zero_vector() -> None:
         """Zero vector returns 0.0."""
-        assert compute_cosine_similarity([0.0, 0.0], [1.0, 2.0]) == 0.0
+        assert compute_cosine_similarity([0.0, 0.0], [1.0, 2.0]) == pytest.approx(0.0)
 
     @staticmethod
     def test_opposite_vectors() -> None:
@@ -351,7 +354,7 @@ class TestRefactorIndex:
         assert matrix.shape == (3, 3)
         # Diagonal should be zero
         for i in range(3):
-            assert matrix[i, i] == 0.0
+            assert matrix[i, i] == pytest.approx(0.0)
 
     @staticmethod
     def test_max_similarities() -> None:

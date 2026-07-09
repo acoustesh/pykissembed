@@ -60,7 +60,7 @@ def _run_ruff(paths: list[Path]) -> list[dict[str, Any]]:
         result = subprocess.run(  # noqa: S603
             cmd, capture_output=True, text=True, check=False, timeout=120
         )
-    except (OSError, subprocess.TimeoutExpired):
+    except OSError, subprocess.TimeoutExpired:
         return []
     if not result.stdout.strip():
         return []
@@ -84,7 +84,7 @@ def _run_pyright(paths: list[Path]) -> list[dict[str, Any]]:
         result = subprocess.run(  # noqa: S603
             cmd, capture_output=True, text=True, check=False, timeout=120
         )
-    except (OSError, subprocess.TimeoutExpired):
+    except OSError, subprocess.TimeoutExpired:
         return []
     if not result.stdout.strip():
         return []

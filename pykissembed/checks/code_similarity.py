@@ -210,9 +210,7 @@ def _run_similarity_test(
     threshold_pair = _extract_float(
         config,
         provider.threshold_pair_key,
-        _extract_float(
-            config, "similarity_threshold_pair", provider.default_threshold_pair
-        ),
+        _extract_float(config, "similarity_threshold_pair", provider.default_threshold_pair),
     )
     threshold_neighbor = _extract_float(
         config,
@@ -228,8 +226,7 @@ def _run_similarity_test(
     functions: list[FunctionInfo] = [
         copy.deepcopy(func)
         for func in shared_functions
-        if func.loc >= min_loc
-        and not any(directory in func.file for directory in excluded_dirs)
+        if func.loc >= min_loc and not any(directory in func.file for directory in excluded_dirs)
     ]
 
     run_provider_similarity_checks(
@@ -280,6 +277,15 @@ def test_providers_parallel(
         Session-scoped list of extracted functions.
     pca_cache : SimilarityPcaCache
         Session-scoped PCA model cache.
+
+    Raises
+    ------
+    SystemExit
+        Propagated if a provider raises ``SystemExit``.
+    GeneratorExit
+        Propagated if a provider raises ``GeneratorExit``.
+    KeyboardInterrupt
+        Propagated if a provider raises ``KeyboardInterrupt``.
     """
     if not shared_functions:
         pytest.skip("No [tool.pykissembed] paths configured")
@@ -304,7 +310,7 @@ def test_providers_parallel(
                 future.result()
             except pytest.skip.Exception as exc:  # type: ignore[attr-defined]
                 skips[provider.label] = str(exc)
-            except (KeyboardInterrupt, SystemExit, GeneratorExit):
+            except KeyboardInterrupt, SystemExit, GeneratorExit:
                 raise
             except BaseException as exc:  # noqa: BLE001 — deliberately broad: aggregates every
                 # provider's failure (network, API, assertion) so one provider's error doesn't
@@ -316,10 +322,7 @@ def test_providers_parallel(
         pytest.fail(f"Provider failures:\n{detail}", pytrace=False)
 
     if skips and len(skips) == len(_PARALLEL_PROVIDERS):
-        pytest.skip(
-            "All providers skipped:\n"
-            + "\n".join(f"  {n}: {m}" for n, m in skips.items())
-        )
+        pytest.skip("All providers skipped:\n" + "\n".join(f"  {n}: {m}" for n, m in skips.items()))
 
 
 @pytest.mark.similarity

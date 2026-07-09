@@ -206,7 +206,9 @@ def get_refactor_priority_message(
     -------
         Formatted message string, or ``None`` if no functions exceed the threshold.
     """
-    if len(functions) < _MIN_FUNCTIONS_FOR_REFACTOR_INDEX or not any(f.embedding is not None for f in functions):
+    if len(functions) < _MIN_FUNCTIONS_FOR_REFACTOR_INDEX or not any(
+        f.embedding is not None for f in functions
+    ):
         return None
 
     similarity_matrix: Float32Array = compute_similarity_matrix(functions)

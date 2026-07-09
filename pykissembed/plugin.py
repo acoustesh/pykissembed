@@ -268,15 +268,11 @@ def _decide_injection(
 
     args: list[str] = list(getattr(config, "args", []))
 
-    has_marker_filter = any(
-        a == "-m" or a.startswith(("--markers", "-m=")) for a in args
-    )
+    has_marker_filter = any(a == "-m" or a.startswith(("--markers", "-m=")) for a in args)
     if has_marker_filter:
         return checks_dir
 
-    has_keyword_filter = any(
-        a == "-k" or a.startswith(("-k=", "--keyword")) for a in args
-    )
+    has_keyword_filter = any(a == "-k" or a.startswith(("-k=", "--keyword")) for a in args)
     has_deselect = any(a == "--deselect" or a.startswith("--deselect=") for a in args)
 
     # Check if the user already targeted a check file directly (either
@@ -319,7 +315,7 @@ def _decide_injection(
             continue
         try:
             resolved = Path(raw).resolve()
-        except (OSError, ValueError):
+        except OSError, ValueError:
             continue
         if (
             resolved.is_file()
@@ -373,9 +369,7 @@ _collected_key = StashKey[set[Path]]()
 
 
 @pytest.hookimpl(tryfirst=True)
-def pytest_collect_file(
-    file_path: Path, parent: pytest.Collector
-) -> pytest.Module | None:
+def pytest_collect_file(file_path: Path, parent: pytest.Collector) -> pytest.Module | None:
     """Collect pykissembed's check modules as test modules.
 
     This hook makes the check modules (``code_complexity.py``,

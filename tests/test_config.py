@@ -7,7 +7,11 @@ from typing import TYPE_CHECKING
 
 import pytest
 
-from pykissembed.config import _auto_detect, _coerce_str_list, load_config
+from pykissembed.config import (
+    _auto_detect,
+    _coerce_str_list,
+    load_config,
+)
 from pykissembed.paths import iter_py_files
 
 if TYPE_CHECKING:

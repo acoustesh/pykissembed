@@ -39,7 +39,7 @@ def greet(name: str) -> str:
     return f"Hello, {name}"
 
 
-def no_docstring_func(x: int) -> int:  # noqa: D — deliberately missing docstring
+def no_docstring_func(x: int) -> int:
     return x * 2
 
 

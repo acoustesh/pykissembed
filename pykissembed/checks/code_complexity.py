@@ -132,11 +132,7 @@ def _get_cc(file_path: Path) -> list[tuple[str, int, int]]:
         name = getattr(block, "name", None)
         lineno = getattr(block, "lineno", None)
         complexity = getattr(block, "complexity", None)
-        if (
-            isinstance(name, str)
-            and isinstance(lineno, int)
-            and isinstance(complexity, int)
-        ):
+        if isinstance(name, str) and isinstance(lineno, int) and isinstance(complexity, int):
             out.append((name, lineno, complexity))
     return out
 
@@ -173,11 +169,7 @@ def _get_cog(file_path: Path) -> list[tuple[str, int, int]]:
         name = getattr(f, "name", None)
         line = getattr(f, "line_start", None)
         complexity = getattr(f, "complexity", None)
-        if (
-            isinstance(name, str)
-            and isinstance(line, int)
-            and isinstance(complexity, int)
-        ):
+        if isinstance(name, str) and isinstance(line, int) and isinstance(complexity, int):
             out.append((name, line, complexity))
     return out
 
@@ -225,9 +217,7 @@ class TestDocstringCoverage:
 
     @staticmethod
     @pytest.mark.complexity
-    def test_docstring_coverage(
-        pykissembed_paths: list[Path], *, update_baselines: bool
-    ) -> None:
+    def test_docstring_coverage(pykissembed_paths: list[Path], *, update_baselines: bool) -> None:
         """Fail if any directory has more missing docstrings than its baseline."""
         if not pykissembed_paths:
             pytest.skip("No [tool.pykissembed] paths configured")
@@ -262,14 +252,10 @@ class TestDocstringCoverage:
 
         if violations:
             detail = "\n".join(
-                f"{d}/:\n" + "\n".join(items)
-                for d, items in sorted(all_missing.items())
+                f"{d}/:\n" + "\n".join(items) for d, items in sorted(all_missing.items())
             )
             pytest.fail(
-                "Docstring coverage regression:\n"
-                + "\n".join(violations)
-                + "\n\n"
-                + detail,
+                "Docstring coverage regression:\n" + "\n".join(violations) + "\n\n" + detail,
                 pytrace=False,
             )
 
@@ -279,9 +265,7 @@ class TestLineCount:
 
     @staticmethod
     @pytest.mark.complexity
-    def test_file_line_counts(
-        pykissembed_paths: list[Path], *, update_baselines: bool
-    ) -> None:
+    def test_file_line_counts(pykissembed_paths: list[Path], *, update_baselines: bool) -> None:
         """Fail if any file exceeds its line-count baseline."""
         if not pykissembed_paths:
             pytest.skip("No [tool.pykissembed] paths configured")
@@ -297,17 +281,13 @@ class TestLineCount:
                 current_counts[key] = count
                 baseline = line_baselines.get(key, 0) or None
                 if baseline is not None and count > baseline:
-                    violations.append(
-                        f"File {key} has {count} lines, exceeds baseline {baseline}"
-                    )
+                    violations.append(f"File {key} has {count} lines, exceeds baseline {baseline}")
         if update_baselines:
             envelope.data["line_baselines"] = current_counts
             save_envelope(baseline_file, envelope)
             pytest.skip("Updated line count baselines")
         if violations:
-            pytest.fail(
-                "Line count violations:\n" + "\n".join(violations), pytrace=False
-            )
+            pytest.fail("Line count violations:\n" + "\n".join(violations), pytrace=False)
 
 
 class TestCyclomaticComplexity:

@@ -82,10 +82,14 @@ select = ["ALL"]
 ignore = [
     "D100",
     "D104",
+    "CPY001", # package follows the root project's no per-file-header policy
+    "S403", # controlled pickle use is limited to the provider round-trip test
+    "S404", # subprocess imports use fixed argv lists without a shell
     "T201",   # print() usage — allowed in scripts
     "PLR09",  # too many of things,
     "C901",  # too complex
     "PLC0415", # import-outside-top-level — lazy in-function imports are deliberate: sentence-transformers/tiktoken are heavy/optional and deferred (mirrors the root pykissembed config)
+    "PLR6301", # provider methods implement the shared Provider protocol
 ]
 
 [tool.ruff.lint.pydocstyle]
