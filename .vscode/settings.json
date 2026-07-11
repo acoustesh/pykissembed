@@ -29,5 +29,7 @@
     "**/*.pyc": true,
     "**/.pytest_cache": true,
     "**/.ruff_cache": true
-  }
+  },
+  "github.copilot.chat.completionsFetcher": "node-fetch",
+  "github.copilot.chat.nesFetcher": "node-fetch"
 }
