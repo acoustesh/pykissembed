@@ -134,6 +134,12 @@ convention = "numpy"
 [tool.ruff.lint.per-file-ignores]
 "tests/**" = ["ANN001", "ANN201", "ANN202", "S101", "PLR2004", "PLR6301"]
 
+[tool.ty.analysis]
+respect-type-ignore-comments = false
+
+[tool.ty.rules]
+all = "error"
+
 [tool.pytest.ini_options]
 minversion = "8.0"
 testpaths = ["tests"]
