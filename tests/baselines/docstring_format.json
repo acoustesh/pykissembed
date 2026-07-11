@@ -1,0 +1,14 @@
+{
+  "data": {
+    "per_file": {
+      "pykissembed/checks/code_similarity.py": 1,
+      "pykissembed/checks/docstring_format.py": 1,
+      "pykissembed/conftest.py": 2,
+      "pykissembed/plugin.py": 1,
+      "pykissembed/providers/local.py": 1,
+      "pykissembed/providers/registry.py": 4
+    }
+  },
+  "kind": "docstring_format",
+  "schema_version": "1.0"
+}

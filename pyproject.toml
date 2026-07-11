@@ -93,6 +93,10 @@ dev = [
 packages = ["pykissembed", "src/pykissembed"]
 include = ["pykissembed/schemas/*.json"]
 
+# Self-check: pykissembed dogfoods its own checks against its own source.
+[tool.pykissembed]
+paths = ["pykissembed"]
+
 # The `[local]` / `[cloud]` extras reference sibling subpackages. They are
 # workspace members, so we mark them as such under `[tool.uv.sources]`.
 [tool.uv.sources]
