@@ -36,15 +36,19 @@ def _make_config(
 
     The decision helper only reads three things from the config:
     ``getoption('--pykissembed-all')``, ``getoption('--collect-only')``,
-    and ``config.args``. Everything else is stubbed out so the helper can
-    run in isolation.
+    and ``config.invocation_params.args`` — the raw CLI argv, which is
+    where flags like ``-m``/``-k``/``--deselect`` actually live (unlike
+    ``config.args``, pytest's *resolved collection roots*, which never
+    contains option flags). Everything else is stubbed out so the helper
+    can run in isolation.
 
     Returns
     -------
     MagicMock
         A mock ``pytest.Config`` whose ``getoption`` returns *all_flag*
         for ``--pykissembed-all``, *collect_only* for ``--collect-only``,
-        and ``False`` otherwise, and whose ``.args`` is a copy of *args*.
+        and ``False`` otherwise, and whose ``.invocation_params.args`` is
+        a copy of *args*.
     """
     cfg = MagicMock()
 
@@ -56,7 +60,7 @@ def _make_config(
         return False
 
     cfg.getoption = MagicMock(side_effect=_getoption)
-    cfg.args = list(args)
+    cfg.invocation_params = SimpleNamespace(args=tuple(args))
     return cfg
 
 

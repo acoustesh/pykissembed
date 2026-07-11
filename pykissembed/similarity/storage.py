@@ -113,6 +113,11 @@ def _compress_embedding(vec: list[float]) -> str:
     -------
         Base64-encoded zlib-compressed float32 string.
     """
+    # A 1536+ dim float vector as JSON decimal text (e.g. "0.0123456789,
+    # -0.234567,...") is far larger than its binary form; packing to raw
+    # float32 bytes, zlib-compressing, then base64-encoding keeps the
+    # cache file JSON-safe while staying close to the binary size instead
+    # of the verbose decimal-text size.
     arr = np.array(vec, dtype=np.float32)
     return base64.b64encode(zlib.compress(arr.tobytes(), level=6)).decode("ascii")
 
@@ -159,6 +164,10 @@ def _atomic_json_write(
     suffix: str = ".json",
 ) -> None:
     """Write JSON data atomically using temp file + rename."""
+    # Writing to a sibling temp file and then renaming it into place is
+    # atomic at the OS level (POSIX rename, Windows Path.replace): a
+    # concurrent reader (e.g. another pytest-xdist worker) always sees
+    # either the fully-old or fully-new file, never a half-written one.
     file_path.parent.mkdir(parents=True, exist_ok=True)
     fd, temp_path = tempfile.mkstemp(suffix=suffix, prefix=prefix, dir=file_path.parent)
     try:
@@ -413,6 +422,11 @@ class EmbeddingRegistry:
             gemini_text = text_caches["gemini_text"].get(text_hash)
             gemini_ast = ast_caches["gemini_ast"].get(ast_hash)
 
+            # All-or-nothing gate: a function's combined embedding is only
+            # built once every one of the 8 base providers has embedded it.
+            # This means a function stays absent from `combined_cache`
+            # (rather than getting a partial/zero-padded vector) until the
+            # slowest provider to populate catches up.
             if (
                 openai_text is not None
                 and openai_ast is not None
@@ -664,6 +678,12 @@ def load_baselines() -> dict[str, object]:
     return baselines
 
 
+# Guards the read-modify-write of the in-memory `baselines` dict and its
+# on-disk files. _atomic_json_write is already atomic per-file, but
+# multiple threads (e.g. the ThreadPoolExecutor in code_similarity.py, one
+# per embedding provider) can call save_baselines() concurrently on the
+# *same* dict/files — without this lock two saves could interleave and
+# each overwrite the other's provider-specific cache updates.
 _SAVE_LOCK = threading.Lock()
 
 
@@ -678,7 +698,11 @@ def _save_baselines_unlocked(baselines: dict[str, object]) -> None:
     baselines_file = _constants.baselines_file()
     baselines_file.parent.mkdir(parents=True, exist_ok=True)
 
-    # Extract embedding caches to save separately
+    # Embedding vectors are popped out before the main baselines file is
+    # written so they land in their own smaller, per-provider compressed
+    # files instead of one large JSON blob — keeps the main baselines file
+    # (config, thresholds, function hashes) small and readable in a git
+    # diff, independent of how many embeddings are cached.
     embedding_caches = {key: baselines.pop(key, {}) for key in REGISTRY.files}
     function_hashes = _as_str_object_dict(
         baselines.pop("function_hashes", {}),

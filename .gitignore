@@ -17,3 +17,6 @@ venv/
 tests/.pykissembed_cache/
 .env
 .pypirc
+
+# Baseline file locks (cross-process lock sidecars) — never commit
+tests/baselines/*.lock

@@ -28,6 +28,10 @@ def _as_embeddings_cache(value: object) -> dict[str, list[float]]:
     if not isinstance(value, dict):
         return {}
 
+    # Any single malformed entry discards the *entire* cache rather than
+    # just that entry: a shape mismatch usually signals a stale/corrupted
+    # baselines file, and partially trusting it risks silently pairing
+    # embeddings from two incompatible schema versions.
     raw = cast("dict[object, object]", value)
     for key, vector in raw.items():
         if not isinstance(key, str):
@@ -96,6 +100,10 @@ def generate_file_split_proposal(file_path: Path, baselines: dict[str, object]) 
         n_clusters=_SPLIT_CLUSTER_COUNT,
     )
 
+    # k-means can collapse everything into one cluster when the embeddings
+    # are nearly identical or there simply aren't enough distinct points —
+    # an empty second cluster would produce a "split" that just recreates
+    # the original file, so bail out silently instead of proposing that.
     if len(clusters) < _SPLIT_CLUSTER_COUNT or not clusters[0] or not clusters[1]:
         return None
 

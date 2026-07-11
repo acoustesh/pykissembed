@@ -266,7 +266,14 @@ def _decide_injection(
     if config.getoption("--pykissembed-all"):
         return checks_dir
 
-    args: list[str] = list(getattr(config, "args", []))
+    # `config.args` is pytest's *resolved collection roots* (positional
+    # paths, falling back to ini `testpaths` when none are given) — it
+    # never contains option flags, since argparse consumes those before
+    # `config.args` is populated. `invocation_params.args` is the raw argv
+    # pytest was invoked with (unaffected by ini `addopts`/`testpaths`),
+    # so it's the only source that actually reflects flags like `-m`/`-k`/
+    # `--deselect` the user typed.
+    args: list[str] = list(config.invocation_params.args)
 
     has_marker_filter = any(a == "-m" or a.startswith(("--markers", "-m=")) for a in args)
     if has_marker_filter:

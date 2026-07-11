@@ -143,6 +143,11 @@ def compute_similarity_matrix(functions: list[FunctionInfo]) -> Float32Array:
         if func.embedding is not None:
             embeddings.append(func.embedding)
         else:
+            # A zero vector (not a skipped row) keeps this matrix's row/
+            # column indices aligned 1:1 with `functions`, so callers can
+            # index the result by the same position without a separate
+            # remapping — a missing embedding just contributes zero
+            # similarity to every pair instead of shifting later indices.
             embeddings.append([0.0] * 3072)  # text-embedding-3-large dimension
 
     emb_matrix = np.array(embeddings, dtype=np.float32)
@@ -176,6 +181,12 @@ def compute_similarity_indices(max_similarities: Float64Array) -> Float64Array:
     -------
         Array of similarity index values.
     """
+    # The 5th power makes this deliberately nonlinear: moderate similarity
+    # (e.g. 0.7) contributes almost nothing, while near-duplicate code
+    # (>0.9) spikes sharply — the intent is to flag true copy-paste, not
+    # penalize functions that merely share a common idiom. 25.403 is a
+    # calibration constant scaling max_similarity=1.0 to an index value
+    # comparable in magnitude to the CC/COG terms it's combined with below.
     return np.asarray(25.403 * np.power(max_similarities, 5), dtype=np.float64)
 
 

@@ -138,6 +138,9 @@ def _load_dir_complexity(
     cc_map: dict[str, int] = {}
     cog_map: dict[str, int] = {}
 
+    # recursive=True (used by load_all_complexity_maps) walks subdirectories
+    # via rglob; the non-recursive glob() default matches the shallow scan
+    # that load_complexity_maps()'s single-directory fallback expects.
     glob_fn = directory.rglob if recursive else directory.glob
     for py_file in glob_fn("*.py"):
         if py_file.name.startswith("__") or _should_skip(py_file):
@@ -164,6 +167,10 @@ def load_complexity_maps(directory: Path | None = None) -> tuple[dict[str, int],
         paths = resolve_paths()
         if not paths:
             return {}, {}
+        # Only the first configured path, unlike load_all_complexity_maps()
+        # below which scans every one — this single-directory variant
+        # exists for callers (tests, ad-hoc scripts) that want one
+        # directory's map without paying for a full multi-path scan.
         directory = paths[0]
     return _load_dir_complexity(directory)
 

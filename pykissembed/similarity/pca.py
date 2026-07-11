@@ -179,6 +179,10 @@ def _get_pca_class() -> tuple[type, bool]:
 
         # Test that cuML actually works (catches version mismatches)
         _ = pca_gpu_cls(n_components=2)
+    # Unparenthesized multi-exception `except` (PEP 758, Python 3.14+) —
+    # equivalent to `except (ImportError, AttributeError):`. Valid syntax
+    # on this project's py314+ baseline even though it reads like the
+    # old (and in Python 3, invalid) Python 2 two-argument form.
     except ImportError, AttributeError:
         # AttributeError catches cuML version incompatibilities
         return _load_sklearn_pca_class(), False
@@ -204,6 +208,10 @@ def fit_pca(
         Returns (None, 0, False) if not enough embeddings (<10)
 
     """
+    # variance_threshold is part of the cache key, not just cache_key: the
+    # same embedding set fitted for two different variance targets needs a
+    # different component count, so keying on cache_key alone would return
+    # a stale n_components for whichever threshold wasn't fitted first.
     if pca_cache is not None:
         full_key = f"{cache_key}_{variance_threshold}"
         if full_key in pca_cache:
@@ -238,6 +246,10 @@ def fit_pca(
             ),
         )
 
+    # searchsorted returns the 0-based index of the first component whose
+    # *cumulative* explained variance reaches variance_threshold; +1
+    # converts that index into a component *count* (index 0 passing the
+    # threshold means "1 component is enough").
     n_components = int(np.searchsorted(cumulative_variance, variance_threshold).item()) + 1
     n_components = min(n_components, max_components)
 
@@ -315,6 +327,10 @@ def _make_kmeans(
     TypeError
         If *n_init* is not a positive integer.
     """
+    # sklearn's KMeans also accepts n_init="auto" (its own default since
+    # 1.4), but that heuristic's chosen value has changed between sklearn
+    # releases — pinning to an explicit positive int here keeps clustering
+    # results reproducible across environments/versions.
     if not isinstance(n_init, int) or n_init < 1:
         msg = f"n_init must be a positive int, got {n_init!r}"
         raise TypeError(msg)
@@ -348,6 +364,9 @@ def cluster_functions_kmeans_with_pca(
             embeddings.append(func.embedding)
             valid_functions.append(func)
 
+    # KMeans requires at least as many samples as clusters; when there
+    # aren't enough embedded functions to fill every cluster, fall back to
+    # one bucket containing everything rather than letting sklearn raise.
     if len(valid_functions) < n_clusters:
         return [valid_functions], ["all_functions"]
 

@@ -18,7 +18,7 @@ from typing import Any, cast
 import pytest
 
 from pykissembed.baselines_engine import (
-    load_envelope,
+    locked_envelope,
     save_envelope,
 )
 from pykissembed.config import get_config
@@ -204,51 +204,54 @@ def test_no_lint_or_type_errors(
 
     # Load the baseline
     baseline_file = config.baseline_path / "lint_typecheck.json"
-    envelope = load_envelope(baseline_file, kind="lint_typecheck")
+    with locked_envelope(baseline_file, kind="lint_typecheck") as envelope:
+        if update_baselines:
+            envelope.data = {
+                "per_file": {
+                    f: len(d["ruff"]) + len(d["pyright"]) for f, d in report["files"].items()
+                }
+            }
+            save_envelope(baseline_file, envelope)
+            pytest.skip("Updated lint/typecheck baselines")
 
-    if update_baselines:
-        envelope.data = {
-            "per_file": {f: len(d["ruff"]) + len(d["pyright"]) for f, d in report["files"].items()}
-        }
-        save_envelope(baseline_file, envelope)
-        pytest.skip("Updated lint/typecheck baselines")
-
-    per_file_baseline = cast("dict[str, int]", envelope.data.get("per_file", {}))
-    regressions: list[str] = []
-    new_violations: list[str] = []
-    for file_path, diags in report["files"].items():
-        count = len(diags["ruff"]) + len(diags["pyright"])
-        baseline = per_file_baseline.get(file_path, 0)
-        if count > baseline:
-            detail = "\n".join(f"    ruff:   {d['code']}: {d['message']}" for d in diags["ruff"])
-            detail += "\n" + "\n".join(
-                f"    pyright: {d['code']}: {d['message']}" for d in diags["pyright"]
-            )
-            if baseline == 0:
-                new_violations.append(f"{file_path}: {count} diagnostics (new file)\n{detail}")
-            else:
-                regressions.append(
-                    f"{file_path}: {count} diagnostics (baseline {baseline}, +{count - baseline})\n{detail}",
+        per_file_baseline = cast("dict[str, int]", envelope.data.get("per_file", {}))
+        regressions: list[str] = []
+        new_violations: list[str] = []
+        for file_path, diags in report["files"].items():
+            count = len(diags["ruff"]) + len(diags["pyright"])
+            baseline = per_file_baseline.get(file_path, 0)
+            if count > baseline:
+                detail = "\n".join(
+                    f"    ruff:   {d['code']}: {d['message']}" for d in diags["ruff"]
                 )
+                detail += "\n" + "\n".join(
+                    f"    pyright: {d['code']}: {d['message']}" for d in diags["pyright"]
+                )
+                if baseline == 0:
+                    new_violations.append(f"{file_path}: {count} diagnostics (new file)\n{detail}")
+                else:
+                    regressions.append(
+                        f"{file_path}: {count} diagnostics (baseline {baseline}, +{count - baseline})\n{detail}",
+                    )
 
-    total = report["summary"]["total"]
-    if total == 0:
-        return
+        total = report["summary"]["total"]
+        if total == 0:
+            return
 
-    if not regressions and not new_violations:
-        # Diagnostics exist but are grandfathered by baselines
-        return
+        if not regressions and not new_violations:
+            # Diagnostics exist but are grandfathered by baselines
+            return
 
-    lines = [
-        f"Lint/type-check gate failed: {total} diagnostic(s) across {report['summary']['total_files']} file(s).",
-        f"  ruff errors: {report['summary']['ruff_errors']}",
-        f"  pyright errors: {report['summary']['pyright_errors']}",
-        f"Report: {report_path}",
-    ]
-    if regressions:
-        lines.append("\n=== Regressions (exceeds baseline) ===")
-        lines.extend(regressions)
-    if new_violations:
-        lines.append("\n=== New violations (no baseline) ===")
-        lines.extend(new_violations)
-    pytest.fail("\n".join(lines), pytrace=False)
+        lines = [
+            f"Lint/type-check gate failed: {total} diagnostic(s) across {report['summary']['total_files']} file(s).",
+            f"  ruff errors: {report['summary']['ruff_errors']}",
+            f"  pyright errors: {report['summary']['pyright_errors']}",
+            f"Report: {report_path}",
+        ]
+        if regressions:
+            lines.append("\n=== Regressions (exceeds baseline) ===")
+            lines.extend(regressions)
+        if new_violations:
+            lines.append("\n=== New violations (no baseline) ===")
+            lines.extend(new_violations)
+        pytest.fail("\n".join(lines), pytrace=False)

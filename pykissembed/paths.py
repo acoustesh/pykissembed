@@ -83,7 +83,14 @@ def iter_py_files(base_dir: Path) -> Iterator[Path]:
     Path
         Each Python file under *base_dir*, sorted for determinism.
     """
+    # sorted(): rglob() order depends on the OS/filesystem directory listing
+    # order, which isn't guaranteed stable across machines — baselines keyed
+    # by file path need deterministic iteration so re-running a check
+    # doesn't reorder (and spuriously diff) its own output.
     for py_file in sorted(base_dir.rglob("*.py")):
+        # Dunder files (__init__.py, __main__.py, ...) are typically
+        # re-export/entry-point boilerplate, not code meant to carry
+        # docstring/complexity/similarity scoring.
         if py_file.name.startswith("__"):
             continue
         if _should_skip(py_file):

@@ -1,0 +1,19 @@
+{
+  "data": {
+    "aggregate_current": 11.17,
+    "per_file": {
+      "pykissembed/conftest.py": {
+        "current": 0.0,
+        "max": 40.0,
+        "min": 0.0
+      },
+      "pykissembed/providers/base.py": {
+        "current": 0.0,
+        "max": 40.0,
+        "min": 0.0
+      }
+    }
+  },
+  "kind": "density",
+  "schema_version": "1.0"
+}

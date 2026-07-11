@@ -55,6 +55,10 @@ class ProviderRegistry:
                     stacklevel=2,
                 )
                 continue
+            # An entry point may resolve to either a Provider *class* (needs
+            # instantiating) or an already-built singleton *instance* —
+            # both are accepted so third-party provider packages aren't
+            # forced into one particular authoring style.
             instance = loaded() if isinstance(loaded, type) else loaded
             if isinstance(instance, Provider):
                 self.register(instance)
@@ -125,6 +129,9 @@ def get(name: str) -> Provider | None:
         is registered under that name (after running discovery once if
         the registry was empty).
     """
+    # `not REGISTRY` relies on ProviderRegistry.__len__ — an empty registry
+    # is falsy, which doubles as the "discovery hasn't run yet" check
+    # without a separate boolean flag to keep in sync.
     if not REGISTRY:
         discover_all()
     return REGISTRY.get(name)

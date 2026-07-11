@@ -206,7 +206,10 @@ def _run_similarity_test(
     config = raw_config
     min_loc = _extract_int(config, "min_loc_for_similarity", 1)
     excluded_dirs = _extract_str_list(config, "excluded_directories")
-    # Try provider-specific key, then generic key, then provider default
+    # Three-level fallback lets a consumer override a threshold for one
+    # provider without having to also set it for the other seven: a
+    # provider-specific key wins, then a shared key across all providers,
+    # then the provider's own hardcoded default.
     threshold_pair = _extract_float(
         config,
         provider.threshold_pair_key,
@@ -302,6 +305,10 @@ def test_providers_parallel(
 
     errors: dict[str, BaseException] = {}
     skips: dict[str, str] = {}
+    # One worker per provider (not a bounded pool): each `_run_one` call
+    # does network I/O against a distinct API, so full parallelism here
+    # bounds wall-clock time by the slowest single provider rather than by
+    # the sum of all eight.
     with ThreadPoolExecutor(max_workers=len(_PARALLEL_PROVIDERS)) as executor:
         futures = {executor.submit(_run_one, p): p for p in _PARALLEL_PROVIDERS}
         for future in as_completed(futures):
@@ -310,6 +317,10 @@ def test_providers_parallel(
                 future.result()
             except pytest.skip.Exception as exc:  # type: ignore[attr-defined]
                 skips[provider.label] = str(exc)
+            # Unparenthesized multi-exception `except` (PEP 758, Python 3.14+)
+            # — equivalent to `except (KeyboardInterrupt, SystemExit,
+            # GeneratorExit):`. Looks like a Python 2 typo at a glance but is
+            # valid modern syntax; this project targets py314+.
             except KeyboardInterrupt, SystemExit, GeneratorExit:
                 raise
             except BaseException as exc:  # noqa: BLE001 — deliberately broad: aggregates every

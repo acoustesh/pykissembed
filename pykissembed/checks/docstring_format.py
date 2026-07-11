@@ -14,7 +14,7 @@ from typing import cast
 
 import pytest
 
-from pykissembed.baselines_engine import load_envelope, save_envelope
+from pykissembed.baselines_engine import locked_envelope, save_envelope
 from pykissembed.config import get_config
 from pykissembed.paths import include_notebooks
 
@@ -69,6 +69,10 @@ def _run_ruff_docstring_check(target_dir: Path, *, root: Path) -> list[Docstring
         parsed_obj = cast("object", json.loads(result.stdout))
     except json.JSONDecodeError:
         return []
+    # ruff's JSON schema isn't a stable contract this project controls, so
+    # every layer below re-validates shape defensively instead of trusting
+    # the parsed structure — an upstream ruff version bump that reshapes a
+    # field should degrade to "violation dropped", not crash the check.
     if not isinstance(parsed_obj, list):
         return []
     violations: list[DocstringViolation] = []
@@ -93,6 +97,10 @@ def _run_ruff_docstring_check(target_dir: Path, *, root: Path) -> list[Docstring
         if not isinstance(row_obj, int) or not isinstance(col_obj, int):
             continue
         try:
+            # ruff may report a path outside `root` (e.g. a config-excluded
+            # file reached via a symlink), in which case relative_to raises
+            # ValueError; fall back to ruff's own filename rather than fail
+            # the whole check over one unrelativizable path.
             rel = str(Path(filename).resolve().relative_to(root.resolve()))
         except ValueError:
             rel = filename
@@ -123,67 +131,72 @@ class TestDocstringFormat:
             pytest.skip("No [tool.pykissembed] paths configured")
         config = get_config()
         baseline_file = config.baseline_path / "docstring_format.json"
-        envelope = load_envelope(baseline_file, kind="docstring_format")
-        per_file_baseline = cast("dict[str, int]", envelope.data.get("per_file", {}))
+        with locked_envelope(baseline_file, kind="docstring_format") as envelope:
+            per_file_baseline = cast("dict[str, int]", envelope.data.get("per_file", {}))
 
-        all_violations: list[DocstringViolation] = []
-        for path in pykissembed_paths:
-            all_violations.extend(_run_ruff_docstring_check(path, root=get_config().root))
+            all_violations: list[DocstringViolation] = []
+            for path in pykissembed_paths:
+                all_violations.extend(_run_ruff_docstring_check(path, root=get_config().root))
 
-        by_file: dict[str, list[DocstringViolation]] = {}
-        for v in all_violations:
-            by_file.setdefault(v.file, []).append(v)
+            by_file: dict[str, list[DocstringViolation]] = {}
+            for v in all_violations:
+                by_file.setdefault(v.file, []).append(v)
 
-        current_counts: dict[str, int] = {}
-        regressions: list[str] = []
-        new_files: list[str] = []
-        for file_path, viols in sorted(by_file.items()):
-            count = len(viols)
-            current_counts[file_path] = count
-            baseline = per_file_baseline.get(file_path, 0)
-            if count > baseline:
-                detail = "\n".join(f"    {v}" for v in viols)
-                if baseline == 0:
-                    new_files.append(f"{file_path}: {count} violations (new file)\n{detail}")
-                else:
-                    regressions.append(
-                        f"{file_path}: {count} violations (baseline {baseline}, +{count - baseline})\n{detail}",
-                    )
+            current_counts: dict[str, int] = {}
+            regressions: list[str] = []
+            new_files: list[str] = []
+            for file_path, viols in sorted(by_file.items()):
+                count = len(viols)
+                current_counts[file_path] = count
+                baseline = per_file_baseline.get(file_path, 0)
+                if count > baseline:
+                    detail = "\n".join(f"    {v}" for v in viols)
+                    # A baseline of 0 is indistinguishable between "file is new
+                    # to the check" and "file previously had zero violations";
+                    # both are reported as "new file" since the actionable
+                    # advice (fix it before it earns a nonzero baseline) is
+                    # the same either way.
+                    if baseline == 0:
+                        new_files.append(f"{file_path}: {count} violations (new file)\n{detail}")
+                    else:
+                        regressions.append(
+                            f"{file_path}: {count} violations (baseline {baseline}, +{count - baseline})\n{detail}",
+                        )
 
-        if update_baselines:
-            envelope.data["per_file"] = current_counts
-            save_envelope(baseline_file, envelope)
-            pytest.skip(f"Updated docstring format baselines: {len(current_counts)} files")
-        if regressions or new_files:
-            total_violations = sum(len(v) for v in by_file.values())
-            n_files = len(regressions) + len(new_files)
-            # Count violations by error code for the summary.
-            code_counts: dict[str, int] = {}
-            for viols in by_file.values():
-                for v in viols:
-                    code_counts[v.code] = code_counts.get(v.code, 0) + 1
-            top_codes = sorted(code_counts.items(), key=lambda kv: -kv[1])[:5]
-            lines = [
-                f"Docstring format: {total_violations} violation(s) across {n_files} file(s).",
-                "",
-                "Top error codes: " + ", ".join(f"{code}={n}" for code, n in top_codes),
-                "",
-            ]
-            if regressions:
-                lines.append("--- Regressions (exceeds baseline) ---")
-                for entry in regressions:
-                    # Show only the file summary line, not every violation.
-                    header = entry.split("\n", 1)[0]
-                    lines.append(header)
-                lines.append("")
-            if new_files:
-                lines.append("--- New violations (no baseline) ---")
-                for entry in new_files:
-                    header = entry.split("\n", 1)[0]
-                    lines.append(header)
-                lines.append("")
-            lines.append(
-                "Run `ruff check --select=D <file>` for full details, "
-                "or `ruff check --fix --select=D <file>` to auto-fix."
-            )
-            pytest.fail("\n".join(lines), pytrace=False)
+            if update_baselines:
+                envelope.data["per_file"] = current_counts
+                save_envelope(baseline_file, envelope)
+                pytest.skip(f"Updated docstring format baselines: {len(current_counts)} files")
+            if regressions or new_files:
+                total_violations = sum(len(v) for v in by_file.values())
+                n_files = len(regressions) + len(new_files)
+                # Count violations by error code for the summary.
+                code_counts: dict[str, int] = {}
+                for viols in by_file.values():
+                    for v in viols:
+                        code_counts[v.code] = code_counts.get(v.code, 0) + 1
+                top_codes = sorted(code_counts.items(), key=lambda kv: -kv[1])[:5]
+                lines = [
+                    f"Docstring format: {total_violations} violation(s) across {n_files} file(s).",
+                    "",
+                    "Top error codes: " + ", ".join(f"{code}={n}" for code, n in top_codes),
+                    "",
+                ]
+                if regressions:
+                    lines.append("--- Regressions (exceeds baseline) ---")
+                    for entry in regressions:
+                        # Show only the file summary line, not every violation.
+                        header = entry.split("\n", 1)[0]
+                        lines.append(header)
+                    lines.append("")
+                if new_files:
+                    lines.append("--- New violations (no baseline) ---")
+                    for entry in new_files:
+                        header = entry.split("\n", 1)[0]
+                        lines.append(header)
+                    lines.append("")
+                lines.append(
+                    "Run `ruff check --select=D <file>` for full details, "
+                    "or `ruff check --fix --select=D <file>` to auto-fix."
+                )
+                pytest.fail("\n".join(lines), pytrace=False)

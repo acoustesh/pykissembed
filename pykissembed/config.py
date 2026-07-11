@@ -139,6 +139,9 @@ def load_config(start: Path | None = None) -> PyqtestConfig:
             pyproject = candidate
             root = cursor
             break
+        # `Path("/").parent == Path("/")` (and likewise for a Windows drive
+        # root) — this is the portable way to detect "walked past the
+        # filesystem root" without special-casing POSIX vs. Windows roots.
         if cursor.parent == cursor:
             break
         cursor = cursor.parent
@@ -158,6 +161,11 @@ def load_config(start: Path | None = None) -> PyqtestConfig:
     paths = _coerce_str_list(section.get("paths", ["src"]), key="paths")
     mode_raw = section.get("mode", "ratchet")
     mode = str(mode_raw) if isinstance(mode_raw, str) else "ratchet"
+    # Deliberate exception to this module's stated "ambiguous/missing
+    # config raises" policy: an invalid `mode` value (e.g. a typo) falls
+    # back to the safer "ratchet" default instead of raising, so a
+    # config typo degrades to a slightly-too-lenient gate rather than
+    # breaking every consumer's CI outright.
     if mode not in {"ratchet", "strict"}:
         mode = "ratchet"
     baseline_dir = str(section.get("baseline_dir", "tests/baselines"))
@@ -214,6 +222,10 @@ def get_config() -> PyqtestConfig:
         The configuration for the current working directory, loaded
         fresh on first call per cwd and cached thereafter.
     """
+    # Keyed by cwd (not a single module-level singleton) because tests that
+    # chdir into fixture repos need their own independent cached config —
+    # a single shared cache would leak one fixture's [tool.pykissembed]
+    # settings into the next test that runs from a different directory.
     cache: dict[str, PyqtestConfig] = globals().setdefault("pykissembed_CONFIG_CACHE", {})  # type: ignore[var-annotated]
     key = str(Path.cwd())
     if key not in cache:

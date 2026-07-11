@@ -11,6 +11,10 @@ from typing import TYPE_CHECKING, TypeGuard, cast
 
 import pytest
 
+from pykissembed.similarity.constants import (
+    DEFAULT_REFACTOR_INDEX_THRESHOLD,
+    DEFAULT_REFACTOR_INDEX_TOP_N,
+)
 from pykissembed.similarity.embeddings import (
     compute_cosine_similarity,
     get_cached_embedding,
@@ -183,6 +187,10 @@ def _check_against_others(
         return pair_violations, neighbor_entries
 
     for j, func_b in enumerate(functions):
+        # `func_a_idx >= j` restricts comparisons to the upper triangle of
+        # the pair matrix: skips comparing a function to itself (j ==
+        # func_a_idx) and skips the (b, a) half of every pair already
+        # covered as (a, b) by an earlier outer-loop iteration.
         if func_a_idx >= j or func_b.embedding is None:
             continue
 
@@ -244,6 +252,8 @@ def _report_violations(
     threshold_neighbor: float,
     functions: list[FunctionInfo],
     load_complexity_maps_fn: Callable[[], tuple[dict[str, int], dict[str, int]]],
+    refactor_index_threshold: float,
+    refactor_index_top_n: int,
 ) -> None:
     """Report violations and fail test if any found."""
     all_violations: list[str] = []
@@ -260,7 +270,13 @@ def _report_violations(
     if all_violations:
         error_msg = "\n\n".join(all_violations)
         cc_map, cog_map = load_complexity_maps_fn()
-        refactor_msg = get_refactor_priority_message(functions, cc_map, cog_map)
+        refactor_msg = get_refactor_priority_message(
+            functions,
+            cc_map,
+            cog_map,
+            threshold=refactor_index_threshold,
+            top_n=refactor_index_top_n,
+        )
         if refactor_msg:
             error_msg += refactor_msg
         pytest.fail(error_msg)
@@ -330,9 +346,12 @@ def run_provider_similarity_checks(
             if uncached:
                 _skip_missing_embeddings(uncached, provider)
 
-    # Apply PCA dimensionality reduction using provider-specific threshold
+    # Apply PCA dimensionality reduction using the provider-specific override,
+    # the generic baseline setting, or the provider default, in that order.
     config = _extract_config(baselines)
     pca_variance = _extract_pca_variance(config, provider)
+    refactor_index_threshold = _extract_refactor_index_threshold(config)
+    refactor_index_top_n = _extract_refactor_index_top_n(config)
     embeddings_cache = _extract_embedding_cache(baselines, provider.cache_key)
 
     # Use cached PCA if available, otherwise fit fresh
@@ -364,6 +383,8 @@ def run_provider_similarity_checks(
         threshold_neighbor,
         functions,
         load_complexity_maps_fn,
+        refactor_index_threshold=refactor_index_threshold,
+        refactor_index_top_n=refactor_index_top_n,
     )
 
 
@@ -413,11 +434,56 @@ def _extract_pca_variance(config: dict[str, object], provider: ProviderEntry) ->
     TypeError
         If the configured PCA variance value is not numeric.
     """
-    raw_variance = config.get(provider.pca_variance_key, provider.default_pca_variance)
+    raw_variance = config.get(
+        provider.pca_variance_key,
+        config.get("pca_variance_threshold", provider.default_pca_variance),
+    )
     if not isinstance(raw_variance, int | float):
-        msg = f"Config key '{provider.pca_variance_key}' must be numeric"
+        msg = (
+            f"Config key '{provider.pca_variance_key}' or 'pca_variance_threshold' must be numeric"
+        )
         raise TypeError(msg)
     return float(raw_variance)
+
+
+def _extract_refactor_index_threshold(config: dict[str, object]) -> float:
+    """Extract the refactor-index threshold from similarity configuration.
+
+    Returns
+    -------
+    float
+        The configured threshold, or the library default when absent.
+
+    Raises
+    ------
+    TypeError
+        If the configured threshold is not numeric.
+    """
+    raw_threshold = config.get("refactor_index_threshold", DEFAULT_REFACTOR_INDEX_THRESHOLD)
+    if not isinstance(raw_threshold, int | float):
+        msg = "config['refactor_index_threshold'] must be float"
+        raise TypeError(msg)
+    return float(raw_threshold)
+
+
+def _extract_refactor_index_top_n(config: dict[str, object]) -> int:
+    """Extract the number of refactor recommendations to report.
+
+    Returns
+    -------
+    int
+        The configured number of recommendations, or the library default when absent.
+
+    Raises
+    ------
+    TypeError
+        If the configured count is not an integer.
+    """
+    raw_top_n = config.get("refactor_index_top_n", DEFAULT_REFACTOR_INDEX_TOP_N)
+    if not isinstance(raw_top_n, int):
+        msg = "config['refactor_index_top_n'] must be int"
+        raise TypeError(msg)
+    return raw_top_n
 
 
 def _is_float_list(value: object) -> TypeGuard[list[float]]:

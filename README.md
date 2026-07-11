@@ -152,7 +152,10 @@ The complexity gate (`pytest -m complexity`) enforces:
   threshold (default 13) or per-file baseline.
 
 Baselines are stored in `tests/baselines/complexity.json` as a versioned
-envelope. Update with `pytest --update-baselines`.
+envelope. Update with `pytest --update-baselines`. Override a default by
+editing its key directly (`cc_threshold`, `cog_threshold`, `mi_threshold`,
+`max_missing_docstrings`) — the first `--update-baselines` run writes all
+four with their defaults if they're not already set.
 
 ---
 
@@ -390,7 +393,11 @@ class MyProvider:
   the box" on any real codebase without forcing a "fix every diagnostic" PR.
 - **Versioned baseline envelope** — every baseline JSON file is wrapped in
   `{"schema_version": "1.0", "kind": "...", "data": {...}}` and validated
-  against `pykissembed/schemas/baselines.v1.json` on load.
+  against `pykissembed/schemas/baselines.v1.json` on load. Concurrent
+  `--update-baselines` runs against the same file (e.g. under pytest-xdist's
+  `-n auto`, where several check tests can write the same baseline from
+  different worker processes) are serialized via a per-file lock
+  (`<baseline>.json.lock`, gitignored) so writes don't clobber each other.
 - **Embedding cache keys** — `provider.name|model_id|schema_version|content_hash`.
   Mandatory `schema_version` prevents silent cache corruption.
 - **Sync provider Protocol** — providers are tiny CPU/IO wrappers.

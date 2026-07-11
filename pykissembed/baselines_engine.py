@@ -16,6 +16,7 @@ are wrapped in the envelope on first load.
 
 from __future__ import annotations
 
+import contextlib
 import functools
 import json
 import os
@@ -25,9 +26,12 @@ from importlib import resources
 from pathlib import Path
 from typing import TYPE_CHECKING, Any, TypeGuard, cast
 
+from filelock import FileLock
 from jsonschema import Draft7Validator
 
 if TYPE_CHECKING:
+    from collections.abc import Iterator
+
     from jsonschema.protocols import Validator
 
 SCHEMA_VERSION = "1.0"
@@ -165,6 +169,38 @@ def save_envelope(path: Path, envelope: BaselineEnvelope) -> None:
         if Path(temp_path).exists():
             Path(temp_path).unlink()
         raise
+
+
+@contextlib.contextmanager
+def locked_envelope(path: Path, kind: str) -> Iterator[BaselineEnvelope]:
+    """Load *path* as a v1 envelope under an exclusive cross-process lock.
+
+    The lock is held for the whole context, not just the load — callers
+    that mutate the yielded envelope and conditionally call
+    :func:`save_envelope` (e.g. only under ``--update-baselines``) get a
+    race-free load-mutate-save cycle even when multiple pytest-xdist
+    workers target the same baseline file in one session. Without this,
+    each worker's independent load-then-overwrite can clobber another
+    worker's write, since :func:`save_envelope` replaces the file's
+    ``data`` wholesale rather than merging with what's currently on disk.
+
+    Parameters
+    ----------
+    path
+        File to load (same as :func:`load_envelope`).
+    kind
+        Baseline kind to assign if migrating a v0 file.
+
+    Yields
+    ------
+    BaselineEnvelope
+        Loaded (or freshly-minted) envelope, safe to mutate and pass to
+        :func:`save_envelope` before the context exits.
+    """
+    path.parent.mkdir(parents=True, exist_ok=True)
+    lock_path = path.with_name(f"{path.name}.lock")
+    with FileLock(str(lock_path), timeout=60):
+        yield load_envelope(path, kind=kind)
 
 
 def ratchet(data: dict[str, Any], current: dict[str, Any]) -> dict[str, Any]:

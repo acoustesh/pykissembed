@@ -17,10 +17,12 @@ from pykissembed.plugin import (
     _CHECK_STEMS,
     _checks_dir,
 )
+from pykissembed.similarity import checks as similarity_checks
 from pykissembed.similarity.ast_helpers import (
     compute_content_hash,
     extract_function_infos_from_file,
 )
+from pykissembed.similarity.checks import OPENAI_TEXT_PROVIDER
 from pykissembed.similarity.embeddings import (
     compute_combined_embedding,
     compute_cosine_similarity,
@@ -382,6 +384,98 @@ class TestRefactorIndex:
         result = compute_refactor_indices(cc, cog, sim_idx)
         expected = 0.25 * 10.0 + 0.15 * 5.0 + 0.6 * 20.0
         assert result[0] == pytest.approx(expected)
+
+
+class TestSimilarityConfiguration:
+    """Tests for plumbing ``similarity.json`` configuration through checks."""
+
+    @staticmethod
+    def test_provider_checks_use_generic_pca_and_refactor_settings(
+        monkeypatch: pytest.MonkeyPatch,
+    ) -> None:
+        """Generic settings affect the parallel-provider failure workflow."""
+        captured: dict[str, object] = {}
+
+        monkeypatch.setattr(similarity_checks, "load_provider_embeddings", lambda *_: None)
+
+        def fake_fit_pca(
+            embeddings_cache: dict[str, list[float]],
+            pca_variance: float,
+            **_: object,
+        ) -> tuple[None, int, bool]:
+            captured["pca_variance"] = pca_variance
+            assert embeddings_cache
+            return None, 0, False
+
+        def fake_report_violations(
+            *_: object,
+            refactor_index_threshold: float,
+            refactor_index_top_n: int,
+        ) -> None:
+            captured["refactor_index_threshold"] = refactor_index_threshold
+            captured["refactor_index_top_n"] = refactor_index_top_n
+
+        monkeypatch.setattr(similarity_checks, "fit_pca", fake_fit_pca)
+        monkeypatch.setattr(similarity_checks, "_find_violations", lambda *_: (["pair"], []))
+        monkeypatch.setattr(similarity_checks, "_report_violations", fake_report_violations)
+
+        functions = [
+            FunctionInfo(
+                name=f"function_{index}",
+                file="module.py",
+                start_line=index + 1,
+                end_line=index + 1,
+                loc=1,
+                hash=f"ast-{index}",
+                text="pass",
+                text_hash=f"text-{index}",
+            )
+            for index in range(2)
+        ]
+        baselines: dict[str, object] = {
+            "config": {
+                "pca_variance_threshold": 0.75,
+                "refactor_index_threshold": 12.0,
+                "refactor_index_top_n": 3,
+            },
+            OPENAI_TEXT_PROVIDER.cache_key: {
+                "text-0": [1.0, 0.0],
+                "text-1": [0.0, 1.0],
+            },
+        }
+
+        similarity_checks.run_provider_similarity_checks(
+            baselines=baselines,
+            functions=functions,
+            update_baselines=False,
+            cached_only=True,
+            provider=OPENAI_TEXT_PROVIDER,
+            threshold_pair=0.98,
+            threshold_neighbor=0.8,
+            load_complexity_maps_fn=lambda: ({}, {}),
+        )
+
+        assert captured == {
+            "pca_variance": 0.75,
+            "refactor_index_threshold": 12.0,
+            "refactor_index_top_n": 3,
+        }
+
+    @staticmethod
+    def test_provider_specific_pca_setting_overrides_generic_setting() -> None:
+        """Provider-specific PCA configuration has precedence over the generic key."""
+        config: dict[str, object] = {
+            "pca_variance_threshold": 0.75,
+            OPENAI_TEXT_PROVIDER.pca_variance_key: 0.9,
+        }
+
+        assert (
+            similarity_checks._extract_pca_variance(  # noqa: SLF001
+                config,
+                OPENAI_TEXT_PROVIDER,
+            )
+            == 0.9
+        )
 
 
 class TestPluginCollection:
