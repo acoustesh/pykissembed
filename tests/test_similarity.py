@@ -390,6 +390,33 @@ class TestSimilarityConfiguration:
     """Tests for plumbing ``similarity.json`` configuration through checks."""
 
     @staticmethod
+    def test_similarity_violations_suppress_the_test_traceback(
+        monkeypatch: pytest.MonkeyPatch,
+    ) -> None:
+        """Similarity failures report violations without displaying check implementation code."""
+        captured: dict[str, object] = {}
+
+        def fake_fail(message: str, *, pytrace: bool = True) -> None:
+            captured["message"] = message
+            captured["pytrace"] = pytrace
+
+        monkeypatch.setattr(similarity_checks.pytest, "fail", fake_fail)
+
+        similarity_checks._report_violations(  # noqa: SLF001
+            ["module.py:1 duplicated() vs other.py:1 copy() - similarity: 100.0%"],
+            [],
+            threshold_pair=0.98,
+            threshold_neighbor=0.8,
+            functions=[],
+            load_complexity_maps_fn=lambda: ({}, {}),
+            refactor_index_threshold=10.0,
+            refactor_index_top_n=10,
+        )
+
+        assert captured["pytrace"] is False
+        assert "High similarity pairs" in str(captured["message"])
+
+    @staticmethod
     def test_provider_checks_use_generic_pca_and_refactor_settings(
         monkeypatch: pytest.MonkeyPatch,
     ) -> None:

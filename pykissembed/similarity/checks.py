@@ -279,7 +279,7 @@ def _report_violations(
         )
         if refactor_msg:
             error_msg += refactor_msg
-        pytest.fail(error_msg)
+        pytest.fail(error_msg, pytrace=False)
 
 
 def run_provider_similarity_checks(
