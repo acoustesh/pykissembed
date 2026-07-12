@@ -38,7 +38,7 @@ from pykissembed.similarity.storage import (
     ProviderEntry,
     get_valid_hashes,
 )
-from pykissembed.similarity.types import FunctionInfo
+from pykissembed.similarity.types import FunctionInfo, is_str_object_dict
 
 
 class TestComputeContentHash:
@@ -62,6 +62,18 @@ class TestComputeContentHash:
         h = compute_content_hash("test")
         assert len(h) == 64
         assert all(c in "0123456789abcdef" for c in h)
+
+
+class TestSharedTypeGuards:
+    """Tests for shared runtime type guards."""
+
+    @staticmethod
+    def test_is_str_object_dict() -> None:
+        """Only dictionaries with string keys satisfy the shared guard."""
+        assert is_str_object_dict({"key": object()})
+        assert is_str_object_dict({})
+        assert not is_str_object_dict({1: "value"})
+        assert not is_str_object_dict([("key", "value")])
 
 
 class TestExtractFunctionInfosFromFile:

@@ -28,6 +28,7 @@ from pykissembed.similarity.storage import (
     load_provider_embeddings,
     save_baselines,
 )
+from pykissembed.similarity.types import is_str_object_dict
 
 if TYPE_CHECKING:
     from collections.abc import Callable
@@ -388,19 +389,6 @@ def run_provider_similarity_checks(
     )
 
 
-def _is_str_object_dict(value: object) -> TypeGuard[dict[str, object]]:
-    """Check if a dictionary has string keys and object values.
-
-    Returns
-    -------
-    bool
-        True if the dictionary has string keys and object values.
-    """
-    if not isinstance(value, dict):
-        return False
-    return all(isinstance(key, str) for key in cast("dict[object, object]", value))
-
-
 def _extract_config(baselines: Baselines) -> dict[str, object]:
     """Extract configuration from a dictionary.
 
@@ -415,7 +403,7 @@ def _extract_config(baselines: Baselines) -> dict[str, object]:
         If ``baselines['config']`` is not ``dict[str, object]``.
     """
     config = baselines.get("config", {})
-    if not _is_str_object_dict(config):
+    if not is_str_object_dict(config):
         msg = "baselines['config'] must be a dict[str, object]"
         raise TypeError(msg)
     return config
@@ -513,7 +501,7 @@ def _extract_embedding_cache(baselines: Baselines, cache_key: str) -> dict[str, 
         If cache data is not a ``dict[str, list[float]]``.
     """
     raw_cache = baselines.get(cache_key, {})
-    if not _is_str_object_dict(raw_cache):
+    if not is_str_object_dict(raw_cache):
         msg = f"baselines['{cache_key}'] must be a dict[str, list[float]]"
         raise TypeError(msg)
     typed_cache: dict[str, list[float]] = {}

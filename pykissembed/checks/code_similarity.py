@@ -30,7 +30,7 @@ from __future__ import annotations
 
 import copy
 from concurrent.futures import ThreadPoolExecutor, as_completed
-from typing import TYPE_CHECKING, TypeGuard, cast
+from typing import TYPE_CHECKING, cast
 
 import pytest
 
@@ -49,31 +49,13 @@ from pykissembed.similarity import (
     run_provider_similarity_checks,
 )
 from pykissembed.similarity.complexity import load_all_complexity_maps
+from pykissembed.similarity.types import is_str_object_dict
 
 if TYPE_CHECKING:
     from pykissembed.similarity.types import PCAModel
 
 type SharedBaselines = dict[str, object]
 type SimilarityPcaCache = dict[str, tuple[PCAModel | None, int, bool]]
-
-
-def _is_str_object_dict(value: object) -> TypeGuard[dict[str, object]]:
-    """Check if a value is a dict with all string keys.
-
-    Parameters
-    ----------
-    value : object
-        The value to inspect.
-
-    Returns
-    -------
-    bool
-        ``True`` if *value* is a ``dict`` with all string keys.
-    """
-    if not isinstance(value, dict):
-        return False
-    value_dict = cast("dict[object, object]", value)
-    return all(isinstance(key, str) for key in value_dict)
 
 
 def _extract_int(config: dict[str, object], key: str, default: int) -> int:
@@ -200,7 +182,7 @@ def _run_similarity_test(
         If ``shared_baselines["config"]`` is not ``dict[str, object]``.
     """
     raw_config = shared_baselines.get("config", {})
-    if not _is_str_object_dict(raw_config):
+    if not is_str_object_dict(raw_config):
         msg = "shared_baselines['config'] must be dict[str, object]"
         raise TypeError(msg)
     config = raw_config

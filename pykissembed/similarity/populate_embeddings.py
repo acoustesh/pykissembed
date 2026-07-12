@@ -33,6 +33,7 @@ from pykissembed.similarity.embeddings import (
     get_embeddings_batch,
 )
 from pykissembed.similarity.storage import load_baselines, save_baselines
+from pykissembed.similarity.types import is_str_object_dict
 
 if TYPE_CHECKING:
     from collections.abc import Callable
@@ -81,19 +82,6 @@ def _is_embedding_cache(value: object) -> TypeGuard[dict[str, list[float]]]:
     )
 
 
-def _is_str_object_dict(value: object) -> TypeGuard[dict[str, object]]:
-    """Check if a dictionary has string keys and object values.
-
-    Returns
-    -------
-    bool
-        True if the dictionary has string keys and object values.
-    """
-    if not isinstance(value, dict):
-        return False
-    return all(isinstance(key, str) for key in cast("dict[object, object]", value))
-
-
 def _get_embedding_cache(baselines: Baselines, cache_key: str) -> dict[str, list[float]]:
     """Get the embedding cache.
 
@@ -136,7 +124,7 @@ def _get_function_hashes(baselines: Baselines) -> dict[str, object]:
         empty_hashes: dict[str, object] = {}
         baselines["function_hashes"] = empty_hashes
         return empty_hashes
-    if not _is_str_object_dict(hashes_obj):
+    if not is_str_object_dict(hashes_obj):
         msg = f"Expected function_hashes to be dict[str, object], got {type(hashes_obj).__name__}"
         raise TypeError(msg)
     return hashes_obj
