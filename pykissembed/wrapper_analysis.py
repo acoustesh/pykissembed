@@ -51,6 +51,8 @@ def parse_source_files(paths: list[Path]) -> list[tuple[Path, ast.Module]]:
     list[tuple[Path, ast.Module]]
         Parsed files paired with their AST modules, sorted by path.
     """
+    # Resolve first so overlapping configured directories cannot parse the
+    # same source file twice; sorting keeps later diagnostics deterministic.
     files = sorted(
         {
             file_path.resolve()
@@ -89,6 +91,8 @@ def find_wrapper_candidates(
     call_counts = _call_counts(modules)
     candidates: list[WrapperCandidate] = []
     for file_path, tree in modules:
+        # Qualified identifiers include enclosing functions and classes, so
+        # index each module's upward AST links before visiting its functions.
         parents = _parent_map(tree)
         for node in ast.walk(tree):
             if not isinstance(node, ast.FunctionDef | ast.AsyncFunctionDef):
@@ -157,6 +161,8 @@ def _forwarding_call(node: ast.FunctionDef | ast.AsyncFunctionDef) -> ast.Call |
         return None
     return_value = body[0].value
     if isinstance(return_value, ast.Await):
+        # Awaiting remains a direct forward only for an async wrapper; a
+        # synchronous function cannot validly contain this AST shape.
         if not isinstance(node, ast.AsyncFunctionDef):
             return None
         return_value = return_value.value
@@ -191,6 +197,8 @@ def _is_unchanged_forwarding(
     positional_names = [argument.arg for argument in (*node.args.posonlyargs, *node.args.args)]
     receiver_name = _receiver_name(call.func)
     if positional_names and positional_names[0] == receiver_name:
+        # ``self.method(...)`` and ``cls.method(...)`` consume the receiver
+        # through the call target instead of forwarding it as an argument.
         positional_names = positional_names[1:]
     return _matches_positional_arguments(call.args, positional_names, node.args.vararg) and (
         _matches_keyword_arguments(call.keywords, node.args.kwonlyargs, node.args.kwarg)
@@ -227,6 +235,8 @@ def _matches_positional_arguments(
     if len(values) != expected_count:
         return False
     fixed_values = values[: len(parameter_names)]
+    # Pairing with ``strict=True`` rejects an arity mismatch as well as a
+    # reordered or renamed positional argument.
     if not all(map(_is_parameter_name, fixed_values, parameter_names, strict=True)):
         return False
     if vararg is None:
@@ -263,6 +273,8 @@ def _matches_keyword_arguments(
     if kwarg is None:
         return True
     variadic_keyword = keywords[-1]
+    # ``arg is None`` is the AST representation of ``**kwargs``; named
+    # keyword nodes would transform the wrapper's forwarding convention.
     return variadic_keyword.arg is None and _is_parameter_name(variadic_keyword.value, kwarg.arg)
 
 
@@ -289,6 +301,8 @@ def _call_counts(modules: list[tuple[Path, ast.Module]]) -> dict[str, int]:
     for _, tree in modules:
         for node in ast.walk(tree):
             if isinstance(node, ast.Call):
+                # Count by terminal syntax because this static pass does not
+                # resolve imports, attributes, or lexical scopes.
                 name = _call_terminal_name(node.func)
                 if name is not None:
                     counts[name] = counts.get(name, 0) + 1
@@ -318,6 +332,8 @@ def _parent_map(tree: ast.Module) -> dict[ast.AST, ast.AST]:
     dict[ast.AST, ast.AST]
         Every AST child mapped to its direct parent node.
     """
+    # Python AST nodes have no parent pointers, but qualified names must walk
+    # outward through every containing class and function scope.
     return {
         child: parent
         for parent in ast.walk(tree)
@@ -422,6 +438,8 @@ def _decorator_name(decorator: ast.expr) -> str | None:
     str | None
         The decorator's dotted name, or ``None`` when it is dynamic.
     """
+    # Parameterized decorators are calls, so recurse into their callee to
+    # compare the same static dotted name used for unparameterized forms.
     if isinstance(decorator, ast.Call):
         return _decorator_name(decorator.func)
     if isinstance(decorator, ast.Name):
