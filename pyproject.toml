@@ -8,7 +8,7 @@
 # Default mode is "baseline-and-ratchet" — see README.md.
 
 [build-system]
-requires = ["hatchling>=1.27"]
+requires = ["hatchling>=1.31.0"]
 build-backend = "hatchling.build"
 
 [project]
@@ -42,7 +42,7 @@ dependencies = [
     "jsonschema>=4.21",
     "filelock>=3.12",
     "ruff>=0.7",
-    "pyright[nodejs]>=1.1.390",
+    "pyright[nodejs]>=1.1.411",
     "radon>=6.0",
     "complexipy>=0.5",
     "numpy>=1.26",
@@ -85,7 +85,7 @@ dev = [
     "pytest-xdist>=3.6",
     "ruff>=0.15.20",
     "twine>=6.0",
-    "mcp[cli]>=1.28,<2.0",  # advisor-mcp server deps (ty resolution)
+    "mcp[cli]>=1.28.1,<2.0",  # advisor-mcp server deps (ty resolution)
     "google-genai>=1.0",    # optional gemini provider in similarity/embeddings.py (ty resolution)
     "voyageai>=0.3",        # optional voyage provider in similarity/embeddings.py (ty resolution)
 ]

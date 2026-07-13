@@ -12,7 +12,7 @@
 #     pykissembed populate-embeddings --provider gemini
 
 [build-system]
-requires = ["hatchling>=1.27"]
+requires = ["hatchling>=1.31.0"]
 build-backend = "hatchling.build"
 
 [project]
