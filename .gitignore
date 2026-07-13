@@ -33,3 +33,5 @@ tests/baselines/openai_ast_embeddings.json.zlib
 tests/baselines/codestral_ast_embeddings.json.zlib
 tests/baselines/codestral_ast_embeddings.json.zlib
 tests/baselines/openai_ast_embeddings.json.zlib
+tests/baselines/codestral_text_embeddings.json.zlib
+tests/baselines/openai_text_embeddings.json.zlib
