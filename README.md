@@ -407,20 +407,6 @@ class MyProvider:
 
 ---
 
-## Migration from `mega-scrapper/tests/`
-
-pykissembed is the upstream successor of the code-quality tests in
-`aa-ml/mega-scrapper/tests/`. The five attached tests
-(`test_code_complexity.py`, `test_comment_density.py`,
-`test_docstring_format.py`, `test_lint_typecheck.py`, `test_code_similarity.py`)
-plus the `tests/similarity/` package are the v0 source. Migration preserves
-baseline values verbatim (the v1 envelope wraps them without changing
-semantics).
-
-See [docs/MIGRATING_FROM_MEGA_SCRAPPER.md](docs/MIGRATING_FROM_MEGA_SCRAPPER.md)
-for the step-by-step migration guide.
-
----
 
 ## License
 
