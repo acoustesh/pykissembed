@@ -101,28 +101,43 @@ def _extract_items_with_docstrings(
     except SyntaxError:
         return results
     for node in ast.walk(tree):
-        if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef, ast.ClassDef)):
-            # Skip @overload stubs: their body is a bare `...` by convention,
-            # so flagging them as "missing docstring" would be a false
-            # positive against every overloaded signature in the file.
-            if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef)):
-                decorators = [
-                    d.id
-                    if isinstance(d, ast.Name)
-                    # A decorator can be a bare name (`@overload`) or an
-                    # attribute access (`@typing.overload`); both forms
-                    # are normalized to their tail name for the match below.
-                    else d.attr
-                    if isinstance(d, ast.Attribute)
-                    else ""
-                    for d in node.decorator_list
-                ]
-                if "overload" in decorators:
-                    continue
-            has_docstring = ast.get_docstring(node) is not None
-            kind = "class" if isinstance(node, ast.ClassDef) else "function"
-            results.append((node.name, node.lineno, has_docstring, kind))
+        if not isinstance(node, ast.FunctionDef | ast.AsyncFunctionDef | ast.ClassDef):
+            continue
+        # Skip @overload stubs: their body is a bare `...` by convention,
+        # so flagging them as "missing docstring" would be a false
+        # positive against every overloaded signature in the file.
+        if isinstance(node, ast.FunctionDef | ast.AsyncFunctionDef) and _is_overload_stub(node):
+            continue
+        has_docstring = ast.get_docstring(node) is not None
+        kind = "class" if isinstance(node, ast.ClassDef) else "function"
+        results.append((node.name, node.lineno, has_docstring, kind))
     return results
+
+
+def _is_overload_stub(node: ast.FunctionDef | ast.AsyncFunctionDef) -> bool:
+    """Return whether *node* has a bare or dotted ``overload`` decorator.
+
+    Returns
+    -------
+    bool
+        Whether the function is an overload stub.
+    """
+    return any(_decorator_tail(decorator) == "overload" for decorator in node.decorator_list)
+
+
+def _decorator_tail(decorator: ast.expr) -> str | None:
+    """Return the terminal name of a name or attribute decorator.
+
+    Returns
+    -------
+    str | None
+        The terminal name, or ``None`` for another decorator expression.
+    """
+    if isinstance(decorator, ast.Name):
+        return decorator.id
+    if isinstance(decorator, ast.Attribute):
+        return decorator.attr
+    return None
 
 
 def _get_line_count(file_path: Path) -> int:
@@ -228,6 +243,72 @@ def _get_mi(file_path: Path) -> float:
     if isinstance(score, (int, float)):
         return float(score)
     return 0.0
+
+
+def _collect_metric_results(
+    relative_path: Path,
+    metrics: list[tuple[str, int, int]],
+    *,
+    baselines: dict[str, int],
+    threshold: int,
+    label: str,
+) -> tuple[dict[str, int], list[str]]:
+    """Collect one file's metric values and threshold violations.
+
+    Returns
+    -------
+    tuple[dict[str, int], list[str]]
+        Current metric values keyed by function and rendered violations.
+    """
+    current: dict[str, int] = {}
+    violations: list[str] = []
+    for name, lineno, value in metrics:
+        key = f"{relative_path}:{name}"
+        current[key] = value
+        baseline = baselines.get(key, threshold)
+        if value > baseline:
+            violations.append(
+                f"{relative_path}:{lineno} - {name}() {label}={value}, exceeds {baseline}",
+            )
+    return current, violations
+
+
+def _record_excess_metric_baselines(
+    baselines: dict[str, int],
+    current: dict[str, int],
+    *,
+    threshold: int,
+) -> None:
+    """Record values above the default threshold in an update baseline."""
+    baselines.update({key: value for key, value in current.items() if value > threshold})
+
+
+def _complexity_failure_message(
+    cc_violations: list[str],
+    cog_violations: list[str],
+    *,
+    cc_threshold: int,
+    cog_threshold: int,
+) -> str:
+    """Format cyclomatic and cognitive complexity violations.
+
+    Returns
+    -------
+    str
+        The failure message containing every nonempty violation section.
+    """
+    sections: list[str] = []
+    if cc_violations:
+        sections.append(
+            f"Cyclomatic complexity violations (threshold {cc_threshold}):\n"
+            + "\n".join(cc_violations),
+        )
+    if cog_violations:
+        sections.append(
+            f"Cognitive complexity violations (threshold {cog_threshold}):\n"
+            + "\n".join(cog_violations),
+        )
+    return "\n\n".join(sections)
 
 
 # ---------------------------------------------------------------------------
@@ -372,46 +453,49 @@ class TestCyclomaticComplexity:
             for base_dir in pykissembed_paths:
                 for py_file in _iter_py_files(base_dir):
                     rel = py_file.relative_to(get_config().root)
-                    for name, lineno, cc in _get_cc(py_file):
-                        key = f"{rel}:{name}"
-                        current_cc[key] = cc
-                        func_baseline = cc_baselines.get(key, cc_threshold)
-                        if cc > func_baseline:
-                            cc_violations.append(
-                                f"{rel}:{lineno} - {name}() CC={cc}, exceeds {func_baseline}",
-                            )
-                    for name, lineno, cog in _get_cog(py_file):
-                        key = f"{rel}:{name}"
-                        current_cog[key] = cog
-                        func_baseline = cog_baselines.get(key, cog_threshold)
-                        if cog > func_baseline:
-                            cog_violations.append(
-                                f"{rel}:{lineno} - {name}() cognitive={cog}, exceeds {func_baseline}",
-                            )
+                    cc_current, cc_found = _collect_metric_results(
+                        rel,
+                        _get_cc(py_file),
+                        baselines=cc_baselines,
+                        threshold=cc_threshold,
+                        label="CC",
+                    )
+                    current_cc.update(cc_current)
+                    cc_violations.extend(cc_found)
+                    cog_current, cog_found = _collect_metric_results(
+                        rel,
+                        _get_cog(py_file),
+                        baselines=cog_baselines,
+                        threshold=cog_threshold,
+                        label="cognitive",
+                    )
+                    current_cog.update(cog_current)
+                    cog_violations.extend(cog_found)
             if update_baselines:
-                for key, cc in current_cc.items():
-                    if cc > cc_threshold:
-                        cc_baselines[key] = cc
-                for key, cog in current_cog.items():
-                    if cog > cog_threshold:
-                        cog_baselines[key] = cog
+                _record_excess_metric_baselines(
+                    cc_baselines,
+                    current_cc,
+                    threshold=cc_threshold,
+                )
+                _record_excess_metric_baselines(
+                    cog_baselines,
+                    current_cog,
+                    threshold=cog_threshold,
+                )
                 envelope.data["cc_baselines"] = cc_baselines
                 envelope.data["cog_baselines"] = cog_baselines
                 save_envelope(baseline_file, envelope)
                 pytest.skip("Updated cyclomatic and cognitive complexity baselines")
             if cc_violations or cog_violations:
-                sections: list[str] = []
-                if cc_violations:
-                    sections.append(
-                        f"Cyclomatic complexity violations (threshold {cc_threshold}):\n"
-                        + "\n".join(cc_violations),
-                    )
-                if cog_violations:
-                    sections.append(
-                        f"Cognitive complexity violations (threshold {cog_threshold}):\n"
-                        + "\n".join(cog_violations),
-                    )
-                pytest.fail("\n\n".join(sections), pytrace=False)
+                pytest.fail(
+                    _complexity_failure_message(
+                        cc_violations,
+                        cog_violations,
+                        cc_threshold=cc_threshold,
+                        cog_threshold=cog_threshold,
+                    ),
+                    pytrace=False,
+                )
 
 
 class TestWrapperProliferation:

@@ -75,58 +75,117 @@ def extract_text_for_embedding(
     lines = source.splitlines()
     start_line = node.lineno  # 1-indexed
     end_line = node.end_lineno or start_line
+    parts = _decorator_lines(node, lines, start_line)
+    parts.extend(_signature_lines(node, lines, start_line))
 
-    # Get decorator lines (before function definition)
+    docstring = ast.get_docstring(node) or ""
+    if docstring:
+        parts.append(f'"""{docstring}"""')
+
+    comment_lines = _comment_lines(lines, start_line, end_line)
+    if comment_lines:
+        _append_unique_comment_lines(parts, comment_lines)
+    return "\n".join(parts)
+
+
+def _decorator_lines(
+    node: ast.FunctionDef | ast.AsyncFunctionDef | ast.ClassDef,
+    lines: list[str],
+    start_line: int,
+) -> list[str]:
+    """Return source lines from each decorator through the definition line.
+
+    Returns
+    -------
+    list[str]
+        Decorator lines in their original range-expansion order.
+    """
     decorator_lines: list[str] = []
+    # Preserve overlapping ranges for multiple decorators: that is the
+    # established embedding input rather than a source-normalization step.
     for decorator in node.decorator_list:
         if decorator.lineno < start_line:
-            decorator_lines.extend(lines[ln - 1] for ln in range(decorator.lineno, start_line))
+            decorator_lines.extend(lines[line_number - 1] for line_number in range(decorator.lineno, start_line))
+    return decorator_lines
 
-    # Get signature line(s) - from node.lineno to first body statement or end
+
+def _signature_lines(
+    node: ast.FunctionDef | ast.AsyncFunctionDef | ast.ClassDef,
+    lines: list[str],
+    start_line: int,
+) -> list[str]:
+    """Return definition lines up to, but not including, the first body node.
+
+    Returns
+    -------
+    list[str]
+        Source lines representing the definition signature.
+    """
     signature_end = start_line
     if node.body:
-        first_body = node.body[0]
-        signature_end = first_body.lineno - 1
-    signature_lines = [lines[ln - 1] for ln in range(start_line, signature_end + 1)]
+        signature_end = node.body[0].lineno - 1
+    return [lines[line_number - 1] for line_number in range(start_line, signature_end + 1)]
 
-    # Get docstring
-    docstring = ast.get_docstring(node) or ""
-    docstring_text = f'"""{docstring}"""' if docstring else ""
 
-    # Extract comment lines within function range
-    comment_lines: list[str] = []
+def _comment_lines(lines: list[str], start_line: int, end_line: int) -> list[str]:
+    """Return tokenized comments, with text scanning for incomplete source.
+
+    Returns
+    -------
+    list[str]
+        Comment-bearing source lines in their original order.
+    """
+    func_source = "\n".join(lines[start_line - 1 : end_line])
     try:
-        func_source = "\n".join(lines[start_line - 1 : end_line])
-        tokens = tokenize.generate_tokens(io.StringIO(func_source).readline)
-        for tok in tokens:
-            if tok.type == tokenize.COMMENT:
-                actual_line_idx = start_line - 1 + tok.start[0] - 1
-                if actual_line_idx < len(lines):
-                    comment_lines.append(lines[actual_line_idx])
+        return _tokenized_comment_lines(func_source, lines, start_line)
     except tokenize.TokenError:
-        # Fall back to simple # detection
-        comment_lines.extend(
-            lines[ln]
-            for ln in range(start_line - 1, end_line)
-            if ln < len(lines) and "#" in lines[ln]
-        )
+        # Only incomplete token streams need the less precise text fallback;
+        # normal tokenization avoids treating hashes inside strings as comments.
+        return _fallback_comment_lines(lines, start_line, end_line)
 
-    # Combine all parts
-    parts: list[str] = []
-    if decorator_lines:
-        parts.extend(decorator_lines)
-    parts.extend(signature_lines)
-    if docstring_text:
-        parts.append(docstring_text)
-    if comment_lines:
-        # Deduplicate (signature lines might contain comments)
-        seen: set[str] = set(parts)
-        for cl in comment_lines:
-            if cl not in seen:
-                parts.append(cl)
-                seen.add(cl)
 
-    return "\n".join(parts)
+def _tokenized_comment_lines(func_source: str, lines: list[str], start_line: int) -> list[str]:
+    """Return comments identified by Python's tokenizer.
+
+    Returns
+    -------
+    list[str]
+        Source lines for tokens classified as comments.
+    """
+    comment_lines: list[str] = []
+    tokens = tokenize.generate_tokens(io.StringIO(func_source).readline)
+    for token in tokens:
+        if token.type == tokenize.COMMENT:
+            # Token coordinates are relative to ``func_source``, so translate
+            # them back to the file before retrieving the original line.
+            actual_line_index = start_line - 1 + token.start[0] - 1
+            if actual_line_index < len(lines):
+                comment_lines.append(lines[actual_line_index])
+    return comment_lines
+
+
+def _fallback_comment_lines(lines: list[str], start_line: int, end_line: int) -> list[str]:
+    """Return lines containing ``#`` when tokenization cannot complete.
+
+    Returns
+    -------
+    list[str]
+        Candidate comment lines selected by text matching.
+    """
+    return [
+        lines[line_index]
+        for line_index in range(start_line - 1, end_line)
+        if line_index < len(lines) and "#" in lines[line_index]
+    ]
+
+
+def _append_unique_comment_lines(parts: list[str], comment_lines: list[str]) -> None:
+    """Append comment lines that are not already represented in *parts*."""
+    seen = set(parts)
+    for comment_line in comment_lines:
+        if comment_line not in seen:
+            parts.append(comment_line)
+            seen.add(comment_line)
 
 
 def _count_executable_lines(

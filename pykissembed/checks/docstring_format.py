@@ -116,6 +116,130 @@ def _run_ruff_docstring_check(target_dir: Path, *, root: Path) -> list[Docstring
     return violations
 
 
+def _collect_docstring_violations(paths: list[Path]) -> list[DocstringViolation]:
+    """Run the docstring check for every configured source path.
+
+    Returns
+    -------
+    list[DocstringViolation]
+        Violations in configured-path order.
+    """
+    violations: list[DocstringViolation] = []
+    for path in paths:
+        violations.extend(_run_ruff_docstring_check(path, root=get_config().root))
+    return violations
+
+
+def _group_violations_by_file(
+    violations: list[DocstringViolation],
+) -> dict[str, list[DocstringViolation]]:
+    """Group docstring violations by their reported relative filename.
+
+    Returns
+    -------
+    dict[str, list[DocstringViolation]]
+        Violations grouped under each relative filename.
+    """
+    by_file: dict[str, list[DocstringViolation]] = {}
+    for violation in violations:
+        by_file.setdefault(violation.file, []).append(violation)
+    return by_file
+
+
+def _classify_docstring_violations(
+    by_file: dict[str, list[DocstringViolation]],
+    per_file_baseline: dict[str, int],
+) -> tuple[dict[str, int], list[str], list[str]]:
+    """Return current counts, regressions, and new-file violations.
+
+    Returns
+    -------
+    tuple[dict[str, int], list[str], list[str]]
+        Current counts, regression messages, and new-file messages.
+    """
+    current_counts: dict[str, int] = {}
+    regressions: list[str] = []
+    new_files: list[str] = []
+    for file_path, violations in sorted(by_file.items()):
+        count = len(violations)
+        current_counts[file_path] = count
+        baseline = per_file_baseline.get(file_path, 0)
+        if count <= baseline:
+            continue
+        detail = "\n".join(f"    {violation}" for violation in violations)
+        # A baseline of 0 is indistinguishable between "file is new to the
+        # check" and "file previously had zero violations"; both need the
+        # same actionable advice: fix them before recording a nonzero bound.
+        if baseline == 0:
+            new_files.append(f"{file_path}: {count} violations (new file)\n{detail}")
+        else:
+            regressions.append(
+                f"{file_path}: {count} violations (baseline {baseline}, +{count - baseline})\n{detail}",
+            )
+    return current_counts, regressions, new_files
+
+
+def _count_violations_by_code(
+    by_file: dict[str, list[DocstringViolation]],
+) -> dict[str, int]:
+    """Count docstring violations by ruff diagnostic code.
+
+    Returns
+    -------
+    dict[str, int]
+        The number of violations for each diagnostic code.
+    """
+    code_counts: dict[str, int] = {}
+    for violations in by_file.values():
+        for violation in violations:
+            code_counts[violation.code] = code_counts.get(violation.code, 0) + 1
+    return code_counts
+
+
+def _violation_headers(heading: str, entries: list[str]) -> list[str]:
+    """Return a heading and file-summary lines for a nonempty violation group.
+
+    Returns
+    -------
+    list[str]
+        The heading, summary lines, and trailing blank line, or an empty list.
+    """
+    if not entries:
+        return []
+    headers = [entry.split("\n", 1)[0] for entry in entries]
+    return [heading, *headers, ""]
+
+
+def _docstring_failure_message(
+    by_file: dict[str, list[DocstringViolation]],
+    regressions: list[str],
+    new_files: list[str],
+) -> str:
+    """Format the summary emitted for docstring-format baseline failures.
+
+    Returns
+    -------
+    str
+        The complete failure message.
+    """
+    total_violations = sum(len(violations) for violations in by_file.values())
+    n_files = len(regressions) + len(new_files)
+    top_codes = sorted(_count_violations_by_code(by_file).items(), key=lambda item: -item[1])[:5]
+    lines = [
+        f"Docstring format: {total_violations} violation(s) across {n_files} file(s).",
+        "",
+        "Top error codes: " + ", ".join(f"{code}={count}" for code, count in top_codes),
+        "",
+    ]
+    lines.extend(_violation_headers("--- Regressions (exceeds baseline) ---", regressions))
+    lines.extend(_violation_headers("--- New violations (no baseline) ---", new_files))
+    lines.append(
+        "Run `ruff check --select=D <file>` for full details, "
+        "or `ruff check --fix --select=D <file>` to auto-fix."
+    )
+    return "\n".join(lines)
+
+
 class TestDocstringFormat:
     """Tests for NumPy docstring format compliance."""
 
@@ -133,70 +257,19 @@ class TestDocstringFormat:
         baseline_file = config.baseline_path / "docstring_format.json"
         with locked_envelope(baseline_file, kind="docstring_format") as envelope:
             per_file_baseline = cast("dict[str, int]", envelope.data.get("per_file", {}))
-
-            all_violations: list[DocstringViolation] = []
-            for path in pykissembed_paths:
-                all_violations.extend(_run_ruff_docstring_check(path, root=get_config().root))
-
-            by_file: dict[str, list[DocstringViolation]] = {}
-            for v in all_violations:
-                by_file.setdefault(v.file, []).append(v)
-
-            current_counts: dict[str, int] = {}
-            regressions: list[str] = []
-            new_files: list[str] = []
-            for file_path, viols in sorted(by_file.items()):
-                count = len(viols)
-                current_counts[file_path] = count
-                baseline = per_file_baseline.get(file_path, 0)
-                if count > baseline:
-                    detail = "\n".join(f"    {v}" for v in viols)
-                    # A baseline of 0 is indistinguishable between "file is new
-                    # to the check" and "file previously had zero violations";
-                    # both are reported as "new file" since the actionable
-                    # advice (fix it before it earns a nonzero baseline) is
-                    # the same either way.
-                    if baseline == 0:
-                        new_files.append(f"{file_path}: {count} violations (new file)\n{detail}")
-                    else:
-                        regressions.append(
-                            f"{file_path}: {count} violations (baseline {baseline}, +{count - baseline})\n{detail}",
-                        )
+            all_violations = _collect_docstring_violations(pykissembed_paths)
+            by_file = _group_violations_by_file(all_violations)
+            current_counts, regressions, new_files = _classify_docstring_violations(
+                by_file,
+                per_file_baseline,
+            )
 
             if update_baselines:
                 envelope.data["per_file"] = current_counts
                 save_envelope(baseline_file, envelope)
                 pytest.skip(f"Updated docstring format baselines: {len(current_counts)} files")
             if regressions or new_files:
-                total_violations = sum(len(v) for v in by_file.values())
-                n_files = len(regressions) + len(new_files)
-                # Count violations by error code for the summary.
-                code_counts: dict[str, int] = {}
-                for viols in by_file.values():
-                    for v in viols:
-                        code_counts[v.code] = code_counts.get(v.code, 0) + 1
-                top_codes = sorted(code_counts.items(), key=lambda kv: -kv[1])[:5]
-                lines = [
-                    f"Docstring format: {total_violations} violation(s) across {n_files} file(s).",
-                    "",
-                    "Top error codes: " + ", ".join(f"{code}={n}" for code, n in top_codes),
-                    "",
-                ]
-                if regressions:
-                    lines.append("--- Regressions (exceeds baseline) ---")
-                    for entry in regressions:
-                        # Show only the file summary line, not every violation.
-                        header = entry.split("\n", 1)[0]
-                        lines.append(header)
-                    lines.append("")
-                if new_files:
-                    lines.append("--- New violations (no baseline) ---")
-                    for entry in new_files:
-                        header = entry.split("\n", 1)[0]
-                        lines.append(header)
-                    lines.append("")
-                lines.append(
-                    "Run `ruff check --select=D <file>` for full details, "
-                    "or `ruff check --fix --select=D <file>` to auto-fix."
+                pytest.fail(
+                    _docstring_failure_message(by_file, regressions, new_files),
+                    pytrace=False,
                 )
-                pytest.fail("\n".join(lines), pytrace=False)
