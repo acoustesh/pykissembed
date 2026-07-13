@@ -1,0 +1,29 @@
+version: 2
+
+updates:
+  # The root uv workspace includes the pykissembed_local and pykissembed_cloud
+  # members, so this covers all three pyproject.toml and uv.lock files.
+  - package-ecosystem: "uv"
+    directory: "/"
+    schedule:
+      interval: "weekly"
+      day: "sunday"
+      time: "06:00"
+      timezone: "UTC"
+    groups:
+      uv-dependencies:
+        patterns:
+          - "*"
+
+  # Keep the pinned actions used by every workflow up to date.
+  - package-ecosystem: "github-actions"
+    directory: "/"
+    schedule:
+      interval: "weekly"
+      day: "sunday"
+      time: "06:00"
+      timezone: "UTC"
+    groups:
+      github-actions:
+        patterns:
+          - "*"
