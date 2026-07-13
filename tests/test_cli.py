@@ -9,7 +9,7 @@ import pytest
 from typer.testing import CliRunner
 
 from pykissembed import config as config_mod
-from pykissembed.cli import app
+from pykissembed.cli import _auto_detect_paths, app
 
 if TYPE_CHECKING:
     from pathlib import Path
@@ -113,6 +113,50 @@ class TestInit:
         text = pyproject.read_text()
         # Auto-detect: no src/ dir in the temp project → falls back to "."
         assert 'paths = ["."]' in text
+
+
+class TestAutoDetectPaths:
+    """Tests for ``pykissembed init`` source-path discovery."""
+
+    @staticmethod
+    def test_setuptools_find_paths_take_priority(tmp_path: Path) -> None:
+        """Setuptools discovery wins over every lower-priority source."""
+        (tmp_path / "src").mkdir()
+        pyproject = dedent(
+            """
+            [tool.setuptools.packages.find]
+            where = ["lib", "vendor"]
+
+            [tool.hatch.build.targets.wheel]
+            packages = ["package/demo"]
+            """
+        )
+
+        assert _auto_detect_paths(tmp_path, pyproject) == ["lib", "vendor"]
+
+    @staticmethod
+    def test_hatch_package_roots_are_distinct(tmp_path: Path) -> None:
+        """Hatch package paths reduce to distinct top-level source roots."""
+        pyproject = dedent(
+            """
+            [tool.hatch.build.targets.wheel]
+            packages = ["src/demo", "src/support", "package"]
+            """
+        )
+
+        assert _auto_detect_paths(tmp_path, pyproject) == ["src", "package"]
+
+    @staticmethod
+    def test_src_directory_is_the_unconfigured_fallback(tmp_path: Path) -> None:
+        """An unconfigured project with ``src/`` selects that directory."""
+        (tmp_path / "src").mkdir()
+
+        assert _auto_detect_paths(tmp_path, "") == ["src"]
+
+    @staticmethod
+    def test_invalid_toml_falls_back_to_current_directory(tmp_path: Path) -> None:
+        """Malformed TOML without a ``src/`` directory falls back to ``.``."""
+        assert _auto_detect_paths(tmp_path, "[tool") == ["."]
 
 
 class TestCheck:

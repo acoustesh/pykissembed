@@ -409,7 +409,7 @@ def _auto_detect_paths(root: Path, pyproject_text: str) -> list[str]:
 
     Priority:
     1. ``[tool.setuptools.packages.find]`` ``where`` field
-    2. ``[project]`` ``packages`` (hatchling ``packages`` list)
+    2. ``[tool.hatch.build.targets.wheel]`` ``packages`` list
     3. ``src/`` directory if it exists
     4. ``.`` (current directory) as fallback
 
@@ -419,52 +419,108 @@ def _auto_detect_paths(root: Path, pyproject_text: str) -> list[str]:
         The detected source directory path(s), taken from the first
         matching priority rule above.
     """
+    data = _parse_pyproject(pyproject_text)
+    return (
+        _setuptools_source_paths(data)
+        or _hatch_source_paths(data)
+        or _default_source_paths(root)
+    )
+
+
+def _parse_pyproject(pyproject_text: str) -> dict[str, object]:
+    """Parse a ``pyproject.toml`` document, degrading invalid text to an empty table.
+
+    Returns
+    -------
+    dict[str, object]
+        The parsed TOML table, or an empty table when parsing fails.
+    """
     try:
-        data = tomllib.loads(pyproject_text)
+        return tomllib.loads(pyproject_text)
     except tomllib.TOMLDecodeError:
-        data = {}
+        return {}
 
-    # 1. setuptools packages.find.where
-    tools = data.get("tool", {})
-    if isinstance(tools, dict):
-        setuptools = tools.get("setuptools", {})
-        if isinstance(setuptools, dict):
-            find = setuptools.get("packages", {})
-            if isinstance(find, dict):
-                where = find.get("where")
-                if isinstance(where, str):
-                    return [where]
-                if isinstance(where, list) and where:
-                    return [str(w) for w in where]
 
-    # 2. hatchling packages list
-    hatch = tools.get("hatch", {})
-    if isinstance(hatch, dict):
-        build_targets = hatch.get("build", {})
-        if isinstance(build_targets, dict):
-            targets = build_targets.get("targets", {})
-            if isinstance(targets, dict):
-                wheel = targets.get("wheel", {})
-                if isinstance(wheel, dict):
-                    packages = wheel.get("packages")
-                    if isinstance(packages, list) and packages:
-                        # Extract directory names from package paths
-                        dirs: list[str] = []
-                        for pkg in packages:
-                            if isinstance(pkg, str):
-                                # "src/pykissembed" → "src"
-                                parts = pkg.split("/")
-                                if parts[0] not in dirs:
-                                    dirs.append(parts[0])
-                        if dirs:
-                            return dirs
+def _setuptools_source_paths(data: dict[str, object]) -> list[str]:
+    """Return paths configured by setuptools package discovery.
 
-    # 3. src/ directory
-    if (root / "src").is_dir():
-        return ["src"]
+    Returns
+    -------
+    list[str]
+        Configured ``where`` paths, or an empty list when none are present.
+    """
+    find_where = _toml_value(data, "tool", "setuptools", "packages", "find", "where")
+    legacy_where = _toml_value(data, "tool", "setuptools", "packages", "where")
+    return _path_values(find_where) or _path_values(legacy_where)
 
-    # 4. Fallback
-    return ["."]
+
+def _hatch_source_paths(data: dict[str, object]) -> list[str]:
+    """Return distinct source roots configured in Hatch's wheel target.
+
+    Returns
+    -------
+    list[str]
+        Source roots in configured package order, or an empty list.
+    """
+    packages = _toml_value(data, "tool", "hatch", "build", "targets", "wheel", "packages")
+    return _package_roots(packages)
+
+
+def _toml_value(data: dict[str, object], *keys: str) -> object | None:
+    """Return a nested TOML value without exposing intermediate tables.
+
+    Returns
+    -------
+    object | None
+        The nested value, or ``None`` when any table is absent or malformed.
+    """
+    value: object = data
+    for key in keys:
+        if not isinstance(value, dict):
+            return None
+        value = value.get(key)
+    return value
+
+
+def _path_values(value: object | None) -> list[str]:
+    """Normalize a TOML path value to a non-empty list of strings.
+
+    Returns
+    -------
+    list[str]
+        One string path, a non-empty list coerced to strings, or an empty list.
+    """
+    if isinstance(value, str):
+        return [value]
+    if isinstance(value, list) and value:
+        return [str(path) for path in value]
+    return []
+
+
+def _package_roots(packages: object | None) -> list[str]:
+    """Extract distinct leading directories from Hatch package paths.
+
+    Returns
+    -------
+    list[str]
+        Package roots in first-seen order, or an empty list for non-lists.
+    """
+    if not isinstance(packages, list):
+        return []
+    return list(
+        dict.fromkeys(package.split("/", 1)[0] for package in packages if isinstance(package, str))
+    )
+
+
+def _default_source_paths(root: Path) -> list[str]:
+    """Return the conventional source path when build configuration is absent.
+
+    Returns
+    -------
+    list[str]
+        ``["src"]`` when *root* has a source directory; otherwise ``["."]``.
+    """
+    return ["src"] if (root / "src").is_dir() else ["."]
 
 
 __all__ = ["app", "load_config"]
