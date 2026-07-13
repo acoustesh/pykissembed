@@ -207,6 +207,16 @@ def _populate_provider(
             cache[getattr(func, hash_attr)] = emb
         print(f"{cfg.label}: cached {len(uncached)} new embeddings")  # noqa: T201
         return len(uncached)
+    except ModuleNotFoundError as e:
+        # The provider's SDK is an optional dependency not bundled with any
+        # pykissembed extra (see pyproject.toml dev-group comments) — spell
+        # that out instead of the generic "failed to fetch" message, which
+        # reads like an API failure rather than a missing package.
+        print(  # noqa: T201
+            f"{cfg.label}: skipping — '{e.name}' is not installed "
+            f"(pip install {e.name} to enable this provider)",
+        )
+        return 0
     except Exception as e:  # noqa: BLE001 — external API boundary: network/auth/rate-limit
         # failures for one provider must not abort populating the rest.
         print(f"{cfg.label}: failed to fetch embeddings: {e}")  # noqa: T201
