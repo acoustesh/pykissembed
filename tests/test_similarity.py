@@ -609,13 +609,10 @@ class TestSimilarityConfiguration:
             OPENAI_TEXT_PROVIDER.pca_variance_key: 0.9,
         }
 
-        assert (
-            similarity_checks._extract_pca_variance(  # noqa: SLF001
-                config,
-                OPENAI_TEXT_PROVIDER,
-            )
-            == 0.9
-        )
+        assert similarity_checks._extract_pca_variance(  # noqa: SLF001
+            config,
+            OPENAI_TEXT_PROVIDER,
+        ) == pytest.approx(0.9)
 
 
 class TestPluginCollection:

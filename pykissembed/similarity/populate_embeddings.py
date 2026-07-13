@@ -43,6 +43,7 @@ if TYPE_CHECKING:
 type Baselines = dict[str, object]
 type PopulateFn = Callable[[Baselines, list[FunctionInfo]], int]
 
+
 class _FunctionHashEntry(TypedDict):
     """Represents a function hash entry."""
 

@@ -242,6 +242,11 @@ def _locked_envelope() -> Iterator[tuple[Path, BaselineEnvelope]]:
     Held for the whole ``with`` block so a test's compute-then-maybe-save
     cycle is atomic even when multiple pytest-xdist workers write to this
     same file in one session (see :func:`pykissembed.baselines_engine.locked_envelope`).
+
+    Yields
+    ------
+    tuple[Path, BaselineEnvelope]
+        The complexity baseline path and its locked, default-populated envelope.
     """
     config = get_config()
     path = config.baseline_path / "complexity.json"

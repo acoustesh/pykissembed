@@ -263,9 +263,6 @@ def _decide_injection(
     6. Otherwise → return ``None``. The consumer did not ask for the
        battery; respect that.
     """
-    if config.getoption("--pykissembed-all"):
-        return checks_dir
-
     # `config.args` is pytest's *resolved collection roots* (positional
     # paths, falling back to ini `testpaths` when none are given) — it
     # never contains option flags, since argparse consumes those before
@@ -275,63 +272,17 @@ def _decide_injection(
     # `--deselect` the user typed.
     args: list[str] = list(config.invocation_params.args)
 
-    has_marker_filter = any(a == "-m" or a.startswith(("--markers", "-m=")) for a in args)
-    if has_marker_filter:
+    if config.getoption("--pykissembed-all") or _has_marker_filter(args):
         return checks_dir
 
-    has_keyword_filter = any(a == "-k" or a.startswith(("-k=", "--keyword")) for a in args)
-    has_deselect = any(a == "--deselect" or a.startswith("--deselect=") for a in args)
+    node_id = _first_node_id(args)
+    if node_id is not None:
+        return _smart_restricted_target(node_id, checks_dir)
 
-    # Check if the user already targeted a check file directly (either
-    # via a NodeId or a bare path). If so, skip injection to avoid
-    # double-collection — pytest collects each entry in config.args
-    # independently, so appending a path the user already passed causes
-    # the same test to run twice.
-    for raw in args:
-        # NodeIds always contain `::`. The first segment is the file path;
-        # if its stem matches a known check, we can smart-restrict to that
-        # file alone. This is what lets a user run *exactly* one check.
-        if "::" in raw:
-            head, _, node_selector = raw.partition("::")
-            head_stem = Path(head).stem
-            if head_stem in _CHECK_STEMS:
-                candidate = checks_dir / f"{head_stem}.py"
-                if candidate.is_file():
-                    # Guard: only inject if the user's path does NOT
-                    # already resolve to the same file inside checks_dir.
-                    try:
-                        resolved = Path(head).resolve()
-                    except OSError:
-                        resolved = None
-                    if resolved is not None and resolved == candidate.resolve():
-                        return None  # already on the CLI; don't re-inject
-                    # Preserve the class/test selector so only the
-                    # requested test(s) are collected from the real check
-                    # module, instead of every test class it contains.
-                    if node_selector:
-                        return f"{candidate}::{node_selector}"
-                    return candidate
-            # NodeId present but does not name a pykissembed check. The
-            # consumer is targeting something else — do not inject.
-            return None
+    if _already_targets_check_file(args, checks_dir):
+        return None
 
-    # Also check for bare file paths (no ::) that already point at a
-    # check file inside checks_dir.
-    for raw in args:
-        if "::" in raw or raw.startswith("-"):
-            continue
-        try:
-            resolved = Path(raw).resolve()
-        except OSError, ValueError:
-            continue
-        if (
-            resolved.is_file()
-            and resolved.parent == checks_dir.resolve()
-            and resolved.stem in _CHECK_STEMS
-        ):
-            return None  # user already targeted this check file
-
-    if has_keyword_filter or has_deselect:
+    if _has_keyword_filter(args) or _has_deselect_filter(args):
         return None
 
     # Nothing narrowed the request at all (no marker, NodeId, keyword, or
@@ -342,6 +293,128 @@ def _decide_injection(
         return checks_dir
 
     return None
+
+
+def _has_marker_filter(args: list[str]) -> bool:
+    """Return whether raw pytest arguments contain a marker filter.
+
+    Returns
+    -------
+    bool
+        ``True`` when a marker-filter option is present.
+    """
+    return any(arg == "-m" or arg.startswith(("--markers", "-m=")) for arg in args)
+
+
+def _has_keyword_filter(args: list[str]) -> bool:
+    """Return whether raw pytest arguments contain a keyword filter.
+
+    Returns
+    -------
+    bool
+        ``True`` when a keyword-filter option is present.
+    """
+    return any(arg == "-k" or arg.startswith(("-k=", "--keyword")) for arg in args)
+
+
+def _has_deselect_filter(args: list[str]) -> bool:
+    """Return whether raw pytest arguments contain a deselect filter.
+
+    Returns
+    -------
+    bool
+        ``True`` when a deselect option is present.
+    """
+    return any(arg == "--deselect" or arg.startswith("--deselect=") for arg in args)
+
+
+def _first_node_id(args: list[str]) -> str | None:
+    """Return the first NodeId from raw pytest arguments, if one is present.
+
+    Returns
+    -------
+    str | None
+        The first argument containing a NodeId separator, or ``None``.
+    """
+    return next((arg for arg in args if "::" in arg), None)
+
+
+def _smart_restricted_target(node_id: str, checks_dir: Path) -> Path | str | None:
+    """Map a check NodeId to its installed check file, preserving its selector.
+
+    Returns
+    -------
+    Path | str | None
+        The matching check file, a selector-qualified target, or ``None``
+        when the NodeId cannot be safely injected.
+    """
+    head, _, selector = node_id.partition("::")
+    candidate = _check_candidate(head, checks_dir)
+    if candidate is None or _is_same_file(head, candidate):
+        return None
+    return f"{candidate}::{selector}" if selector else candidate
+
+
+def _check_candidate(path: str, checks_dir: Path) -> Path | None:
+    """Return the installed check file identified by *path*'s stem, if any.
+
+    Returns
+    -------
+    Path | None
+        The existing installed check file, or ``None`` when the stem is unknown.
+    """
+    stem = Path(path).stem
+    if stem not in _CHECK_STEMS:
+        return None
+    candidate = checks_dir / f"{stem}.py"
+    return candidate if candidate.is_file() else None
+
+
+def _is_same_file(path: str, candidate: Path) -> bool:
+    """Return whether *path* resolves to the installed check *candidate*.
+
+    Returns
+    -------
+    bool
+        ``True`` when *path* resolves to *candidate*.
+    """
+    try:
+        resolved = Path(path).resolve()
+    except OSError:
+        return False
+    return resolved == candidate.resolve()
+
+
+def _already_targets_check_file(args: list[str], checks_dir: Path) -> bool:
+    """Return whether a bare path already selects an installed check file.
+
+    Returns
+    -------
+    bool
+        ``True`` when an argument names an installed check file directly.
+    """
+    return any(_is_installed_check_path(arg, checks_dir) for arg in args)
+
+
+def _is_installed_check_path(path: str, checks_dir: Path) -> bool:
+    """Return whether *path* is a bare path to a known installed check file.
+
+    Returns
+    -------
+    bool
+        ``True`` when *path* resolves to a known check in *checks_dir*.
+    """
+    if "::" in path or path.startswith("-"):
+        return False
+    try:
+        resolved = Path(path).resolve()
+    except OSError, ValueError:
+        return False
+    return (
+        resolved.is_file()
+        and resolved.parent == checks_dir.resolve()
+        and resolved.stem in _CHECK_STEMS
+    )
 
 
 def _checks_dir() -> Path | None:

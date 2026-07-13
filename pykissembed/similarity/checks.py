@@ -189,6 +189,7 @@ def _is_excluded_pair(
     )
     return code_lines_between <= class_function_proximity
 
+
 def _check_against_others(
     func_a: FunctionInfo,
     func_a_idx: int,
