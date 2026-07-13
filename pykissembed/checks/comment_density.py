@@ -148,7 +148,7 @@ class TestCommentDensity:
         *,
         update_baselines: bool,
     ) -> None:
-        """Fail if any file's density is outside its configured range."""
+        """Fail if per-file or aggregate density is outside its configured range."""
         if not pykissembed_paths:
             pytest.skip("No [tool.pykissembed] paths configured")
         config = get_config()
@@ -156,15 +156,25 @@ class TestCommentDensity:
         with locked_envelope(baseline_file, kind="density") as envelope:
             min_density = float(envelope.data.get("min_density", DEFAULT_MIN_DENSITY))
             max_density = float(envelope.data.get("max_density", DEFAULT_MAX_DENSITY))
+            aggregate_min_density = float(
+                envelope.data.get("aggregate_min_density", DEFAULT_MIN_DENSITY),
+            )
+            aggregate_max_density = float(
+                envelope.data.get("aggregate_max_density", DEFAULT_MAX_DENSITY),
+            )
             per_file = cast("dict[str, dict[str, float]]", envelope.data.get("per_file", {}))
 
             violations: list[str] = []
             current: dict[str, float] = {}
+            total_sloc = 0
+            total_comments = 0
             for base_dir in pykissembed_paths:
                 for py_file in _iter_py_files(base_dir):
                     rel = py_file.relative_to(config.root)
                     key = str(rel)
                     stats = _file_stats(py_file)
+                    total_sloc += stats.sloc
+                    total_comments += stats.comments
                     density = round(stats.density_pct, 2)
                     current[key] = density
                     file_baseline = per_file.get(key, {})
@@ -180,6 +190,8 @@ class TestCommentDensity:
                         violations.append(
                             f"{key}: density={density}% (sloc={stats.sloc}, comments={stats.comments}), above {file_max}%",
                         )
+            denom = total_sloc + total_comments
+            aggregate = 0.0 if denom == 0 else 100.0 * (total_comments / denom)
             if update_baselines:
                 # Only files currently outside [min_density, max_density] get a
                 # recorded per-file override, and it's widened just far enough
@@ -194,51 +206,20 @@ class TestCommentDensity:
                             "current": density,
                         }
                 envelope.data["per_file"] = per_file
+                envelope.data["aggregate_current"] = round(aggregate, 2)
                 save_envelope(baseline_file, envelope)
                 pytest.skip("Updated comment density baselines")
+            if aggregate < aggregate_min_density:
+                violations.append(
+                    f"Aggregate density {aggregate:.1f}% below {aggregate_min_density}%",
+                )
+            if aggregate > aggregate_max_density:
+                violations.append(
+                    f"Aggregate density {aggregate:.1f}% above {aggregate_max_density}%",
+                )
             if violations:
                 pytest.fail(
                     f"Comment density violations (min {min_density}%, max {max_density}%):\n"
                     + "\n".join(violations),
                     pytrace=False,
                 )
-
-    @staticmethod
-    @pytest.mark.density
-    def test_aggregate_comment_density(
-        pykissembed_paths: list[Path],
-        *,
-        update_baselines: bool,
-    ) -> None:
-        """Fail if aggregate density falls outside configured range."""
-        if not pykissembed_paths:
-            pytest.skip("No [tool.pykissembed] paths configured")
-        config = get_config()
-        baseline_file = config.baseline_path / "comment_density.json"
-        with locked_envelope(baseline_file, kind="density") as envelope:
-            min_density = float(envelope.data.get("aggregate_min_density", DEFAULT_MIN_DENSITY))
-            max_density = float(envelope.data.get("aggregate_max_density", DEFAULT_MAX_DENSITY))
-            total_sloc = 0
-            total_comments = 0
-            for base_dir in pykissembed_paths:
-                for py_file in _iter_py_files(base_dir):
-                    stats = _file_stats(py_file)
-                    total_sloc += stats.sloc
-                    total_comments += stats.comments
-            denom = total_sloc + total_comments
-            aggregate = 0.0 if denom == 0 else 100.0 * (total_comments / denom)
-            if update_baselines:
-                envelope.data["aggregate_current"] = round(aggregate, 2)
-                save_envelope(baseline_file, envelope)
-                pytest.skip(f"Updated aggregate density: {aggregate:.2f}%")
-            violations: list[str] = []
-            if aggregate < min_density:
-                violations.append(
-                    f"Aggregate density {aggregate:.1f}% below {min_density}%",
-                )
-            if aggregate > max_density:
-                violations.append(
-                    f"Aggregate density {aggregate:.1f}% above {max_density}%",
-                )
-            if violations:
-                pytest.fail("\n".join(violations), pytrace=False)
