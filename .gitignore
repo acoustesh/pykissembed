@@ -37,3 +37,5 @@ tests/baselines/codestral_text_embeddings.json.zlib
 tests/baselines/openai_text_embeddings.json.zlib
 tests/baselines/lint_typecheck_report.json
 tests/baselines/lint_typecheck_report.json
+tests/baselines/qwen_text_embeddings.json.zlib
+tests/baselines/qwen_ast_embeddings.json.zlib

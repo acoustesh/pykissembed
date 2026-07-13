@@ -1,6 +1,6 @@
 {
   "config": {
-    "min_loc_for_similarity": 5,
+    "min_loc_for_similarity": 6,
     "pca_variance_threshold": 0.99,
     "refactor_index_threshold": 18.0,
     "refactor_index_top_n": 4,
