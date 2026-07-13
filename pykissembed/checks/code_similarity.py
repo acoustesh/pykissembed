@@ -49,7 +49,7 @@ from pykissembed.similarity import (
     run_provider_similarity_checks,
 )
 from pykissembed.similarity.complexity import load_all_complexity_maps
-from pykissembed.similarity.types import is_str_object_dict
+from pykissembed.similarity.embeddings import is_str_object_dict
 
 if TYPE_CHECKING:
     from pykissembed.similarity.types import PCAModel
@@ -224,6 +224,7 @@ def _run_similarity_test(
         threshold_neighbor=threshold_neighbor,
         load_complexity_maps_fn=load_all_complexity_maps,
         pca_cache=pca_cache,
+        class_function_proximity=min_loc,
     )
 
 

@@ -26,7 +26,6 @@ from pykissembed.similarity.constants import (
     OPENROUTER_API_URL,
     VOYAGE_CODE_MODEL,
 )
-from pykissembed.similarity.types import is_str_object_dict
 
 # Exponential backoff delays
 _RETRY_DELAYS = [1.0, 2.0, 4.0]
@@ -141,6 +140,9 @@ def _load_api_key_from_env(
     if min_length and len(api_key) < min_length:
         return None
     return api_key
+
+
+load_api_key_from_env = _load_api_key_from_env
 
 
 def _get_embeddings_with_retry(
@@ -592,6 +594,30 @@ def _is_float_embedding(value: object) -> TypeGuard[list[float]]:
     if not isinstance(value, list):
         return False
     return all(isinstance(component, float) for component in cast("list[object]", value))
+
+
+is_float_embedding = _is_float_embedding
+
+
+def _is_str_object_dict(value: object) -> TypeGuard[dict[str, object]]:
+    """Check whether *value* is a dict with all string keys.
+
+    Parameters
+    ----------
+    value : object
+        The value to inspect.
+
+    Returns
+    -------
+    bool
+        ``True`` if *value* is a ``dict`` and every key is a ``str``.
+    """
+    if not isinstance(value, dict):
+        return False
+    return all(isinstance(key, str) for key in cast("dict[object, object]", value))
+
+
+is_str_object_dict = _is_str_object_dict
 
 
 def get_cached_embedding(

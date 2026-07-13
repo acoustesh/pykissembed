@@ -26,6 +26,9 @@ from pykissembed.similarity.checks import OPENAI_TEXT_PROVIDER
 from pykissembed.similarity.embeddings import (
     compute_combined_embedding,
     compute_cosine_similarity,
+    is_float_embedding,
+    is_str_object_dict,
+    load_api_key_from_env,
 )
 from pykissembed.similarity.refactor_index import (
     compute_max_similarities,
@@ -38,7 +41,7 @@ from pykissembed.similarity.storage import (
     ProviderEntry,
     get_valid_hashes,
 )
-from pykissembed.similarity.types import FunctionInfo, is_str_object_dict
+from pykissembed.similarity.types import FunctionInfo
 
 
 class TestComputeContentHash:
@@ -74,6 +77,104 @@ class TestSharedTypeGuards:
         assert is_str_object_dict({})
         assert not is_str_object_dict({1: "value"})
         assert not is_str_object_dict([("key", "value")])
+
+    @staticmethod
+    def test_is_float_embedding() -> None:
+        """Only lists containing floats satisfy the shared embedding guard."""
+        assert is_float_embedding([0.1, 2.0])
+        assert is_float_embedding([])
+        assert not is_float_embedding([0.1, 2])
+        assert not is_float_embedding((0.1, 2.0))
+
+
+class TestSimilarityProximityExclusions:
+    """Tests for structurally related class/function exclusions."""
+
+    @staticmethod
+    def test_class_function_proximity_ignores_blank_and_comment_lines(tmp_path: Path) -> None:
+        """A nearby class/function pair is excluded using executable-line distance."""
+        source_file = tmp_path / "nearby.py"
+        source_file.write_text(
+            "class TestCase:\n    pass\n\n# separating comment\ndef test_case():\n    pass\n",
+            encoding="utf-8",
+        )
+        test_class = FunctionInfo(
+            name="TestCase",
+            file=str(source_file),
+            start_line=1,
+            end_line=2,
+            loc=2,
+            hash="class-hash",
+            text="class TestCase:\n    pass",
+        )
+        test_function = FunctionInfo(
+            name="test_case",
+            file=str(source_file),
+            start_line=5,
+            end_line=6,
+            loc=2,
+            hash="function-hash",
+            text="def test_case():\n    pass",
+        )
+
+        assert similarity_checks._is_excluded_pair(  # noqa: SLF001
+            test_class,
+            test_function,
+            [],
+            [],
+            class_function_proximity=0,
+        )
+
+    @staticmethod
+    def test_nested_class_method_pair_is_excluded() -> None:
+        """A method inside its class has zero source distance and is excluded."""
+        test_class = FunctionInfo(
+            name="TestCase",
+            file="module.py",
+            start_line=1,
+            end_line=10,
+            loc=4,
+            hash="class-hash",
+            text="class TestCase:\n    def test_case(self): ...",
+        )
+        test_method = FunctionInfo(
+            name="test_case",
+            file="module.py",
+            start_line=2,
+            end_line=3,
+            loc=2,
+            hash="method-hash",
+            text="def test_case(self):\n    pass",
+        )
+
+        assert similarity_checks._is_excluded_pair(  # noqa: SLF001
+            test_class,
+            test_method,
+            [],
+            [],
+            class_function_proximity=1,
+        )
+        test_class.embedding = [1.0, 0.0]
+        test_method.embedding = [1.0, 0.0]
+        assert similarity_checks._find_violations(  # noqa: SLF001
+            [test_class, test_method],
+            threshold_pair=0.9,
+            threshold_neighbor=0.8,
+            class_function_proximity=1,
+        ) == ([], [])
+
+
+class TestApiKeyLoading:
+    """Tests for shared API-key validation."""
+
+    @staticmethod
+    def test_api_key_validation_options(monkeypatch: pytest.MonkeyPatch) -> None:
+        """Invalid prefixes and minimum length apply to environment keys."""
+        env_var = "PYKISSEMBED_TEST_API_KEY"
+        monkeypatch.setenv(env_var, "valid-api-key")
+        assert load_api_key_from_env(env_var, min_length=10) == "valid-api-key"
+        assert load_api_key_from_env(env_var, invalid_prefixes=("valid-",)) is None
+        assert load_api_key_from_env(env_var, min_length=20) is None
 
 
 class TestExtractFunctionInfosFromFile:

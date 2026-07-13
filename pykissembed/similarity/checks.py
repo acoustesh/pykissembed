@@ -7,10 +7,12 @@ adaptation is that imports use ``pykissembed.similarity.*`` instead of
 
 from __future__ import annotations
 
+from pathlib import Path
 from typing import TYPE_CHECKING, TypeGuard, cast
 
 import pytest
 
+from pykissembed.config import get_config
 from pykissembed.similarity.constants import (
     DEFAULT_REFACTOR_INDEX_THRESHOLD,
     DEFAULT_REFACTOR_INDEX_TOP_N,
@@ -18,6 +20,7 @@ from pykissembed.similarity.constants import (
 from pykissembed.similarity.embeddings import (
     compute_cosine_similarity,
     get_cached_embedding,
+    is_str_object_dict,
 )
 from pykissembed.similarity.pca import fit_pca, transform_embeddings_with_pca
 from pykissembed.similarity.populate_embeddings import get_provider_populator
@@ -28,7 +31,6 @@ from pykissembed.similarity.storage import (
     load_provider_embeddings,
     save_baselines,
 )
-from pykissembed.similarity.types import is_str_object_dict
 
 if TYPE_CHECKING:
     from collections.abc import Callable
@@ -130,8 +132,9 @@ def _is_excluded_pair(
     func_b: FunctionInfo,
     excluded_file_pairs: list[list[str]],
     excluded_function_pairs: list[list[str]],
+    class_function_proximity: int = 0,
 ) -> bool:
-    """Check if two functions belong to an excluded pair.
+    """Check whether a pair is configured or structurally excluded.
 
     Returns
     -------
@@ -160,8 +163,31 @@ def _is_excluded_pair(
         ):
             return True
 
-    return False
+    # A class naturally contains its methods' source. Comparing the class
+    # block with one of those methods produces a structural false positive;
+    # nearby class/function pairs have the same property in small test files.
+    is_class_a = func_a.text.lstrip().startswith(("class ", "class\t"))
+    is_class_b = func_b.text.lstrip().startswith(("class ", "class\t"))
+    if func_a.file != func_b.file or is_class_a == is_class_b:
+        return False
 
+    first, second = sorted((func_a, func_b), key=lambda func: func.start_line)
+    if first.end_line >= second.start_line:
+        return class_function_proximity >= 0
+
+    source_file = Path(first.file)
+    if not source_file.is_absolute():
+        source_file = get_config().root / source_file
+    try:
+        source_lines = source_file.read_text(encoding="utf-8").splitlines()
+    except (OSError, UnicodeDecodeError):
+        return False
+
+    code_lines_between = sum(
+        bool(stripped := line.strip()) and not stripped.startswith("#")
+        for line in source_lines[first.end_line : second.start_line - 1]
+    )
+    return code_lines_between <= class_function_proximity
 
 def _check_against_others(
     func_a: FunctionInfo,
@@ -171,6 +197,7 @@ def _check_against_others(
     threshold_neighbor: float,
     excluded_file_pairs: list[list[str]] | None = None,
     excluded_function_pairs: list[list[str]] | None = None,
+    class_function_proximity: int = 0,
 ) -> tuple[list[str], list[NeighborEntry]]:
     """Check one function against all later functions in the list.
 
@@ -195,7 +222,7 @@ def _check_against_others(
         if func_a_idx >= j or func_b.embedding is None:
             continue
 
-        if _is_excluded_pair(func_a, func_b, efp, efnp):
+        if _is_excluded_pair(func_a, func_b, efp, efnp, class_function_proximity):
             continue
 
         similarity = compute_cosine_similarity(embedding_a, func_b.embedding)
@@ -214,6 +241,7 @@ def _find_violations(
     threshold_neighbor: float,
     excluded_file_pairs: list[list[str]] | None = None,
     excluded_function_pairs: list[list[str]] | None = None,
+    class_function_proximity: int = 0,
 ) -> tuple[list[str], list[str]]:
     """Find similarity violations among functions.
 
@@ -237,6 +265,7 @@ def _find_violations(
             threshold_neighbor,
             excluded_file_pairs,
             excluded_function_pairs,
+            class_function_proximity,
         )
         pair_violations.extend(func_pair_viols)
 
@@ -296,6 +325,7 @@ def run_provider_similarity_checks(
     threshold_neighbor: float,
     load_complexity_maps_fn: Callable[[], tuple[dict[str, int], dict[str, int]]],
     pca_cache: PcaCache | None = None,
+    class_function_proximity: int = 0,
 ) -> None:
     """Unified workflow for similarity tests across all embedding providers.
 
@@ -319,6 +349,8 @@ def run_provider_similarity_checks(
     threshold_neighbor: Similarity threshold for neighbor violations.
     load_complexity_maps_fn: Callable returning (cc_map, cog_map) for refactor index.
     pca_cache: Optional session-scoped cache for fitted PCA models.
+    class_function_proximity: Maximum non-blank, non-comment source lines
+        allowed between a class and a function in the same file.
     """
     if len(functions) < _MIN_FUNCTIONS_TO_COMPARE:
         pytest.skip("Not enough functions to compare")
@@ -376,6 +408,7 @@ def run_provider_similarity_checks(
         threshold_neighbor,
         excluded_file_pairs,
         excluded_function_pairs,
+        class_function_proximity,
     )
     _report_violations(
         pair_violations,

@@ -26,3 +26,10 @@ tests/baselines/voyage_text_embeddings.json.zlib
 tests/baselines/combined_embeddings.json.zlib
 tests/baselines/gemini_ast_embeddings.json.zlib
 tests/baselines/gemini_text_embeddings.json.zlib
+tests/baselines/codestral_ast_embeddings.json.zlib
+tests/baselines/openai_ast_embeddings.json.zlib
+tests/baselines/openai_ast_embeddings.json.zlib
+tests/baselines/openai_ast_embeddings.json.zlib
+tests/baselines/codestral_ast_embeddings.json.zlib
+tests/baselines/codestral_ast_embeddings.json.zlib
+tests/baselines/openai_ast_embeddings.json.zlib

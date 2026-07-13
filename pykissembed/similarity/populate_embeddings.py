@@ -17,7 +17,6 @@ Options:
 from __future__ import annotations
 
 import argparse
-import os
 import sys
 import time
 from dataclasses import dataclass
@@ -25,15 +24,16 @@ from typing import TYPE_CHECKING, TypedDict, TypeGuard, cast
 
 import pytest
 
-from pykissembed.config import get_config
 from pykissembed.similarity.ast_helpers import extract_all_function_infos
 from pykissembed.similarity.embeddings import (
     compute_combined_embedding,
     get_cached_embedding,
     get_embeddings_batch,
+    is_float_embedding,
+    is_str_object_dict,
+    load_api_key_from_env,
 )
 from pykissembed.similarity.storage import load_baselines, save_baselines
-from pykissembed.similarity.types import is_str_object_dict
 
 if TYPE_CHECKING:
     from collections.abc import Callable
@@ -43,27 +43,11 @@ if TYPE_CHECKING:
 type Baselines = dict[str, object]
 type PopulateFn = Callable[[Baselines, list[FunctionInfo]], int]
 
-_MIN_API_KEY_LENGTH = 20
-
-
 class _FunctionHashEntry(TypedDict):
     """Represents a function hash entry."""
 
     hash: str
     text_hash: str
-
-
-def _is_float_embedding(value: object) -> TypeGuard[list[float]]:
-    """Check if an embedding is a list of floats.
-
-    Returns
-    -------
-    bool
-        True if the embedding is a list of floats.
-    """
-    if not isinstance(value, list):
-        return False
-    return all(isinstance(component, float) for component in cast("list[object]", value))
 
 
 def _is_embedding_cache(value: object) -> TypeGuard[dict[str, list[float]]]:
@@ -77,7 +61,7 @@ def _is_embedding_cache(value: object) -> TypeGuard[dict[str, list[float]]]:
     if not isinstance(value, dict):
         return False
     return all(
-        isinstance(key, str) and _is_float_embedding(embedding)
+        isinstance(key, str) and is_float_embedding(embedding)
         for key, embedding in cast("dict[object, object]", value).items()
     )
 
@@ -128,35 +112,6 @@ def _get_function_hashes(baselines: Baselines) -> dict[str, object]:
         msg = f"Expected function_hashes to be dict[str, object], got {type(hashes_obj).__name__}"
         raise TypeError(msg)
     return hashes_obj
-
-
-def _load_api_key(env_var: str, invalid_prefixes: tuple[str, ...]) -> str | None:
-    """Load and validate API key from environment.
-
-    Returns
-    -------
-    str | None
-        The validated API key, or ``None`` if missing/invalid.
-    """
-    api_key = os.environ.get(env_var)
-    if not api_key:
-        env_file = get_config().root / ".env"
-        if env_file.exists():
-            prefix = f"{env_var}="
-            with env_file.open(encoding="utf-8") as handle:
-                for raw_line in handle:
-                    stripped_line = raw_line.strip()
-                    if stripped_line.startswith(prefix):
-                        api_key = stripped_line.split("=", 1)[1].strip()
-                        break
-
-    if not api_key:
-        return None
-    if api_key.startswith(invalid_prefixes):
-        return None
-    if len(api_key) < _MIN_API_KEY_LENGTH:
-        return None
-    return api_key
 
 
 @dataclass(frozen=True)
@@ -212,7 +167,11 @@ def _populate_provider(
     int
         Number of newly cached embeddings.
     """
-    api_key = _load_api_key(cfg.env_var, cfg.invalid_prefixes)
+    api_key = load_api_key_from_env(
+        cfg.env_var,
+        invalid_prefixes=cfg.invalid_prefixes,
+        min_length=20,
+    )
     if not api_key:
         print(f"{cfg.env_var} not set or invalid, skipping {cfg.label}")  # noqa: T201
         return 0

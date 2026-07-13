@@ -3,18 +3,11 @@
 from __future__ import annotations
 
 from dataclasses import dataclass, field
-from typing import TYPE_CHECKING, Protocol, TypeGuard, cast
+from typing import TYPE_CHECKING, Protocol
 
 if TYPE_CHECKING:
     import numpy as np
     from numpy.typing import NDArray
-
-
-def is_str_object_dict(value: object) -> TypeGuard[dict[str, object]]:
-    """Return whether *value* is a dictionary with only string keys."""
-    if not isinstance(value, dict):
-        return False
-    return all(isinstance(key, str) for key in cast("dict[object, object]", value))
 
 
 class PCAModel(Protocol):
