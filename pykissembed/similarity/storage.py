@@ -253,7 +253,7 @@ class EmbeddingRegistry:
     Parameters
     ----------
     providers : list[ProviderEntry]
-        All 9 provider entries (8 base + 1 combined).
+        All 11 provider entries (10 base + 1 combined).
     combined_key : str
         The ``cache_key`` that identifies the combined provider.
     """
@@ -283,7 +283,7 @@ class EmbeddingRegistry:
 
     @property
     def combined_dependencies(self) -> list[str]:
-        """Cache keys of the 8 base providers needed to build combined."""
+        """Cache keys of the 10 base providers needed to build combined."""
         return [p.cache_key for p in self.base_providers]
 
     @property
@@ -380,7 +380,7 @@ class EmbeddingRegistry:
         return stats
 
     def rebuild_combined(self, baselines: dict[str, object]) -> int:
-        """Rebuild combined embeddings from the 8 base providers.
+        """Rebuild combined embeddings from the 10 base providers.
 
         Modifies ``baselines[combined.cache_key]`` in place.
 
@@ -421,9 +421,11 @@ class EmbeddingRegistry:
             voyage_ast = ast_caches["voyage_ast"].get(ast_hash)
             gemini_text = text_caches["gemini_text"].get(text_hash)
             gemini_ast = ast_caches["gemini_ast"].get(ast_hash)
+            qwen_text = text_caches["qwen_text"].get(text_hash)
+            qwen_ast = ast_caches["qwen_ast"].get(ast_hash)
 
             # All-or-nothing gate: a function's combined embedding is only
-            # built once every one of the 8 base providers has embedded it.
+            # built once every one of the 10 base providers has embedded it.
             # This means a function stays absent from `combined_cache`
             # (rather than getting a partial/zero-padded vector) until the
             # slowest provider to populate catches up.
@@ -436,6 +438,8 @@ class EmbeddingRegistry:
                 and voyage_ast is not None
                 and gemini_text is not None
                 and gemini_ast is not None
+                and qwen_text is not None
+                and qwen_ast is not None
             ):
                 combined_cache[text_hash] = compute_combined_embedding(
                     openai_text,
@@ -446,13 +450,15 @@ class EmbeddingRegistry:
                     voyage_ast,
                     gemini_text,
                     gemini_ast,
+                    qwen_text,
+                    qwen_ast,
                 )
 
         baselines[self.combined.cache_key] = combined_cache
         return len(combined_cache)
 
 
-# Module-level registry instance with all 9 providers
+# Module-level registry instance with all 11 providers
 REGISTRY = EmbeddingRegistry(
     providers=[
         ProviderEntry(
@@ -523,6 +529,24 @@ REGISTRY = EmbeddingRegistry(
             label="Gemini-AST",
             cache_key="gemini_ast_embeddings",
             file_path=_constants.GEMINI_AST_EMBEDDINGS_FILE,
+            hash_type=HashType.AST,
+            default_threshold_pair=0.90,
+            default_threshold_neighbor=0.85,
+        ),
+        ProviderEntry(
+            name="qwen_text",
+            label="Qwen-Text",
+            cache_key="qwen_text_embeddings",
+            file_path=_constants.QWEN_TEXT_EMBEDDINGS_FILE,
+            hash_type=HashType.TEXT,
+            default_threshold_pair=0.90,
+            default_threshold_neighbor=0.85,
+        ),
+        ProviderEntry(
+            name="qwen_ast",
+            label="Qwen-AST",
+            cache_key="qwen_ast_embeddings",
+            file_path=_constants.QWEN_AST_EMBEDDINGS_FILE,
             hash_type=HashType.AST,
             default_threshold_pair=0.90,
             default_threshold_neighbor=0.85,
@@ -636,7 +660,7 @@ def load_provider_embeddings(
     """Load a single provider's embeddings lazily.
 
     If already loaded in baselines, returns existing. Otherwise loads from file.
-    For combined provider, also loads all 8 base providers if needed.
+    For combined provider, also loads all 10 base providers if needed.
 
     Returns
     -------

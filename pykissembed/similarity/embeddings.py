@@ -1,7 +1,7 @@
-"""Embedding API clients and utilities for OpenAI, Codestral, Voyage, and Gemini.
+"""Embedding API clients and utilities for OpenAI, Codestral, Voyage, Gemini, and Qwen.
 
 Ported from ``mega-scrapper/tests/similarity/embeddings.py``. The cloud
-provider clients (OpenAI, Codestral, Voyage, Gemini) are imported lazily
+provider clients (OpenAI, Codestral, Voyage, Gemini, Qwen) are imported lazily
 so the module is importable without cloud dependencies installed. The
 local provider (sentence-transformers) is handled by
 ``pykissembed-local``.
@@ -24,6 +24,7 @@ from pykissembed.similarity.constants import (
     CODESTRAL_EMBED_MODEL,
     GEMINI_EMBED_MODEL,
     OPENROUTER_API_URL,
+    QWEN_EMBED_MODEL,
     VOYAGE_CODE_MODEL,
 )
 
@@ -35,12 +36,14 @@ _OPENAI_MAX_TOKENS = 8191  # text-embedding-3-large limit is 8192
 _VOYAGE_MAX_TOKENS = 31000  # voyage-code-3 limit is 32000
 _CODESTRAL_MAX_TOKENS = 8000  # Conservative estimate
 _GEMINI_MAX_TOKENS = 2000  # gemini-embedding-001 limit is 2048
+_QWEN_MAX_TOKENS = 32000  # qwen3-embedding-8b limit
 
 # Maximum batch sizes per provider (number of texts per request)
 _OPENAI_MAX_BATCH_SIZE = 2048  # OpenAI allows large batches
 _VOYAGE_MAX_BATCH_SIZE = 128  # Voyage recommends smaller batches
 _CODESTRAL_MAX_BATCH_SIZE = 128  # Conservative estimate
 _GEMINI_MAX_BATCH_SIZE = 100  # Gemini API limit is 100 requests per batch
+_QWEN_MAX_BATCH_SIZE = 32  # qwen3-embedding-8b OpenRouter batch limit
 
 
 def _get_tiktoken_encoding() -> object:
@@ -234,7 +237,8 @@ def _build_provider_caller(
     Parameters
     ----------
     provider : str
-        One of ``"openai"``, ``"codestral"``, ``"voyage"``, ``"gemini"``.
+        One of ``"openai"``, ``"codestral"``, ``"voyage"``, ``"gemini"``,
+        ``"qwen"``.
     model : str
         Model identifier passed to the remote API.
     timeout : float
@@ -335,7 +339,7 @@ def _build_provider_caller(
             ),
         )
 
-    if provider == "codestral":
+    if provider in {"codestral", "qwen"}:
         # Optional cloud SDK: not a pykissembed core dependency, only needed
         # if the caller actually requests the codestral provider.
         import requests  # noqa: PLC0415
@@ -346,10 +350,10 @@ def _build_provider_caller(
             "Content-Type": "application/json",
         }
 
-        def _codestral_request(
+        def _openrouter_request(
             truncated: list[str],
         ) -> list[list[float]]:
-            """Send an embedding request to the Codestral API via OpenRouter.
+            """Send an embedding request to OpenRouter.
 
             Parameters
             ----------
@@ -381,7 +385,7 @@ def _build_provider_caller(
             return [item["embedding"] for item in data["data"]]
 
         return (
-            _codestral_request,
+            _openrouter_request,
             lambda e: isinstance(
                 e,
                 (
@@ -439,6 +443,7 @@ _PROVIDER_DEFAULTS: dict[str, tuple[int, str, float, int]] = {
     "codestral": (_CODESTRAL_MAX_TOKENS, CODESTRAL_EMBED_MODEL, 120.0, _CODESTRAL_MAX_BATCH_SIZE),
     "voyage": (_VOYAGE_MAX_TOKENS, VOYAGE_CODE_MODEL, 120.0, _VOYAGE_MAX_BATCH_SIZE),
     "gemini": (_GEMINI_MAX_TOKENS, GEMINI_EMBED_MODEL, 120.0, _GEMINI_MAX_BATCH_SIZE),
+    "qwen": (_QWEN_MAX_TOKENS, QWEN_EMBED_MODEL, 120.0, _QWEN_MAX_BATCH_SIZE),
 }
 
 
@@ -457,7 +462,8 @@ def get_embeddings_batch(
     texts : list[str]
         Input texts to embed.
     provider : str, optional
-        One of ``"openai"``, ``"codestral"``, ``"voyage"``, ``"gemini"``
+        One of ``"openai"``, ``"codestral"``, ``"voyage"``, ``"gemini"``,
+        ``"qwen"``
         (default ``"openai"``).
     model : str | None, optional
         Model override.  ``None`` uses the provider default.
@@ -526,13 +532,15 @@ def compute_combined_embedding(
     voyage_ast_emb: list[float],
     gemini_text_emb: list[float],
     gemini_ast_emb: list[float],
+    qwen_text_emb: list[float],
+    qwen_ast_emb: list[float],
 ) -> list[float]:
-    """Compute a combined embedding by concatenating all eight base embeddings and L2-normalising.
+    """Compute a combined embedding by concatenating all ten base embeddings and L2-normalising.
 
-    The eight input embeddings are concatenated in order (OpenAI text,
+    The ten input embeddings are concatenated in order (OpenAI text,
     OpenAI AST, Codestral text, Codestral AST, Voyage text, Voyage AST,
-    Gemini text, Gemini AST) using Python list addition, and the resulting
-    vector is L2-normalised.  If the combined vector has zero norm, it is
+    Gemini text, Gemini AST, Qwen text, Qwen AST) using Python list addition,
+    and the resulting vector is L2-normalised. If the combined vector has zero norm, it is
     returned unnormalised.
 
     Parameters
@@ -553,11 +561,15 @@ def compute_combined_embedding(
         Gemini embedding of the raw text.
     gemini_ast_emb : list[float]
         Gemini embedding of the AST representation.
+    qwen_text_emb : list[float]
+        Qwen embedding of the raw text.
+    qwen_ast_emb : list[float]
+        Qwen embedding of the AST representation.
 
     Returns
     -------
     list[float]
-        L2-normalised concatenation of the eight input embeddings.
+        L2-normalised concatenation of the ten input embeddings.
     """
     combined = (
         openai_text_emb
@@ -568,6 +580,8 @@ def compute_combined_embedding(
         + voyage_ast_emb
         + gemini_text_emb
         + gemini_ast_emb
+        + qwen_text_emb
+        + qwen_ast_emb
     )
 
     # L2 normalize the combined vector
@@ -618,6 +632,28 @@ def _is_str_object_dict(value: object) -> TypeGuard[dict[str, object]]:
 
 
 is_str_object_dict = _is_str_object_dict
+
+
+def _is_embedding_cache(value: object) -> TypeGuard[dict[str, list[float]]]:
+    """Check whether *value* is a ``dict[str, list[float]]`` embedding cache.
+
+    Parameters
+    ----------
+    value : object
+        The value to inspect.
+
+    Returns
+    -------
+    bool
+        ``True`` if *value* is a ``dict`` with all string keys mapping to
+        ``list[float]`` embedding vectors.
+    """
+    return is_str_object_dict(value) and all(
+        _is_float_embedding(embedding) for embedding in value.values()
+    )
+
+
+is_embedding_cache = _is_embedding_cache
 
 
 def get_cached_embedding(

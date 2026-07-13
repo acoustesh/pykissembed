@@ -21,6 +21,7 @@ DEFAULT_REFACTOR_INDEX_TOP_N = 5
 # OpenRouter config
 OPENROUTER_API_URL = "https://openrouter.ai/api/v1/embeddings"
 CODESTRAL_EMBED_MODEL = "mistralai/codestral-embed-2505"
+QWEN_EMBED_MODEL = "qwen/qwen3-embedding-8b"
 
 # Voyage AI config
 VOYAGE_CODE_MODEL = "voyage-code-3"
@@ -78,18 +79,20 @@ def _embedding_cache_file(provider_name: str) -> Path:
     return baselines_dir() / f"{provider_name}_embeddings.json.zlib"
 
 
-# Embedding cache file paths (8 base + 1 combined)
+# Embedding cache file paths (10 base + 1 combined)
 # Text variants (signature + docstring + comments, keyed by text_hash)
 OPENAI_TEXT_EMBEDDINGS_FILE = _embedding_cache_file("openai_text")
 CODESTRAL_TEXT_EMBEDDINGS_FILE = _embedding_cache_file("codestral_text")
 VOYAGE_TEXT_EMBEDDINGS_FILE = _embedding_cache_file("voyage_text")
 GEMINI_TEXT_EMBEDDINGS_FILE = _embedding_cache_file("gemini_text")
+QWEN_TEXT_EMBEDDINGS_FILE = _embedding_cache_file("qwen_text")
 
 # AST variants (ast.unparse() output, keyed by hash)
 OPENAI_AST_EMBEDDINGS_FILE = _embedding_cache_file("openai_ast")
 CODESTRAL_AST_EMBEDDINGS_FILE = _embedding_cache_file("codestral_ast")
 VOYAGE_AST_EMBEDDINGS_FILE = _embedding_cache_file("voyage_ast")
 GEMINI_AST_EMBEDDINGS_FILE = _embedding_cache_file("gemini_ast")
+QWEN_AST_EMBEDDINGS_FILE = _embedding_cache_file("qwen_ast")
 
-# Combined (8-way concatenation, keyed by text_hash)
+# Combined (10-way concatenation, keyed by text_hash)
 COMBINED_EMBEDDINGS_FILE = _embedding_cache_file("combined")

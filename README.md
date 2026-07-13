@@ -171,7 +171,7 @@ four with their defaults if they're not already set.
 ## Similarity tests
 
 The similarity gate (`pytest -m similarity`) detects near-duplicate functions
-using embedding providers. It supports 9 providers:
+using embedding providers. It supports 11 providers:
 
 | Provider | Model | Hash type | Default pair threshold |
 | --- | --- | --- | --- |
@@ -183,7 +183,9 @@ using embedding providers. It supports 9 providers:
 | Voyage-AST | voyage-code-3 | ast_hash | 0.95 |
 | Gemini-Text | gemini-embedding-001 | text_hash | 0.90 |
 | Gemini-AST | gemini-embedding-001 | ast_hash | 0.90 |
-| Combined | 8-way concatenation | text_hash | 0.88 |
+| Qwen-Text | qwen3-embedding-8b | text_hash | 0.90 |
+| Qwen-AST | qwen3-embedding-8b | ast_hash | 0.90 |
+| Combined | 10-way concatenation | text_hash | 0.88 |
 
 Each provider detects:
 - **Pairwise similarity** — finds copy-paste code (similarity ≥ pair threshold)

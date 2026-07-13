@@ -10,7 +10,8 @@ Usage:
 
 Options:
     --provider  One of: openai-text, openai-ast, codestral-text, codestral-ast,
-                voyage-text, voyage-ast, gemini-text, gemini-ast, combined, all
+                voyage-text, voyage-ast, gemini-text, gemini-ast, qwen-text,
+                qwen-ast, combined, all
                 (default: all)
 """
 
@@ -20,20 +21,19 @@ import argparse
 import sys
 import time
 from dataclasses import dataclass
-from typing import TYPE_CHECKING, TypedDict, TypeGuard, cast
+from typing import TYPE_CHECKING, TypedDict
 
 import pytest
 
 from pykissembed.similarity.ast_helpers import extract_all_function_infos
 from pykissembed.similarity.embeddings import (
-    compute_combined_embedding,
     get_cached_embedding,
     get_embeddings_batch,
-    is_float_embedding,
+    is_embedding_cache,
     is_str_object_dict,
     load_api_key_from_env,
 )
-from pykissembed.similarity.storage import load_baselines, save_baselines
+from pykissembed.similarity.storage import REGISTRY, load_baselines, save_baselines
 
 if TYPE_CHECKING:
     from collections.abc import Callable
@@ -51,29 +51,18 @@ class _FunctionHashEntry(TypedDict):
     text_hash: str
 
 
-def _is_embedding_cache(value: object) -> TypeGuard[dict[str, list[float]]]:
-    """Check if a dictionary is an embedding cache.
-
-    Returns
-    -------
-    bool
-        True if the dictionary is an embedding cache.
-    """
-    if not isinstance(value, dict):
-        return False
-    return all(
-        isinstance(key, str) and is_float_embedding(embedding)
-        for key, embedding in cast("dict[object, object]", value).items()
-    )
-
-
 def _get_embedding_cache(baselines: Baselines, cache_key: str) -> dict[str, list[float]]:
-    """Get the embedding cache.
+    """Return the live provider cache for *cache_key*, creating it when absent.
+
+    A missing entry is initialised to an empty mapping, stored back into
+    *baselines*, and returned, so later in-place writes by the caller persist.
+    This deliberately mutates *baselines* and hands back the very object it
+    holds rather than a defensive copy.
 
     Returns
     -------
     dict[str, list[float]]
-        The embedding cache.
+        The mutable cache owned by *baselines* under *cache_key*.
 
     Raises
     ------
@@ -85,7 +74,7 @@ def _get_embedding_cache(baselines: Baselines, cache_key: str) -> dict[str, list
         empty_cache: dict[str, list[float]] = {}
         baselines[cache_key] = empty_cache
         return empty_cache
-    if not _is_embedding_cache(cache_obj):
+    if not is_embedding_cache(cache_obj):
         msg = f"Expected {cache_key} to be dict[str, list[float]], got {type(cache_obj).__name__}"
         raise TypeError(msg)
     return cache_obj
@@ -299,89 +288,46 @@ _GEMINI_AST_CFG = _ProviderCfg(
     provider="gemini",
 )
 
+_QWEN_TEXT_CFG = _ProviderCfg(
+    label="Qwen-Text",
+    env_var="OPENROUTER_API_KEY",
+    invalid_prefixes=("your_", "sk-xxx"),
+    cache_key="qwen_text_embeddings",
+    use_text=True,
+    provider="qwen",
+)
+
+_QWEN_AST_CFG = _ProviderCfg(
+    label="Qwen-AST",
+    env_var="OPENROUTER_API_KEY",
+    invalid_prefixes=("your_", "sk-xxx"),
+    cache_key="qwen_ast_embeddings",
+    use_text=False,
+    provider="qwen",
+)
+
 
 def _populate_combined(
     baselines: Baselines,
-    functions: list[FunctionInfo],
+    _functions: list[FunctionInfo],
 ) -> int:
-    """Populate Combined embeddings from all 8 base providers.
+    """Rebuild Combined embeddings from all 10 base providers.
 
     Returns
     -------
     int
-        Number of newly computed combined embeddings.
+        Number of combined embeddings rebuilt.
     """
-    uncached = _find_uncached(baselines, functions, "combined_embeddings", "text_hash")
-    if not uncached:
-        return 0
-
-    # All 8 base provider caches must be present and valid to build combined.
-    required_caches = [
-        "openai_text_embeddings",
-        "openai_ast_embeddings",
-        "codestral_text_embeddings",
-        "codestral_ast_embeddings",
-        "voyage_text_embeddings",
-        "voyage_ast_embeddings",
-        "gemini_text_embeddings",
-        "gemini_ast_embeddings",
-    ]
-    for cache_key in required_caches:
+    for cache_key in REGISTRY.combined_dependencies:
         raw = baselines.get(cache_key)
-        if raw is None or not raw or not _is_embedding_cache(raw):
+        if raw is None or not raw or not is_embedding_cache(raw):
             provider = cache_key.removesuffix("_embeddings").replace("_", "-")
             pytest.skip(
                 f"Cannot build combined embeddings: {cache_key} is missing or invalid. "
                 f"Run: pykissembed populate-embeddings --provider {provider}",
             )
 
-    openai_text_cache = _get_embedding_cache(baselines, "openai_text_embeddings")
-    codestral_text_cache = _get_embedding_cache(baselines, "codestral_text_embeddings")
-    voyage_text_cache = _get_embedding_cache(baselines, "voyage_text_embeddings")
-    gemini_text_cache = _get_embedding_cache(baselines, "gemini_text_embeddings")
-    openai_ast_cache = _get_embedding_cache(baselines, "openai_ast_embeddings")
-    codestral_ast_cache = _get_embedding_cache(baselines, "codestral_ast_embeddings")
-    voyage_ast_cache = _get_embedding_cache(baselines, "voyage_ast_embeddings")
-    gemini_ast_cache = _get_embedding_cache(baselines, "gemini_ast_embeddings")
-    combined_cache = _get_embedding_cache(baselines, "combined_embeddings")
-
-    computed = 0
-    for func in uncached:
-        # Text variants keyed by text_hash
-        openai_text = openai_text_cache.get(func.text_hash)
-        codestral_text = codestral_text_cache.get(func.text_hash)
-        voyage_text = voyage_text_cache.get(func.text_hash)
-        gemini_text = gemini_text_cache.get(func.text_hash)
-        # AST variants keyed by hash
-        openai_ast = openai_ast_cache.get(func.hash)
-        codestral_ast = codestral_ast_cache.get(func.hash)
-        voyage_ast = voyage_ast_cache.get(func.hash)
-        gemini_ast = gemini_ast_cache.get(func.hash)
-
-        if (
-            openai_text is not None
-            and openai_ast is not None
-            and codestral_text is not None
-            and codestral_ast is not None
-            and voyage_text is not None
-            and voyage_ast is not None
-            and gemini_text is not None
-            and gemini_ast is not None
-        ):
-            combined = compute_combined_embedding(
-                openai_text,
-                openai_ast,
-                codestral_text,
-                codestral_ast,
-                voyage_text,
-                voyage_ast,
-                gemini_text,
-                gemini_ast,
-            )
-            combined_cache[func.text_hash] = combined
-            computed += 1
-
-    return computed
+    return REGISTRY.rebuild_combined(baselines)
 
 
 def _update_function_hashes(baselines: Baselines, functions: list[FunctionInfo]) -> None:
@@ -403,6 +349,8 @@ _PROVIDER_MAP: dict[str, PopulateFn] = {
     "voyage-ast": lambda b, f: _populate_provider(b, f, _VOYAGE_AST_CFG),
     "gemini-text": lambda b, f: _populate_provider(b, f, _GEMINI_TEXT_CFG),
     "gemini-ast": lambda b, f: _populate_provider(b, f, _GEMINI_AST_CFG),
+    "qwen-text": lambda b, f: _populate_provider(b, f, _QWEN_TEXT_CFG),
+    "qwen-ast": lambda b, f: _populate_provider(b, f, _QWEN_AST_CFG),
     "combined": _populate_combined,
 }
 
@@ -427,6 +375,8 @@ _ALL_PROVIDERS = [
     "voyage-ast",
     "gemini-text",
     "gemini-ast",
+    "qwen-text",
+    "qwen-ast",
     "combined",
 ]
 
@@ -437,7 +387,7 @@ def populate_embeddings(provider: str = "all") -> None:
     Parameters
     ----------
     provider : str
-        One of the 9 providers or ``"all"``.
+        One of the 11 providers or ``"all"``.
     """
     print("Loading baselines and extracting functions...")  # noqa: T201
     baselines = load_baselines()

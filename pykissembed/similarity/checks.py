@@ -8,7 +8,7 @@ adaptation is that imports use ``pykissembed.similarity.*`` instead of
 from __future__ import annotations
 
 from pathlib import Path
-from typing import TYPE_CHECKING, TypeGuard, cast
+from typing import TYPE_CHECKING, cast
 
 import pytest
 
@@ -20,6 +20,7 @@ from pykissembed.similarity.constants import (
 from pykissembed.similarity.embeddings import (
     compute_cosine_similarity,
     get_cached_embedding,
+    is_embedding_cache,
     is_str_object_dict,
 )
 from pykissembed.similarity.pca import fit_pca, transform_embeddings_with_pca
@@ -55,6 +56,8 @@ VOYAGE_TEXT_PROVIDER = REGISTRY.by_cache_key("voyage_text_embeddings")
 VOYAGE_AST_PROVIDER = REGISTRY.by_cache_key("voyage_ast_embeddings")
 GEMINI_TEXT_PROVIDER = REGISTRY.by_cache_key("gemini_text_embeddings")
 GEMINI_AST_PROVIDER = REGISTRY.by_cache_key("gemini_ast_embeddings")
+QWEN_TEXT_PROVIDER = REGISTRY.by_cache_key("qwen_text_embeddings")
+QWEN_AST_PROVIDER = REGISTRY.by_cache_key("qwen_ast_embeddings")
 COMBINED_PROVIDER = REGISTRY.by_cache_key("combined_embeddings")
 
 
@@ -508,43 +511,29 @@ def _extract_refactor_index_top_n(config: dict[str, object]) -> int:
     return raw_top_n
 
 
-def _is_float_list(value: object) -> TypeGuard[list[float]]:
-    """Check if a list contains only floats.
-
-    Returns
-    -------
-    bool
-        True if the list contains only floats.
-    """
-    if not isinstance(value, list):
-        return False
-    return all(isinstance(component, float) for component in cast("list[object]", value))
-
-
 def _extract_embedding_cache(baselines: Baselines, cache_key: str) -> dict[str, list[float]]:
-    """Extract embedding cache from a dictionary.
+    """Copy the validated provider cache out of *baselines* without side effects.
+
+    The value stored under *cache_key* is type-checked and then duplicated into
+    a fresh mapping; a missing key simply yields an empty result. Because the
+    snapshot is detached from *baselines*, callers may read or reshape it freely
+    without disturbing the persisted baseline.
 
     Returns
     -------
     dict[str, list[float]]
-        The extracted embedding cache.
+        A newly allocated mapping mirroring the stored cache.
 
     Raises
     ------
     TypeError
-        If cache data is not a ``dict[str, list[float]]``.
+        If the value found under *cache_key* is not ``dict[str, list[float]]``.
     """
     raw_cache = baselines.get(cache_key, {})
-    if not is_str_object_dict(raw_cache):
+    if not is_embedding_cache(raw_cache):
         msg = f"baselines['{cache_key}'] must be a dict[str, list[float]]"
         raise TypeError(msg)
-    typed_cache: dict[str, list[float]] = {}
-    for hash_key, embedding in raw_cache.items():
-        if not _is_float_list(embedding):
-            msg = f"baselines['{cache_key}']['{hash_key}'] must be list[float]"
-            raise TypeError(msg)
-        typed_cache[hash_key] = embedding
-    return typed_cache
+    return dict(raw_cache)
 
 
 def _extract_excluded_pairs(config: dict[str, object], key: str) -> list[list[str]]:

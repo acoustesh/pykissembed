@@ -4,7 +4,7 @@ Ported from ``aa-ml/mega-scrapper/tests/test_code_similarity.py``. This
 module detects near-duplicate functions using embedding providers:
 - Text variants: signature + docstring + comments (keyed by text_hash)
 - AST variants: ast.unparse() output (keyed by hash)
-- Combined: 8-way concatenation of all base embeddings
+- Combined: 10-way concatenation of all base embeddings
 
 Each variant detects:
 - Pairwise similarity detection (finds copy-paste code)
@@ -16,7 +16,8 @@ Providers:
 - Codestral-Text, Codestral-AST (codestral-embed via OpenRouter)
 - Voyage-Text, Voyage-AST (voyage-code-3)
 - Gemini-Text, Gemini-AST (gemini-embedding-001)
-- Combined (8-way concatenation)
+- Qwen-Text, Qwen-AST (qwen3-embedding-8b)
+- Combined (10-way concatenation)
 
 Baseline Management:
     Run ``pytest --update-baselines`` to update similarity baselines.
@@ -42,6 +43,8 @@ from pykissembed.similarity import (
     GEMINI_TEXT_PROVIDER,
     OPENAI_AST_PROVIDER,
     OPENAI_TEXT_PROVIDER,
+    QWEN_AST_PROVIDER,
+    QWEN_TEXT_PROVIDER,
     VOYAGE_AST_PROVIDER,
     VOYAGE_TEXT_PROVIDER,
     FunctionInfo,
@@ -237,6 +240,8 @@ _PARALLEL_PROVIDERS: list[ProviderEntry] = [
     VOYAGE_AST_PROVIDER,
     GEMINI_TEXT_PROVIDER,
     GEMINI_AST_PROVIDER,
+    QWEN_TEXT_PROVIDER,
+    QWEN_AST_PROVIDER,
 ]
 
 
@@ -291,7 +296,7 @@ def test_providers_parallel(
     # One worker per provider (not a bounded pool): each `_run_one` call
     # does network I/O against a distinct API, so full parallelism here
     # bounds wall-clock time by the slowest single provider rather than by
-    # the sum of all eight.
+    # the sum of all ten.
     with ThreadPoolExecutor(max_workers=len(_PARALLEL_PROVIDERS)) as executor:
         futures = {executor.submit(_run_one, p): p for p in _PARALLEL_PROVIDERS}
         for future in as_completed(futures):

@@ -10,7 +10,8 @@ Providers:
 - Codestral-Text, Codestral-AST (codestral-embed via OpenRouter)
 - Voyage-Text, Voyage-AST (voyage-code-3)
 - Gemini-Text, Gemini-AST (gemini-embedding-001)
-- Combined (8-way concatenation)
+- Qwen-Text, Qwen-AST (qwen3-embedding-8b)
+- Combined (10-way concatenation)
 
 Modules
 -------
@@ -18,7 +19,7 @@ Modules
     storage: Embedding compression/decompression and cache management
     ast_helpers: Function extraction from Python AST
     pca: PCA dimensionality reduction and clustering
-    embeddings: Embedding API clients (OpenAI, Codestral, Voyage, Gemini)
+    embeddings: Embedding API clients (OpenAI, Codestral, Voyage, Gemini, Qwen)
     refactor_index: Refactor index computation
     complexity: Complexity map loaders (CC, COG)
     checks: Unified similarity check workflow
@@ -40,6 +41,8 @@ from pykissembed.similarity.checks import (
     GEMINI_TEXT_PROVIDER,
     OPENAI_AST_PROVIDER,
     OPENAI_TEXT_PROVIDER,
+    QWEN_AST_PROVIDER,
+    QWEN_TEXT_PROVIDER,
     VOYAGE_AST_PROVIDER,
     VOYAGE_TEXT_PROVIDER,
     run_provider_similarity_checks,
@@ -88,6 +91,8 @@ __all__ = [
     "GEMINI_TEXT_PROVIDER",
     "OPENAI_AST_PROVIDER",
     "OPENAI_TEXT_PROVIDER",
+    "QWEN_AST_PROVIDER",
+    "QWEN_TEXT_PROVIDER",
     "REGISTRY",
     "VOYAGE_AST_PROVIDER",
     "VOYAGE_TEXT_PROVIDER",

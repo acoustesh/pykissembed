@@ -37,6 +37,7 @@ from pykissembed.similarity.refactor_index import (
     compute_similarity_matrix,
 )
 from pykissembed.similarity.storage import (
+    REGISTRY,
     HashType,
     ProviderEntry,
     get_valid_hashes,
@@ -335,9 +336,9 @@ class TestComputeCombinedEmbedding:
     @staticmethod
     def test_length_is_sum_of_inputs() -> None:
         """Combined embedding length equals sum of input lengths."""
-        inputs = [[1.0] for _ in range(8)]
+        inputs = [[1.0] for _ in range(10)]
         combined = compute_combined_embedding(*inputs)
-        assert len(combined) == 8
+        assert len(combined) == 10
 
     @staticmethod
     def test_is_normalized() -> None:
@@ -351,10 +352,19 @@ class TestComputeCombinedEmbedding:
             [0.0, 0.0],
             [0.0, 0.0],
             [0.0, 0.0],
+            [0.0, 0.0],
+            [0.0, 0.0],
         ]
         combined = compute_combined_embedding(*inputs)
         norm = sum(c**2 for c in combined) ** 0.5
         assert norm == pytest.approx(1.0)
+
+    @staticmethod
+    def test_qwen_vectors_are_included() -> None:
+        """Qwen text and AST embeddings occupy the final two vector segments."""
+        inputs = [[0.0] for _ in range(8)] + [[3.0], [4.0]]
+        combined = compute_combined_embedding(*inputs)
+        assert combined == pytest.approx([0.0] * 8 + [0.6, 0.8])
 
 
 class TestGetValidHashes:
@@ -444,6 +454,21 @@ class TestProviderEntry:
         assert entry.threshold_pair_key == "openai_text_similarity_threshold_pair"
         assert entry.threshold_neighbor_key == "openai_text_similarity_threshold_neighbor"
         assert entry.pca_variance_key == "openai_text_pca_variance_threshold"
+
+
+class TestEmbeddingRegistry:
+    """Tests for the built-in similarity provider registry."""
+
+    @staticmethod
+    def test_qwen_variants_participate_in_combined_embeddings() -> None:
+        """Both Qwen cache variants are base-provider dependencies."""
+        assert REGISTRY.by_cache_key("qwen_text_embeddings").hash_type is HashType.TEXT
+        assert REGISTRY.by_cache_key("qwen_ast_embeddings").hash_type is HashType.AST
+        assert REGISTRY.combined_dependencies[-2:] == [
+            "qwen_text_embeddings",
+            "qwen_ast_embeddings",
+        ]
+        assert len(REGISTRY.base_providers) == 10
 
 
 class TestRefactorIndex:
