@@ -35,6 +35,14 @@ class PyqtestConfig:
     include_notebooks
         Whether to apply ruff and similarity checks to ``.ipynb`` files.
         Defaults to ``False`` — notebooks are typically exploratory.
+    wrapper_max_call_sites
+        Maximum project-wide static call-site count allowed for an exact
+        pass-through wrapper. Defaults to ``1``.
+    wrapper_exclude
+        Glob patterns for intentional wrapper identifiers in the form
+        ``relative/path.py:QualifiedName``.
+    wrapper_exempt_decorators
+        Glob patterns for decorator names that mark intentional wrappers.
     root
         Project root (parent directory of ``pyproject.toml``).
     """
@@ -44,6 +52,9 @@ class PyqtestConfig:
     baseline_dir: str = "tests/baselines"
     cache_dir: str = "tests/.pykissembed_cache"
     include_notebooks: bool = False
+    wrapper_max_call_sites: int = 1
+    wrapper_exclude: list[str] = field(default_factory=list)
+    wrapper_exempt_decorators: list[str] = field(default_factory=list)
     root: Path = field(default_factory=Path.cwd)
 
     @property
@@ -106,6 +117,44 @@ def _coerce_str_list(value: object, *, key: str) -> list[str]:
             result.append(item)
         return result
     return []
+
+
+def _require_str_list(value: object, *, key: str) -> list[str]:
+    """Validate a TOML list containing only strings.
+
+    Returns
+    -------
+    list[str]
+        A copy of *value* when it is a list of strings.
+
+    Raises
+    ------
+    TypeError
+        If *value* is not a list of strings.
+    """
+    if not isinstance(value, list):
+        msg = f"[tool.pykissembed] {key!r} must be list[str]"
+        raise TypeError(msg)
+    return _coerce_str_list(value, key=key)
+
+
+def _require_nonnegative_int(value: object, *, key: str) -> int:
+    """Validate a non-negative integer TOML value.
+
+    Returns
+    -------
+    int
+        The validated integer.
+
+    Raises
+    ------
+    TypeError
+        If *value* is not a non-negative integer.
+    """
+    if isinstance(value, bool) or not isinstance(value, int) or value < 0:
+        msg = f"[tool.pykissembed] {key!r} must be a non-negative integer"
+        raise TypeError(msg)
+    return value
 
 
 def load_config(start: Path | None = None) -> PyqtestConfig:
@@ -172,6 +221,18 @@ def load_config(start: Path | None = None) -> PyqtestConfig:
     cache_dir = str(section.get("cache_dir", "tests/.pykissembed_cache"))
     include_notebooks_raw = section.get("include_notebooks", False)
     include_notebooks = bool(include_notebooks_raw)
+    wrapper_max_call_sites = _require_nonnegative_int(
+        section.get("wrapper_max_call_sites", 1),
+        key="wrapper_max_call_sites",
+    )
+    wrapper_exclude = _require_str_list(
+        section.get("wrapper_exclude", []),
+        key="wrapper_exclude",
+    )
+    wrapper_exempt_decorators = _require_str_list(
+        section.get("wrapper_exempt_decorators", []),
+        key="wrapper_exempt_decorators",
+    )
 
     return PyqtestConfig(
         paths=paths or ["src"],
@@ -179,6 +240,9 @@ def load_config(start: Path | None = None) -> PyqtestConfig:
         baseline_dir=baseline_dir,
         cache_dir=cache_dir,
         include_notebooks=include_notebooks,
+        wrapper_max_call_sites=wrapper_max_call_sites,
+        wrapper_exclude=wrapper_exclude,
+        wrapper_exempt_decorators=wrapper_exempt_decorators,
         root=root,
     )
 

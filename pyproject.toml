@@ -97,6 +97,7 @@ include = ["pykissembed/schemas/*.json"]
 # Self-check: pykissembed dogfoods its own checks against its own source.
 [tool.pykissembed]
 paths = ["pykissembed"]
+wrapper_exclude = ["pykissembed/similarity/populate_embeddings.py:get_provider_populator"]
 
 # The `[local]` / `[cloud]` extras reference sibling subpackages. They are
 # workspace members, so we mark them as such under `[tool.uv.sources]`.

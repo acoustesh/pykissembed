@@ -10,6 +10,8 @@ import pytest
 from pykissembed.config import (
     _auto_detect,
     _coerce_str_list,
+    _require_nonnegative_int,
+    _require_str_list,
     load_config,
 )
 from pykissembed.paths import iter_py_files
@@ -44,6 +46,27 @@ class TestCoerceStrList:
             _coerce_str_list(["src", 42], key="paths")
 
 
+class TestWrapperProliferationConfig:
+    """Tests for wrapper-proliferation configuration validation."""
+
+    @staticmethod
+    def test_requires_string_lists() -> None:
+        """Wrapper exclusions and decorator patterns must be string lists."""
+        assert _require_str_list(["pkg/*.py:Adapter.*"], key="wrapper_exclude") == [
+            "pkg/*.py:Adapter.*"
+        ]
+        with pytest.raises(TypeError, match="wrapper_exclude"):
+            _require_str_list("pkg/*.py:Adapter.*", key="wrapper_exclude")
+
+    @staticmethod
+    def test_requires_nonnegative_call_site_threshold() -> None:
+        """The wrapper call-site threshold rejects booleans and negatives."""
+        assert _require_nonnegative_int(1, key="wrapper_max_call_sites") == 1
+        for invalid in (-1, True, "1"):
+            with pytest.raises(TypeError, match="wrapper_max_call_sites"):
+                _require_nonnegative_int(invalid, key="wrapper_max_call_sites")
+
+
 class TestLoadConfig:
     """Tests for the config loader."""
 
@@ -58,6 +81,9 @@ class TestLoadConfig:
                 mode = "strict"
                 baseline_dir = "tests/baselines"
                 cache_dir = "tests/.pykissembed_cache"
+                wrapper_max_call_sites = 2
+                wrapper_exclude = ["src/demo.py:Adapter.*"]
+                wrapper_exempt_decorators = ["framework.*"]
                 """,
             ),
             encoding="utf-8",
@@ -68,6 +94,9 @@ class TestLoadConfig:
         assert config.paths == ["src", "lib"]
         assert config.mode == "strict"
         assert config.baseline_dir == "tests/baselines"
+        assert config.wrapper_max_call_sites == 2
+        assert config.wrapper_exclude == ["src/demo.py:Adapter.*"]
+        assert config.wrapper_exempt_decorators == ["framework.*"]
         assert config.root == tmp_path
 
     @staticmethod
@@ -88,6 +117,9 @@ class TestLoadConfig:
         config = load_config()
         assert config.paths == ["src"]
         assert config.mode == "ratchet"
+        assert config.wrapper_max_call_sites == 1
+        assert config.wrapper_exclude == []
+        assert config.wrapper_exempt_decorators == []
 
     @staticmethod
     def test_invalid_mode_falls_back_to_ratchet(
@@ -109,6 +141,38 @@ class TestLoadConfig:
         monkeypatch.chdir(tmp_path)
         config = load_config()
         assert config.mode == "ratchet"
+
+    @staticmethod
+    @pytest.mark.parametrize(
+        ("setting", "message"),
+        [
+            ("wrapper_max_call_sites = -1", "wrapper_max_call_sites"),
+            ('wrapper_exclude = "src/module.py:proxy"', "wrapper_exclude"),
+            ("wrapper_exempt_decorators = [42]", "wrapper_exempt_decorators"),
+        ],
+    )
+    def test_invalid_wrapper_settings_raise(
+        tmp_path: Path,
+        monkeypatch: pytest.MonkeyPatch,
+        setting: str,
+        message: str,
+    ) -> None:
+        """Wrapper-policy keys reject invalid TOML values during config loading."""
+        (tmp_path / "pyproject.toml").write_text(
+            dedent(
+                f"""
+                [tool.pykissembed]
+                paths = ["src"]
+                {setting}
+                """,
+            ),
+            encoding="utf-8",
+        )
+        (tmp_path / "src").mkdir()
+        monkeypatch.chdir(tmp_path)
+
+        with pytest.raises(TypeError, match=message):
+            load_config()
 
 
 class TestAutoDetect:

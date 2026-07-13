@@ -57,19 +57,6 @@ def compute_content_hash(text: str) -> str:
     return hashlib.sha256(text.encode("utf-8")).hexdigest()
 
 
-def get_ast_text(node: ast.FunctionDef | ast.AsyncFunctionDef | ast.ClassDef) -> str:
-    """Get human-readable AST representation via ast.unparse().
-
-    Returns the code reconstructed from AST, which excludes comments
-    but preserves structure, docstrings, and type hints.
-
-    Returns
-    -------
-        The unparsed AST code string.
-    """
-    return ast.unparse(node)
-
-
 def extract_text_for_embedding(
     node: ast.FunctionDef | ast.AsyncFunctionDef | ast.ClassDef,
     source: str,
@@ -214,7 +201,7 @@ def _extract_function_from_node(
     ast_hash = compute_content_hash(normalized)
 
     # AST text for AST embeddings
-    ast_text = get_ast_text(node)
+    ast_text = ast.unparse(node)
 
     # Text for text embeddings (signature + docstring + comments)
     text_for_embedding = extract_text_for_embedding(node, source)

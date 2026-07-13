@@ -22,6 +22,7 @@ from pykissembed.baselines_engine import BaselineEnvelope, locked_envelope, save
 from pykissembed.config import get_config
 from pykissembed.paths import iter_py_files as _iter_py_files
 from pykissembed.paths import warn_non_utf8
+from pykissembed.wrapper_analysis import find_wrapper_candidates, parse_source_files
 
 
 class _BaselineConfig(TypedDict, total=False):
@@ -53,7 +54,6 @@ _DEFAULT_CONFIG: _DefaultConfig = {
     "mi_threshold": 13.0,
     "max_missing_docstrings": 0,
 }
-
 
 # ---------------------------------------------------------------------------
 # Helpers
@@ -412,6 +412,40 @@ class TestCyclomaticComplexity:
                         + "\n".join(cog_violations),
                     )
                 pytest.fail("\n\n".join(sections), pytrace=False)
+
+
+class TestWrapperProliferation:
+    """Tests that exact pass-through wrappers have more than trivial use."""
+
+    @staticmethod
+    @pytest.mark.complexity
+    def test_wrapper_proliferation(pykissembed_paths: list[Path]) -> None:
+        """Fail when an exact pass-through wrapper has too few call sites."""
+        if not pykissembed_paths:
+            pytest.skip("No [tool.pykissembed] paths configured")
+        config = get_config()
+        modules = parse_source_files(pykissembed_paths)
+        candidates = find_wrapper_candidates(
+            modules,
+            root=config.root,
+            wrapper_exclude=config.wrapper_exclude,
+            wrapper_exempt_decorators=config.wrapper_exempt_decorators,
+        )
+        violations = [
+            candidate
+            for candidate in candidates
+            if candidate.call_count <= config.wrapper_max_call_sites
+        ]
+        if violations:
+            details = "\n".join(
+                f"{candidate.identifier}:{candidate.line} has {candidate.call_count} call site(s)"
+                for candidate in violations
+            )
+            pytest.fail(
+                "Wrapper proliferation violations "
+                f"(maximum {config.wrapper_max_call_sites} call site(s)):\n{details}",
+                pytrace=False,
+            )
 
 
 class TestMaintainabilityIndex:

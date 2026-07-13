@@ -131,6 +131,9 @@ The `[tool.pykissembed]` config reference:
 | `baseline_dir` | `"tests/baselines"` | Where committed JSON envelopes live |
 | `cache_dir` | `"tests/.pykissembed_cache"` | Where embedding caches live (gitignored) |
 | `include_notebooks` | `false` | If true, run ruff/similarity against `.ipynb` files |
+| `wrapper_max_call_sites` | `1` | Maximum static call sites allowed for an exact pass-through wrapper |
+| `wrapper_exclude` | `[]` | Glob patterns for intentional wrappers (`relative/path.py:QualifiedName`) |
+| `wrapper_exempt_decorators` | `[]` | Glob patterns for decorators that mark intentional wrappers |
 (registered with `tryfirst=True`) collects these modules before pytest's
 default `python_files` filter can reject them.
 
@@ -150,6 +153,12 @@ The complexity gate (`pytest -m complexity`) enforces:
   `complexipy`, fails if above threshold (default 15) or per-function baseline.
 - **Maintainability Index (MI)** — per-file MI via `radon`, fails if below
   threshold (default 13) or per-file baseline.
+- **Wrapper proliferation** — exact one-statement pass-through wrappers fail
+  when their project-wide static call count is at or below
+  `wrapper_max_call_sites` (default 1). Counts use the terminal call name
+  (`wrapper()` and `obj.wrapper()`), so same-named callables can make this
+  conservative static check under-report candidates. Exclude intentional
+  adapters with `wrapper_exclude` or `wrapper_exempt_decorators`.
 
 Baselines are stored in `tests/baselines/complexity.json` as a versioned
 envelope. Update with `pytest --update-baselines`. Override a default by
