@@ -1,46 +1,12 @@
 {
-  "files": {
-    "pykissembed/checks/code_complexity.py": {
-      "ruff": [
-        {
-          "code": "DOC402",
-          "message": "`yield` is not documented in docstring",
-          "line": 240,
-          "col": 5
-        }
-      ],
-      "pyright": []
-    },
-    "pykissembed/similarity/checks.py": {
-      "ruff": [
-        {
-          "code": "E302",
-          "message": "Expected 2 blank lines, found 1",
-          "line": 192,
-          "col": 1
-        }
-      ],
-      "pyright": []
-    },
-    "pykissembed/similarity/populate_embeddings.py": {
-      "ruff": [
-        {
-          "code": "E302",
-          "message": "Expected 2 blank lines, found 1",
-          "line": 46,
-          "col": 1
-        }
-      ],
-      "pyright": []
-    }
-  },
+  "files": {},
   "summary": {
-    "total_files": 3,
-    "ruff_errors": 3,
+    "total_files": 0,
+    "ruff_errors": 0,
     "pyright_errors": 0,
     "pyright_warnings": 0,
     "pyright_information": 0,
     "pyright_hints": 0,
-    "total": 3
+    "total": 0
   }
 }
