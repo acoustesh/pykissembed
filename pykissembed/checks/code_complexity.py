@@ -338,7 +338,7 @@ class TestLineCount:
 
 
 class TestCyclomaticComplexity:
-    """Tests for cyclomatic complexity limits."""
+    """Tests for cyclomatic and cognitive complexity limits."""
 
     @staticmethod
     @pytest.mark.complexity
@@ -347,86 +347,66 @@ class TestCyclomaticComplexity:
         *,
         update_baselines: bool,
     ) -> None:
-        """Fail if any function exceeds the CC threshold or its baseline."""
+        """Fail if any function exceeds its CC or COG threshold or baseline."""
         if not pykissembed_paths:
             pytest.skip("No [tool.pykissembed] paths configured")
         with _locked_envelope() as (baseline_file, envelope):
-            threshold = cast("_BaselineConfig", envelope.data).get(
+            config_data = cast("_BaselineConfig", envelope.data)
+            cc_threshold = config_data.get(
                 "cc_threshold", _DEFAULT_CONFIG["cc_threshold"]
             )
+            cog_threshold = config_data.get(
+                "cog_threshold", _DEFAULT_CONFIG["cog_threshold"]
+            )
             cc_baselines = cast("dict[str, int]", envelope.data.get("cc_baselines", {}))
-            violations: list[str] = []
+            cog_baselines = cast("dict[str, int]", envelope.data.get("cog_baselines", {}))
+            cc_violations: list[str] = []
+            cog_violations: list[str] = []
             current_cc: dict[str, int] = {}
+            current_cog: dict[str, int] = {}
             for base_dir in pykissembed_paths:
                 for py_file in _iter_py_files(base_dir):
                     rel = py_file.relative_to(get_config().root)
                     for name, lineno, cc in _get_cc(py_file):
                         key = f"{rel}:{name}"
                         current_cc[key] = cc
-                        func_baseline = cc_baselines.get(key, threshold)
+                        func_baseline = cc_baselines.get(key, cc_threshold)
                         if cc > func_baseline:
-                            violations.append(
+                            cc_violations.append(
                                 f"{rel}:{lineno} - {name}() CC={cc}, exceeds {func_baseline}",
                             )
-            if update_baselines:
-                for key, cc in current_cc.items():
-                    if cc > threshold:
-                        cc_baselines[key] = cc
-                envelope.data["cc_baselines"] = cc_baselines
-                save_envelope(baseline_file, envelope)
-                pytest.skip("Updated CC baselines")
-            if violations:
-                pytest.fail(
-                    f"Cyclomatic complexity violations (threshold {threshold}):\n"
-                    + "\n".join(violations),
-                    pytrace=False,
-                )
-
-
-class TestCognitiveComplexity:
-    """Tests for cognitive complexity limits (complexipy)."""
-
-    @staticmethod
-    @pytest.mark.complexity
-    def test_cognitive_complexity(
-        pykissembed_paths: list[Path],
-        *,
-        update_baselines: bool,
-    ) -> None:
-        """Fail if any function exceeds the COG threshold or its baseline."""
-        if not pykissembed_paths:
-            pytest.skip("No [tool.pykissembed] paths configured")
-        with _locked_envelope() as (baseline_file, envelope):
-            threshold = cast("_BaselineConfig", envelope.data).get(
-                "cog_threshold", _DEFAULT_CONFIG["cog_threshold"]
-            )
-            cog_baselines = cast("dict[str, int]", envelope.data.get("cog_baselines", {}))
-            violations: list[str] = []
-            current_cog: dict[str, int] = {}
-            for base_dir in pykissembed_paths:
-                for py_file in _iter_py_files(base_dir):
-                    rel = py_file.relative_to(get_config().root)
                     for name, lineno, cog in _get_cog(py_file):
                         key = f"{rel}:{name}"
                         current_cog[key] = cog
-                        func_baseline = cog_baselines.get(key, threshold)
+                        func_baseline = cog_baselines.get(key, cog_threshold)
                         if cog > func_baseline:
-                            violations.append(
+                            cog_violations.append(
                                 f"{rel}:{lineno} - {name}() cognitive={cog}, exceeds {func_baseline}",
                             )
             if update_baselines:
+                for key, cc in current_cc.items():
+                    if cc > cc_threshold:
+                        cc_baselines[key] = cc
                 for key, cog in current_cog.items():
-                    if cog > threshold:
+                    if cog > cog_threshold:
                         cog_baselines[key] = cog
+                envelope.data["cc_baselines"] = cc_baselines
                 envelope.data["cog_baselines"] = cog_baselines
                 save_envelope(baseline_file, envelope)
-                pytest.skip("Updated COG baselines")
-            if violations:
-                pytest.fail(
-                    f"Cognitive complexity violations (threshold {threshold}):\n"
-                    + "\n".join(violations),
-                    pytrace=False,
-                )
+                pytest.skip("Updated cyclomatic and cognitive complexity baselines")
+            if cc_violations or cog_violations:
+                sections: list[str] = []
+                if cc_violations:
+                    sections.append(
+                        f"Cyclomatic complexity violations (threshold {cc_threshold}):\n"
+                        + "\n".join(cc_violations),
+                    )
+                if cog_violations:
+                    sections.append(
+                        f"Cognitive complexity violations (threshold {cog_threshold}):\n"
+                        + "\n".join(cog_violations),
+                    )
+                pytest.fail("\n\n".join(sections), pytrace=False)
 
 
 class TestMaintainabilityIndex:
