@@ -13,12 +13,12 @@
 #     pykissembed populate-embeddings --provider gemini
 
 [build-system]
-requires = ["hatchling>=1.31.0"]
+requires = ["hatchling>=1.31.0", "hatch-vcs>=0.4"]
 build-backend = "hatchling.build"
 
 [project]
 name = "pykissembed-cloud"
-version = "0.1.20"
+dynamic = ["version"]
 description = "Cloud embedding providers for pykissembed (openai, gemini, qwen via OpenRouter; jina native)."
 readme = "README.md"
 license = "MIT"
@@ -47,6 +47,12 @@ openai = "pykissembed_cloud.providers.openai:OpenAIProvider"
 gemini = "pykissembed_cloud.providers.gemini:GeminiProvider"
 qwen = "pykissembed_cloud.providers.qwen:QwenProvider"
 jina = "pykissembed_cloud.providers.jina:JinaProvider"
+
+[tool.hatch.version]
+source = "vcs"
+
+[tool.hatch.version.raw-options]
+root = ".."
 
 [tool.hatch.build.targets.wheel]
 packages = ["pykissembed_cloud"]

@@ -2,8 +2,10 @@
 
 from __future__ import annotations
 
+from importlib.metadata import version as _version
+
 from pykissembed_local.provider import LocalProvider
 
-__version__ = "0.1.20"
+__version__ = _version("pykissembed-local")
 
 __all__ = ["LocalProvider", "__version__"]

@@ -8,12 +8,12 @@
 # Default mode is "baseline-and-ratchet" — see README.md.
 
 [build-system]
-requires = ["hatchling>=1.31.0"]
+requires = ["hatchling>=1.31.0", "hatch-vcs>=0.4"]
 build-backend = "hatchling.build"
 
 [project]
 name = "pykissembed"
-version = "0.1.20"
+dynamic = ["version"]
 description = "Generic Python code-quality test library: lint, type, complexity, docstring, comment density, and embedding-based similarity (pytest plugin)."
 readme = "README.md"
 license = "MIT"
@@ -89,6 +89,9 @@ dev = [
     "google-genai>=1.0",    # optional gemini provider in similarity/embeddings.py (ty resolution)
     "voyageai>=0.3",        # optional voyage provider in similarity/embeddings.py (ty resolution)
 ]
+
+[tool.hatch.version]
+source = "vcs"
 
 [tool.hatch.build.targets.wheel]
 packages = ["pykissembed", "src/pykissembed"]

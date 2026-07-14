@@ -11,12 +11,12 @@
 #     pytest -m similarity
 
 [build-system]
-requires = ["hatchling>=1.31.0"]
+requires = ["hatchling>=1.31.0", "hatch-vcs>=0.4"]
 build-backend = "hatchling.build"
 
 [project]
 name = "pykissembed-local"
-version = "0.1.20"
+dynamic = ["version"]
 description = "Local sentence-transformers embedding provider for pykissembed (BAAI/bge-small-en-v1.5)."
 readme = "README.md"
 license = "MIT"
@@ -44,6 +44,12 @@ dependencies = [
 
 [project.entry-points."pykissembed.providers"]
 local = "pykissembed_local.provider:LocalProvider"
+
+[tool.hatch.version]
+source = "vcs"
+
+[tool.hatch.version.raw-options]
+root = ".."
 
 [tool.hatch.build.targets.wheel]
 packages = ["pykissembed_local"]

@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
-__version__ = "0.1.20"
+from importlib.metadata import version as _version
+
+__version__ = _version("pykissembed")
 
 __all__ = ["__version__"]

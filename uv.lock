@@ -1661,7 +1661,6 @@ crypto = [
 
 [[package]]
 name = "pykissembed"
-version = "0.1.20"
 source = { editable = "." }
 dependencies = [
     { name = "click" },
@@ -1712,9 +1711,9 @@ requires-dist = [
     { name = "jsonschema", specifier = ">=4.21" },
     { name = "numpy", specifier = ">=1.26" },
     { name = "pandas", specifier = ">=3.0" },
-    { name = "pykissembed", extras = ["cloud"], marker = "extra == 'all'" },
-    { name = "pykissembed", extras = ["local"], marker = "extra == 'all'" },
+    { name = "pykissembed-cloud", marker = "extra == 'all'", editable = "pykissembed_cloud" },
     { name = "pykissembed-cloud", marker = "extra == 'cloud'", editable = "pykissembed_cloud" },
+    { name = "pykissembed-local", marker = "extra == 'all'", editable = "pykissembed_local" },
     { name = "pykissembed-local", marker = "extra == 'local'", editable = "pykissembed_local" },
     { name = "pyright", extras = ["nodejs"], specifier = ">=1.1.411" },
     { name = "pytest", specifier = ">=8.0" },
@@ -1726,7 +1725,7 @@ requires-dist = [
     { name = "tiktoken", specifier = ">=0.7" },
     { name = "typer", specifier = ">=0.21" },
 ]
-provides-extras = ["local", "cloud", "all"]
+provides-extras = ["all", "cloud", "local"]
 
 [package.metadata.requires-dev]
 dev = [
@@ -1741,7 +1740,6 @@ dev = [
 
 [[package]]
 name = "pykissembed-cloud"
-version = "0.1.20"
 source = { editable = "pykissembed_cloud" }
 dependencies = [
     { name = "openai" },
@@ -1768,7 +1766,6 @@ dev = [
 
 [[package]]
 name = "pykissembed-local"
-version = "0.1.20"
 source = { editable = "pykissembed_local" }
 dependencies = [
     { name = "numpy" },
