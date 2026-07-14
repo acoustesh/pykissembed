@@ -26,7 +26,7 @@ from pykissembed.similarity.embeddings import (
 from pykissembed.similarity.exclusions import is_excluded_pair
 from pykissembed.similarity.jina_similarity import Float32Array, build_symmetrized_matrix
 from pykissembed.similarity.pca import fit_pca, transform_embeddings_with_pca
-from pykissembed.similarity.populate_embeddings import get_provider_populator
+from pykissembed.similarity.populate_embeddings import cli_provider_name, get_provider_populator
 from pykissembed.similarity.refactor_index import get_refactor_priority_message
 from pykissembed.similarity.storage import (
     REGISTRY,
@@ -113,19 +113,96 @@ def _load_cached_embeddings(
     return uncached
 
 
-def _skip_missing_embeddings(uncached: list[FunctionInfo], provider: ProviderEntry) -> None:
-    """Skip test if any functions lack cached embeddings."""
-    uncached_names = [f"{f.file}:{f.name}" for f in uncached[:_MAX_SHOWN_UNCACHED]]
-    more_msg = (
-        f"\n  ... and {len(uncached) - _MAX_SHOWN_UNCACHED} more"
-        if len(uncached) > _MAX_SHOWN_UNCACHED
-        else ""
+def _combined_member_gaps(
+    baselines: Baselines,
+    uncached: list[FunctionInfo],
+) -> dict[str, int]:
+    """Count the uncached functions missing each combined member's embeddings.
+
+    Returns
+    -------
+    dict[str, int]
+        CLI provider name -> number of *uncached* functions absent from that
+        member's cache. The raw Jina query/passage caches fold onto one
+        provider, keeping the larger count. Empty when every member is fully
+        cached and combined only needs a local rebuild.
+    """
+    gaps: dict[str, int] = {}
+    for dep_key in REGISTRY.combined_dependencies + REGISTRY.standalone_dependencies:
+        entry = REGISTRY.by_cache_key(dep_key)
+        cache = baselines.get(dep_key)
+        members = cache if is_embedding_cache(cache) else {}
+        missing = sum(1 for func in uncached if getattr(func, entry.hash_field) not in members)
+        if missing:
+            # A Jina variant's query and passage caches fold onto the same CLI
+            # provider; keep the larger miss count instead of double-counting
+            # functions that are absent from both.
+            name = cli_provider_name(dep_key)
+            gaps[name] = max(gaps.get(name, 0), missing)
+    return gaps
+
+
+def _missing_embeddings_advice(
+    provider: ProviderEntry,
+    member_gaps: dict[str, int] | None,
+) -> list[str]:
+    """Build the remediation lines for a missing-embeddings skip.
+
+    Returns
+    -------
+    list[str]
+        Lines saying which populate step fills the gap. For combined,
+        *member_gaps* selects between naming the incomplete member providers
+        and pointing out that a local rebuild is all that is needed.
+    """
+    if member_gaps is None:
+        return [f"Run: pykissembed populate-embeddings --provider {provider.label.lower()}"]
+    if not member_gaps:
+        # Only reachable under --cached-only: with every member cached, a
+        # normal run would have rebuilt combined locally instead of skipping.
+        return [
+            (
+                "All member embeddings are cached; rerun without --cached-only "
+                "to rebuild Combined locally (no API calls needed)."
+            ),
+        ]
+    return [
+        (
+            "Member embeddings missing for those functions "
+            "(fix with: pykissembed populate-embeddings --provider <name>):"
+        ),
+        *(f"  {name}: {count}" for name, count in member_gaps.items()),
+    ]
+
+
+def _skip_missing_embeddings(
+    baselines: Baselines,
+    uncached: list[FunctionInfo],
+    provider: ProviderEntry,
+    *,
+    total: int,
+) -> None:
+    """Skip the test with a diagnosis of which embeddings are missing.
+
+    Reports how many of the *total* checked functions are uncached and how to
+    fill the gap. When every function is uncached, the per-function list is
+    dropped — it would just enumerate the whole codebase. For the combined
+    provider, the diagnosis names the member providers that are actually
+    incomplete instead of blaming the derived combined cache.
+    """
+    count = f"All {total}" if len(uncached) == total else f"{len(uncached)} of {total}"
+    lines = [f"{count} functions lack cached {provider.label} embeddings."]
+    member_gaps = (
+        _combined_member_gaps(baselines, uncached)
+        if provider.cache_key == REGISTRY.combined.cache_key
+        else None
     )
-    pytest.skip(
-        f"{len(uncached)} functions lack cached {provider.label} embeddings.\n"
-        f"Run: pykissembed populate-embeddings --provider "
-        f"{provider.label.lower()}\n  " + "\n  ".join(uncached_names) + more_msg,
-    )
+    lines.extend(_missing_embeddings_advice(provider, member_gaps))
+    if len(uncached) < total:
+        lines.extend(f"  {func.file}:{func.name}" for func in uncached[:_MAX_SHOWN_UNCACHED])
+        if len(uncached) > _MAX_SHOWN_UNCACHED:
+            lines.append(f"  ... and {len(uncached) - _MAX_SHOWN_UNCACHED} more")
+    pytest.skip("\n".join(lines))
 
 
 def _format_pair_violation(func_a: FunctionInfo, func_b: FunctionInfo, similarity: float) -> str:
@@ -344,7 +421,7 @@ def run_provider_similarity_checks(
 
     if uncached:
         if cached_only:
-            _skip_missing_embeddings(uncached, provider)
+            _skip_missing_embeddings(baselines, uncached, provider, total=len(functions))
         else:
             # Auto-populate missing embeddings: base providers via API,
             # combined provider from already-loaded base caches.
@@ -358,7 +435,7 @@ def run_provider_similarity_checks(
             # Reload embeddings after populating
             uncached = _load_cached_embeddings(baselines, functions, provider)
             if uncached:
-                _skip_missing_embeddings(uncached, provider)
+                _skip_missing_embeddings(baselines, uncached, provider, total=len(functions))
 
     # Apply PCA dimensionality reduction using the provider-specific override,
     # the generic baseline setting, or the provider default, in that order.
@@ -528,7 +605,7 @@ def run_jina_similarity_checks(
     uncached = _jina_uncached(functions, provider, query_cache, passage_cache)
     if uncached:
         if cached_only:
-            _skip_missing_embeddings(uncached, provider)
+            _skip_missing_embeddings(baselines, uncached, provider, total=len(functions))
         else:
             populate_fn = get_provider_populator(provider.label.lower())
             if populate_fn is None:
@@ -540,7 +617,7 @@ def run_jina_similarity_checks(
             passage_cache = _extract_embedding_cache(baselines, passage_key)
             uncached = _jina_uncached(functions, provider, query_cache, passage_cache)
             if uncached:
-                _skip_missing_embeddings(uncached, provider)
+                _skip_missing_embeddings(baselines, uncached, provider, total=len(functions))
 
     config = _extract_config(baselines)
     refactor_index_threshold = _extract_refactor_index_threshold(config)

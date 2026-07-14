@@ -429,32 +429,50 @@ _JINA_AST_CFG = _JinaCfg(
 )
 
 
+def cli_provider_name(cache_key: str) -> str:
+    """Map an embedding cache key to its ``populate-embeddings`` CLI provider name.
+
+    Raw Jina cache keys (``…_query_embeddings`` / ``…_passage_embeddings``) fold
+    back onto their populate provider ("jina-text" / "jina-ast"); cosine keys
+    are unaffected since they carry no query/passage suffix.
+
+    Returns
+    -------
+    str
+        Provider name accepted by ``pykissembed populate-embeddings --provider``.
+    """
+    return (
+        cache_key.removesuffix("_embeddings")
+        .removesuffix("_query")
+        .removesuffix("_passage")
+        .replace("_", "-")
+    )
+
+
 def _populate_combined(
     baselines: Baselines,
-    _functions: list[FunctionInfo],
+    functions: list[FunctionInfo],
 ) -> int:
     """Rebuild Combined embeddings from the 10 cosine base providers + Jina.
+
+    The rebuild derives its (text_hash, ast_hash) pairs from
+    ``baselines["function_hashes"]``, which only the CLI refreshes — the pytest
+    auto-populate flow never does. Record the live *functions* first so combined
+    can be built even when ``function_hashes`` starts empty or stale (e.g. a
+    consumer that has only ever populated embeddings through the test run).
 
     Returns
     -------
     int
         Number of combined embeddings rebuilt.
     """
+    _update_function_hashes(baselines, functions)
     for cache_key in REGISTRY.combined_dependencies + REGISTRY.standalone_dependencies:
         raw = baselines.get(cache_key)
         if raw is None or not raw or not is_embedding_cache(raw):
-            # Map a raw Jina cache key (…_query/…_passage_embeddings) back to its
-            # populate provider ("jina-text" / "jina-ast"); cosine keys are
-            # unaffected since they carry no _query/_passage suffix.
-            provider = (
-                cache_key.removesuffix("_embeddings")
-                .removesuffix("_query")
-                .removesuffix("_passage")
-                .replace("_", "-")
-            )
             pytest.skip(
                 f"Cannot build combined embeddings: {cache_key} is missing or invalid. "
-                f"Run: pykissembed populate-embeddings --provider {provider}",
+                f"Run: pykissembed populate-embeddings --provider {cli_provider_name(cache_key)}",
             )
 
     return REGISTRY.rebuild_combined(baselines)

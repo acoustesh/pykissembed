@@ -33,7 +33,12 @@ from pykissembed.similarity.embeddings import (
 )
 from pykissembed.similarity.exclusions import is_excluded_pair
 from pykissembed.similarity.jina_similarity import build_symmetrized_matrix
-from pykissembed.similarity.populate_embeddings import _JINA_TEXT_CFG, _jina_texts
+from pykissembed.similarity.populate_embeddings import (
+    _JINA_TEXT_CFG,
+    _jina_texts,
+    _populate_combined,
+    cli_provider_name,
+)
 from pykissembed.similarity.refactor_index import (
     compute_max_similarities,
     compute_refactor_indices,
@@ -638,6 +643,148 @@ class TestJinaTexts:
         query_texts, passage_texts = _jina_texts([documented, undocumented], _JINA_TEXT_CFG)
         assert query_texts == ["Do the thing.", "def b(): ..."]
         assert passage_texts == [documented.ast_text, undocumented.ast_text]
+
+
+def _combined_member_func(text_hash: str, ast_hash: str) -> FunctionInfo:
+    """Build a minimal FunctionInfo carrying both combined-member hash keys.
+
+    Returns
+    -------
+    FunctionInfo
+        A minimal function keyed by *text_hash* and *ast_hash*.
+    """
+    return FunctionInfo(
+        name="f",
+        file="f.py",
+        start_line=1,
+        end_line=2,
+        loc=1,
+        hash=ast_hash,
+        text="x",
+        text_hash=text_hash,
+    )
+
+
+def _complete_member_baselines(text_hash: str, ast_hash: str) -> dict[str, object]:
+    """Build baselines where every combined member cache covers one function.
+
+    Returns
+    -------
+    dict[str, object]
+        Baselines with empty ``function_hashes`` and all 14 member caches
+        holding a vector under the hash matching each member's hash type.
+    """
+    baselines: dict[str, object] = {"function_hashes": {}}
+    for cache_key in REGISTRY.combined_dependencies + REGISTRY.standalone_dependencies:
+        entry = REGISTRY.by_cache_key(cache_key)
+        content_hash = text_hash if entry.hash_type is HashType.TEXT else ast_hash
+        baselines[cache_key] = {content_hash: [1.0, 0.0]}
+    return baselines
+
+
+class TestPopulateCombined:
+    """Tests for the combined populate step (also used by test auto-population)."""
+
+    @staticmethod
+    def test_builds_from_live_functions_without_prior_function_hashes() -> None:
+        """Combined embeddings are built for the passed functions even when function_hashes starts empty."""
+        baselines = _complete_member_baselines("text1", "ast1")
+        built = _populate_combined(baselines, [_combined_member_func("text1", "ast1")])
+        assert built == 1
+        combined = baselines[REGISTRY.combined.cache_key]
+        assert isinstance(combined, dict)
+        assert "text1" in combined
+
+    @staticmethod
+    def test_records_function_hashes_for_live_functions() -> None:
+        """The live functions' hash pairs are recorded so save_baselines persists them."""
+        baselines = _complete_member_baselines("text1", "ast1")
+        _populate_combined(baselines, [_combined_member_func("text1", "ast1")])
+        assert baselines["function_hashes"] == {
+            "f.py:f:1": {"hash": "ast1", "text_hash": "text1"},
+        }
+
+
+class TestCliProviderName:
+    """Tests for the cache-key to CLI provider-name mapping."""
+
+    @staticmethod
+    def test_maps_cosine_and_raw_jina_cache_keys() -> None:
+        """Cosine keys drop the suffix; raw Jina keys fold onto their variant."""
+        assert cli_provider_name("qwen_text_embeddings") == "qwen-text"
+        assert cli_provider_name("jina_text_query_embeddings") == "jina-text"
+        assert cli_provider_name("jina_ast_passage_embeddings") == "jina-ast"
+        assert cli_provider_name("combined_embeddings") == "combined"
+
+
+class TestSkipMissingEmbeddings:
+    """Tests for the missing-embeddings skip diagnosis."""
+
+    @staticmethod
+    def _skip_message(
+        baselines: dict[str, object],
+        uncached: list[FunctionInfo],
+        provider: ProviderEntry,
+        total: int,
+    ) -> str:
+        """Run the skip helper and capture its message.
+
+        Returns
+        -------
+        str
+            The pytest.skip message raised by the helper.
+        """
+        with pytest.raises(pytest.skip.Exception) as excinfo:
+            similarity_checks._skip_missing_embeddings(  # noqa: SLF001
+                baselines,
+                uncached,
+                provider,
+                total=total,
+            )
+        return str(excinfo.value)
+
+    def test_all_functions_missing_omits_function_list(self) -> None:
+        """When every function is uncached, say so instead of listing names."""
+        uncached = [_combined_member_func(f"t{i}", f"a{i}") for i in range(2)]
+        message = self._skip_message({}, uncached, OPENAI_TEXT_PROVIDER, total=2)
+        assert "All 2 functions lack cached OpenAI-Text embeddings" in message
+        assert "f.py" not in message
+        assert "populate-embeddings --provider openai-text" in message
+
+    def test_partial_missing_lists_functions(self) -> None:
+        """A partial gap names the affected functions."""
+        uncached = [_combined_member_func("t1", "a1")]
+        message = self._skip_message({}, uncached, OPENAI_TEXT_PROVIDER, total=5)
+        assert "1 of 5 functions lack cached OpenAI-Text embeddings" in message
+        assert "f.py:f" in message
+
+    def test_member_gaps_name_the_providers_to_populate(self) -> None:
+        """Combined skips point at the member providers that are missing."""
+        baselines = _complete_member_baselines("t1", "a1")
+        baselines["qwen_text_embeddings"] = {}
+        baselines["jina_ast_query_embeddings"] = {}
+        uncached = [_combined_member_func("t1", "a1")]
+        message = self._skip_message(
+            baselines,
+            uncached,
+            similarity_checks.COMBINED_PROVIDER,
+            total=5,
+        )
+        assert "qwen-text: 1" in message
+        assert "jina-ast: 1" in message
+        assert "populate-embeddings --provider <name>" in message
+
+    def test_complete_members_suggest_rerun_without_cached_only(self) -> None:
+        """With all members cached, the skip explains combined rebuilds locally."""
+        baselines = _complete_member_baselines("t1", "a1")
+        uncached = [_combined_member_func("t1", "a1")]
+        message = self._skip_message(
+            baselines,
+            uncached,
+            similarity_checks.COMBINED_PROVIDER,
+            total=5,
+        )
+        assert "--cached-only" in message
 
 
 class TestRefactorIndex:

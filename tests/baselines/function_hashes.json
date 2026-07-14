@@ -619,7 +619,19 @@
     "hash": "13fb5d947609953280397ff0f01fdfd99c3f64511ec8d09742dcea9aec021301",
     "text_hash": "f5eafc903d3e3078c73470a31aa86b1b9826f6dff67c3c43e16c0c7836fddd3f"
   },
+  "pykissembed/similarity/checks.py:_check_against_others:238": {
+    "hash": "13fb5d947609953280397ff0f01fdfd99c3f64511ec8d09742dcea9aec021301",
+    "text_hash": "f5eafc903d3e3078c73470a31aa86b1b9826f6dff67c3c43e16c0c7836fddd3f"
+  },
+  "pykissembed/similarity/checks.py:_combined_member_gaps:116": {
+    "hash": "ca6716ffbb775e9d4c017ae2a0545055827a625856ef7ddc53d9d9b6c2be57c9",
+    "text_hash": "ddc234fd1950d4618872cad698cf93b452dd706f0b8cedff0d7a12d08c9f2c46"
+  },
   "pykissembed/similarity/checks.py:_extract_config:581": {
+    "hash": "b8bc7ce8d7ea0abf7087559e108b564f6913b6e5890ae846c9bdc3bcbffce1be",
+    "text_hash": "9214b0f99b6d3e8ae4ede3ed80453d03059ea57845d0d289bcfafd2670f356a8"
+  },
+  "pykissembed/similarity/checks.py:_extract_config:658": {
     "hash": "b8bc7ce8d7ea0abf7087559e108b564f6913b6e5890ae846c9bdc3bcbffce1be",
     "text_hash": "9214b0f99b6d3e8ae4ede3ed80453d03059ea57845d0d289bcfafd2670f356a8"
   },
@@ -627,7 +639,15 @@
     "hash": "d2a0f56e40762c61c0121e3d2c3086782b98933be576471973553c62b3630c85",
     "text_hash": "15b54daf64864832fa62bd4521c3e4f89fff9d74df3d04dd6c8008002d734898"
   },
+  "pykissembed/similarity/checks.py:_extract_embedding_cache:743": {
+    "hash": "d2a0f56e40762c61c0121e3d2c3086782b98933be576471973553c62b3630c85",
+    "text_hash": "15b54daf64864832fa62bd4521c3e4f89fff9d74df3d04dd6c8008002d734898"
+  },
   "pykissembed/similarity/checks.py:_extract_excluded_pairs:691": {
+    "hash": "d101b38537677ad08d366e111a7c9f9e2bbc7c2b2824d97a71725096030b4e8a",
+    "text_hash": "0c503df6f489c1273558762dcf682a7180c38788b81dbead0b737aa8335439bd"
+  },
+  "pykissembed/similarity/checks.py:_extract_excluded_pairs:768": {
     "hash": "d101b38537677ad08d366e111a7c9f9e2bbc7c2b2824d97a71725096030b4e8a",
     "text_hash": "0c503df6f489c1273558762dcf682a7180c38788b81dbead0b737aa8335439bd"
   },
@@ -635,7 +655,15 @@
     "hash": "a2a4d993b2cc2a92dd46d7e3ef1669d5e02a335f585ad10a69bf6fbf64c120c1",
     "text_hash": "51fe3de562c166878ef37e51478a8df827e1bc2cacdc039623207242bacf95df"
   },
+  "pykissembed/similarity/checks.py:_extract_pca_variance:678": {
+    "hash": "a2a4d993b2cc2a92dd46d7e3ef1669d5e02a335f585ad10a69bf6fbf64c120c1",
+    "text_hash": "51fe3de562c166878ef37e51478a8df827e1bc2cacdc039623207242bacf95df"
+  },
   "pykissembed/similarity/checks.py:_extract_refactor_index_threshold:626": {
+    "hash": "12cc3af60113ef858c1074cf12b26712cdc7e3446ee5faf9c22064c12bec2435",
+    "text_hash": "1c23b778fa4208aaff50bb173ff28b98a425ca9af5bb23f082903f60f09deac2"
+  },
+  "pykissembed/similarity/checks.py:_extract_refactor_index_threshold:703": {
     "hash": "12cc3af60113ef858c1074cf12b26712cdc7e3446ee5faf9c22064c12bec2435",
     "text_hash": "1c23b778fa4208aaff50bb173ff28b98a425ca9af5bb23f082903f60f09deac2"
   },
@@ -643,7 +671,15 @@
     "hash": "8ba757a7f9a494452e702acaade9f28e7b536eaf49ce6b6c4e6e82a23809773f",
     "text_hash": "a0acf92695835973a16f5009097db9827e200128d179c8972b24b01f063d87db"
   },
+  "pykissembed/similarity/checks.py:_extract_refactor_index_top_n:723": {
+    "hash": "8ba757a7f9a494452e702acaade9f28e7b536eaf49ce6b6c4e6e82a23809773f",
+    "text_hash": "a0acf92695835973a16f5009097db9827e200128d179c8972b24b01f063d87db"
+  },
   "pykissembed/similarity/checks.py:_find_matrix_violations:431": {
+    "hash": "e0427339b2c607d19495f00b6d295e38dae0f1a0a9bb187a1030e179c060e713",
+    "text_hash": "60f680906aa89bbf6ed1386d96eefd94d5344ddcd286a1847d980fee94e9cb2b"
+  },
+  "pykissembed/similarity/checks.py:_find_matrix_violations:508": {
     "hash": "e0427339b2c607d19495f00b6d295e38dae0f1a0a9bb187a1030e179c060e713",
     "text_hash": "60f680906aa89bbf6ed1386d96eefd94d5344ddcd286a1847d980fee94e9cb2b"
   },
@@ -651,7 +687,15 @@
     "hash": "f42d1d7b69f9b7d3a873d5bffad6617f94436f13ae4ba19e8b3580637bb41f89",
     "text_hash": "dfd403004be566c7b5649449e4ca340df3cca0bad9e750058cf779517e52daba"
   },
+  "pykissembed/similarity/checks.py:_find_violations:284": {
+    "hash": "f42d1d7b69f9b7d3a873d5bffad6617f94436f13ae4ba19e8b3580637bb41f89",
+    "text_hash": "dfd403004be566c7b5649449e4ca340df3cca0bad9e750058cf779517e52daba"
+  },
   "pykissembed/similarity/checks.py:_format_neighbor_violation:146": {
+    "hash": "4716126f8a1fb61b568c4bb3e0257e21ef1107b726f87dadc638ecac32f20190",
+    "text_hash": "db52f0fb21ba8f7729d912df5abe810013fd2300b9867b0f083032cdcc9bd454"
+  },
+  "pykissembed/similarity/checks.py:_format_neighbor_violation:223": {
     "hash": "4716126f8a1fb61b568c4bb3e0257e21ef1107b726f87dadc638ecac32f20190",
     "text_hash": "db52f0fb21ba8f7729d912df5abe810013fd2300b9867b0f083032cdcc9bd454"
   },
@@ -659,7 +703,15 @@
     "hash": "faf23f2e915a5893aef5be9bf5c8065a86e1480346323725d399c4f01e0976e1",
     "text_hash": "51a0cf12b09ac84c3ded78d88700e2cff95a058ec70e2ec959b50425dfbcce29"
   },
+  "pykissembed/similarity/checks.py:_format_pair_violation:208": {
+    "hash": "faf23f2e915a5893aef5be9bf5c8065a86e1480346323725d399c4f01e0976e1",
+    "text_hash": "51a0cf12b09ac84c3ded78d88700e2cff95a058ec70e2ec959b50425dfbcce29"
+  },
   "pykissembed/similarity/checks.py:_jina_uncached:409": {
+    "hash": "3fb5c1bd6b9a4bf25de6399f4bb96de840e0c8ec77349186d54c5a7fb666ac4c",
+    "text_hash": "143a8994b56e1b52d1162ff4a10abc2d304fe4dfe44409e6c479ef91d1b36876"
+  },
+  "pykissembed/similarity/checks.py:_jina_uncached:486": {
     "hash": "3fb5c1bd6b9a4bf25de6399f4bb96de840e0c8ec77349186d54c5a7fb666ac4c",
     "text_hash": "143a8994b56e1b52d1162ff4a10abc2d304fe4dfe44409e6c479ef91d1b36876"
   },
@@ -667,7 +719,15 @@
     "hash": "d270fd0c769d130fe8bb688eefa53ef7eafbb3042484957e82014a53ab1783ff",
     "text_hash": "dfa23375c27cb2d0f5fc90630abbb1d748bec08c24ff9fda4ac63903b48427f5"
   },
+  "pykissembed/similarity/checks.py:_missing_embeddings_advice:145": {
+    "hash": "6a10a166497e01044925dd61c114df0dcd21e309bad8fbe8fe9a4c48643e44d7",
+    "text_hash": "cc088452da26268a05f2ac3ae04887fc61dd1adaf26b214eaca495c474ef8dfe"
+  },
   "pykissembed/similarity/checks.py:_report_violations:247": {
+    "hash": "00aa46f00a071f3971a31d64389682e6f9a7fa5a9fc445d0d007f36a58e27d3f",
+    "text_hash": "5fd53020c32f36fd880370326daa057c184a367bf52e663d603d5b58c7747731"
+  },
+  "pykissembed/similarity/checks.py:_report_violations:324": {
     "hash": "00aa46f00a071f3971a31d64389682e6f9a7fa5a9fc445d0d007f36a58e27d3f",
     "text_hash": "5fd53020c32f36fd880370326daa057c184a367bf52e663d603d5b58c7747731"
   },
@@ -675,12 +735,24 @@
     "hash": "4192d6a362fc2a0ed5b5273c1de4c96fb873acd4a7e588c25d3db696c3f15960",
     "text_hash": "d5de1a34393eca7b8e71ba798cb47201229bb022e30ae9194388f586aa621ead"
   },
+  "pykissembed/similarity/checks.py:_skip_missing_embeddings:178": {
+    "hash": "31b85981b8a3752a97f4bb7cf733d8c26b45b71b6add4fcc208f0b185e249aa7",
+    "text_hash": "afeab8fd777058de8eacee9578dc49a75bc1934a41c80fed4781234add5fa34c"
+  },
   "pykissembed/similarity/checks.py:run_jina_similarity_checks:473": {
     "hash": "343feb5d96b7f800a9b1f9517dcbe2234f613c13f56e1c1ccc75944eeb3287ee",
     "text_hash": "269a9faabe673605394ee4f9c3ab8b7a2dbb730fe51bf07a238eccd1f914968d"
   },
+  "pykissembed/similarity/checks.py:run_jina_similarity_checks:550": {
+    "hash": "3632761666307ca66df19dfbf70e84bd34c3baa250c3e16841d81de99c5febd5",
+    "text_hash": "269a9faabe673605394ee4f9c3ab8b7a2dbb730fe51bf07a238eccd1f914968d"
+  },
   "pykissembed/similarity/checks.py:run_provider_similarity_checks:296": {
     "hash": "1fe7226715e2a4df2845c3df52a6be620c7e4af9fb9c506f3f9b7a0ff849792c",
+    "text_hash": "d63d6e558c0621e3ebcbebcf2c687b8697c47b2acb8c1ca85dfe668c54b66940"
+  },
+  "pykissembed/similarity/checks.py:run_provider_similarity_checks:373": {
+    "hash": "1e895e51d6c0a5df4caf03996111f8f476b628edd6766c1c5f9a9fac4a23cd43",
     "text_hash": "d63d6e558c0621e3ebcbebcf2c687b8697c47b2acb8c1ca85dfe668c54b66940"
   },
   "pykissembed/similarity/complexity.py:_cc_complexities_from_source:50": {
@@ -1031,6 +1103,10 @@
     "hash": "8a99139538fd98f4252b027d35f07fbe0e449b0a5895dec5835072af9d7ed8da",
     "text_hash": "bb7f1bc0cfac9f41e1a10c277fc842c6af4ba9cbfbb3297a1820868400a71442"
   },
+  "pykissembed/similarity/populate_embeddings.py:_populate_combined:452": {
+    "hash": "cdc10ea6899a51ba701e04a362822e33de54df7fcaeb4f573f85afccf6e7d72f",
+    "text_hash": "6ea6319679e75fed4bba68a05b2df5ad51bc0318e3da85837708f9ef3b66a27a"
+  },
   "pykissembed/similarity/populate_embeddings.py:_populate_jina:267": {
     "hash": "99b59c92d9d4104e9fedc074f421b6fef4bfb7e4b5470a9f685d6109be812ac3",
     "text_hash": "8abdc15801d02c31a1dbbb2d0a66487bf75620e6c7cc2cc81012d5cea58d6149"
@@ -1043,6 +1119,10 @@
     "hash": "2eac0c76e6489fc2736ee644d53eb75e237b9230015efd3aa5c08bf2bb9d5566",
     "text_hash": "abd2114eda314153c3a171888f6e9fd21c3cdcd183ff4f28ceba2b5d3c415e55"
   },
+  "pykissembed/similarity/populate_embeddings.py:cli_provider_name:432": {
+    "hash": "23cf8f5df484709bb31799b30885033982fe007ea5578ffdf638f917d4bd7910",
+    "text_hash": "bb8c33fb84ce8708dc462c072ee6a469824a811c23e8996534e3b1a4b3de2e81"
+  },
   "pykissembed/similarity/populate_embeddings.py:get_provider_populator:490": {
     "hash": "3e83ee89a473b2a4de0da300879919f33f66b31fb345e68ca0fdde52e1bc661f",
     "text_hash": "b140fac09ff94dcd6ddabf4a9a3aeb65697febdd206c59559349d1b3f38b8d59"
@@ -1051,7 +1131,15 @@
     "hash": "f7380a1294d22186c278e26465bc223d8b48b1ad6880becc5e5551772aee2d5f",
     "text_hash": "c125d2c190608aa0f4711d0ff432321c055af65796842a0844c2c376a85f57b6"
   },
+  "pykissembed/similarity/populate_embeddings.py:main:569": {
+    "hash": "f7380a1294d22186c278e26465bc223d8b48b1ad6880becc5e5551772aee2d5f",
+    "text_hash": "c125d2c190608aa0f4711d0ff432321c055af65796842a0844c2c376a85f57b6"
+  },
   "pykissembed/similarity/populate_embeddings.py:populate_embeddings:518": {
+    "hash": "e22e3df8d03ba43e7de50b0304fb3c80480e1e1472fe9422148b2c3c9b965f67",
+    "text_hash": "1387e981e8bdbd5a34e1b5cd2cb5aa9ba8baf8751e1a1d1e9c912fec3cbe8386"
+  },
+  "pykissembed/similarity/populate_embeddings.py:populate_embeddings:536": {
     "hash": "e22e3df8d03ba43e7de50b0304fb3c80480e1e1472fe9422148b2c3c9b965f67",
     "text_hash": "1387e981e8bdbd5a34e1b5cd2cb5aa9ba8baf8751e1a1d1e9c912fec3cbe8386"
   },
