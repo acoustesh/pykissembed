@@ -85,7 +85,6 @@ dev = [
     "pytest-xdist>=3.6",
     "ruff>=0.15.20",
     "twine>=6.0",
-    "mcp[cli]>=1.28.1,<2.0",  # advisor-mcp server deps (ty resolution)
     "google-genai>=1.0",    # optional gemini provider in similarity/embeddings.py (ty resolution)
     "voyageai>=0.3",        # optional voyage provider in similarity/embeddings.py (ty resolution)
 ]
@@ -160,11 +159,6 @@ exclude_lines = [
 [tool.ruff]
 line-length = 100
 target-version = "py314"
-# advisor-mcp/ is a standalone MCP tool mirrored byte-for-byte from the
-# speechtext repo (own venv/requirements.txt, not part of the pykissembed
-# package or uv workspace) — its hyphenated directory name can't be a valid
-# Python package (N999), so it can't satisfy INP001 by adding __init__.py.
-extend-exclude = ["advisor-mcp"]
 
 [tool.ruff.lint]
 select = ["ALL"]

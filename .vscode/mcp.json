@@ -1,17 +1,6 @@
 {
   "inputs": [],
   "servers": {
-    "openrouter-advisor": {
-      "type": "stdio",
-      "command": "bash",
-      "args": [
-        "${workspaceFolder}/advisor-mcp/start_advisor.sh",
-        "${workspaceFolder}"
-      ],
-      "env": {
-        "ADVISOR_MODEL": "@preset/glm52"
-      }
-    },
     "serena": {
       "type": "stdio",
       "command": "uvx",
