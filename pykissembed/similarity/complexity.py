@@ -113,7 +113,7 @@ def _get_complexities(
     return [(f.name, f.line_start, f.complexity) for f in result.functions]
 
 
-def _load_dir_complexity(
+def _scan_complexity_directory(
     directory: Path,
     prefix: str = "",
     *,
@@ -172,7 +172,7 @@ def load_complexity_maps(directory: Path | None = None) -> tuple[dict[str, int],
         # exists for callers (tests, ad-hoc scripts) that want one
         # directory's map without paying for a full multi-path scan.
         directory = paths[0]
-    return _load_dir_complexity(directory)
+    return _scan_complexity_directory(directory)
 
 
 def load_all_complexity_maps() -> tuple[dict[str, int], dict[str, int]]:
@@ -194,7 +194,7 @@ def load_all_complexity_maps() -> tuple[dict[str, int], dict[str, int]]:
         rel_dir = (
             str(base_dir.relative_to(root)) if base_dir.is_relative_to(root) else str(base_dir)
         )
-        sub_cc, sub_cog = _load_dir_complexity(
+        sub_cc, sub_cog = _scan_complexity_directory(
             base_dir,
             prefix=f"{rel_dir}/",
             recursive=True,
