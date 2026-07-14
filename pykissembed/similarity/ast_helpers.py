@@ -137,31 +137,21 @@ def _comment_lines(lines: list[str], start_line: int, end_line: int) -> list[str
     """
     func_source = "\n".join(lines[start_line - 1 : end_line])
     try:
-        return _tokenized_comment_lines(func_source, lines, start_line)
+        comment_lines: list[str] = []
+        tokens = tokenize.generate_tokens(io.StringIO(func_source).readline)
+        for token in tokens:
+            if token.type == tokenize.COMMENT:
+                # Token coordinates are relative to ``func_source``, so translate
+                # them back to the file before retrieving the original line.
+                actual_line_index = start_line - 1 + token.start[0] - 1
+                if actual_line_index < len(lines):
+                    comment_lines.append(lines[actual_line_index])
     except tokenize.TokenError:
         # Only incomplete token streams need the less precise text fallback;
         # normal tokenization avoids treating hashes inside strings as comments.
         return _fallback_comment_lines(lines, start_line, end_line)
-
-
-def _tokenized_comment_lines(func_source: str, lines: list[str], start_line: int) -> list[str]:
-    """Return comments identified by Python's tokenizer.
-
-    Returns
-    -------
-    list[str]
-        Source lines for tokens classified as comments.
-    """
-    comment_lines: list[str] = []
-    tokens = tokenize.generate_tokens(io.StringIO(func_source).readline)
-    for token in tokens:
-        if token.type == tokenize.COMMENT:
-            # Token coordinates are relative to ``func_source``, so translate
-            # them back to the file before retrieving the original line.
-            actual_line_index = start_line - 1 + token.start[0] - 1
-            if actual_line_index < len(lines):
-                comment_lines.append(lines[actual_line_index])
-    return comment_lines
+    else:
+        return comment_lines
 
 
 def _fallback_comment_lines(lines: list[str], start_line: int, end_line: int) -> list[str]:
