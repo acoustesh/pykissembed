@@ -787,6 +787,145 @@ class TestSkipMissingEmbeddings:
         assert "--cached-only" in message
 
 
+class TestAutoPopulateMissingEmbeddings:
+    """Tests for automatic population when cache-only mode is disabled."""
+
+    @staticmethod
+    def test_provider_workflow_populates_missing_embeddings(
+        monkeypatch: pytest.MonkeyPatch,
+    ) -> None:
+        """A non-Jina provider populates missing cache entries by default."""
+        functions = [
+            FunctionInfo(
+                name=f"function_{index}",
+                file="module.py",
+                start_line=index + 1,
+                end_line=index + 1,
+                loc=1,
+                hash=f"ast-{index}",
+                text="pass",
+                text_hash=f"text-{index}",
+            )
+            for index in range(2)
+        ]
+        baselines: dict[str, object] = {OPENAI_TEXT_PROVIDER.cache_key: {}}
+        requested_providers: list[str] = []
+        populated_counts: list[int] = []
+        saved: list[dict[str, object]] = []
+
+        def fake_populate(
+            target_baselines: dict[str, object],
+            target_functions: list[FunctionInfo],
+        ) -> int:
+            populated_counts.append(len(target_functions))
+            target_baselines[OPENAI_TEXT_PROVIDER.cache_key] = {
+                function.text_hash: [float(index), float(1 - index)]
+                for index, function in enumerate(target_functions)
+            }
+            return len(target_functions)
+
+        def fake_get_provider_populator(name: str):
+            requested_providers.append(name)
+            return fake_populate
+
+        monkeypatch.setattr(similarity_checks, "load_provider_embeddings", lambda *_: None)
+        monkeypatch.setattr(
+            similarity_checks,
+            "get_provider_populator",
+            fake_get_provider_populator,
+        )
+        monkeypatch.setattr(similarity_checks, "save_baselines", saved.append)
+        monkeypatch.setattr(
+            similarity_checks,
+            "fit_pca",
+            lambda *_args, **_kwargs: (None, 0, False),
+        )
+
+        similarity_checks.run_provider_similarity_checks(
+            baselines=baselines,
+            functions=functions,
+            update_baselines=False,
+            cached_only=False,
+            provider=OPENAI_TEXT_PROVIDER,
+            threshold_pair=1.1,
+            threshold_neighbor=1.1,
+            load_complexity_maps_fn=lambda: ({}, {}),
+        )
+
+        assert requested_providers == ["openai-text"]
+        assert populated_counts == [2]
+        assert saved == [baselines]
+        assert all(function.embedding is not None for function in functions)
+
+    @staticmethod
+    def test_jina_workflow_populates_missing_embeddings(
+        monkeypatch: pytest.MonkeyPatch,
+    ) -> None:
+        """A Jina provider populates both missing raw caches by default."""
+        provider = similarity_checks.JINA_TEXT_PROVIDER
+        query_key = f"{provider.name}_query_embeddings"
+        passage_key = f"{provider.name}_passage_embeddings"
+        functions = [
+            FunctionInfo(
+                name=f"function_{index}",
+                file="module.py",
+                start_line=index + 1,
+                end_line=index + 1,
+                loc=1,
+                hash=f"ast-{index}",
+                text="pass",
+                text_hash=f"text-{index}",
+            )
+            for index in range(2)
+        ]
+        baselines: dict[str, object] = {query_key: {}, passage_key: {}}
+        requested_providers: list[str] = []
+        populated_counts: list[int] = []
+        saved: list[dict[str, object]] = []
+
+        def fake_populate(
+            target_baselines: dict[str, object],
+            target_functions: list[FunctionInfo],
+        ) -> int:
+            populated_counts.append(len(target_functions))
+            target_baselines[query_key] = {
+                function.text_hash: [float(index), float(1 - index)]
+                for index, function in enumerate(target_functions)
+            }
+            target_baselines[passage_key] = {
+                function.text_hash: [float(index), float(1 - index)]
+                for index, function in enumerate(target_functions)
+            }
+            return len(target_functions)
+
+        def fake_get_provider_populator(name: str):
+            requested_providers.append(name)
+            return fake_populate
+
+        monkeypatch.setattr(similarity_checks, "load_provider_embeddings", lambda *_: None)
+        monkeypatch.setattr(
+            similarity_checks,
+            "get_provider_populator",
+            fake_get_provider_populator,
+        )
+        monkeypatch.setattr(similarity_checks, "save_baselines", saved.append)
+
+        similarity_checks.run_jina_similarity_checks(
+            baselines=baselines,
+            functions=functions,
+            update_baselines=False,
+            cached_only=False,
+            provider=provider,
+            threshold_pair=1.1,
+            threshold_neighbor=1.1,
+            load_complexity_maps_fn=lambda: ({}, {}),
+        )
+
+        assert requested_providers == ["jina-text"]
+        assert populated_counts == [2]
+        assert saved == [baselines]
+
+
 class TestRefactorIndex:
     """Tests for refactor index computation."""
 

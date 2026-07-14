@@ -1,0 +1,177 @@
+"""Sync pykissembed's recommended VS Code pytest settings into a consumer project.
+
+Used by ``pykissembed init`` (see :mod:`pykissembed.cli`) to add the two
+``python.testing.*`` keys that make VS Code's Test Explorer drive pytest the
+same way ``pykissembed check`` does. ``.vscode/settings.json`` is JSONC
+(comments, trailing commas), which breaks strict :func:`json.loads`, so
+values are inspected via a tolerant parse but mutated via targeted text
+patches that leave the rest of the file (comments, formatting, unrelated
+keys) untouched.
+"""
+
+from __future__ import annotations
+
+import json
+import re
+from typing import TYPE_CHECKING
+
+if TYPE_CHECKING:
+    from pathlib import Path
+
+_DESIRED_SETTINGS: dict[str, object] = {
+    "python.testing.pytestArgs": ["tests", "--pykissembed-all"],
+    "python.testing.pytestEnabled": True,
+}
+
+_DEFAULT_INDENT = "  "
+
+
+def sync_vscode_settings(root: Path, *, force: bool) -> list[str]:
+    """Create or update ``.vscode/settings.json`` with pykissembed's pytest settings.
+
+    Parameters
+    ----------
+    root
+        Project root (the directory containing, or to contain, ``.vscode/``).
+    force
+        If ``True``, overwrite keys that already exist with a conflicting
+        value. If ``False``, conflicting keys are left untouched.
+
+    Returns
+    -------
+    list[str]
+        One human-readable status message per key (or a single warning if
+        the existing file could not be parsed).
+    """
+    vscode_dir = root / ".vscode"
+    settings_path = vscode_dir / "settings.json"
+
+    if not settings_path.exists():
+        vscode_dir.mkdir(exist_ok=True)
+        settings_path.write_text(_render_fresh_file())
+        return [f"Added {key} to .vscode/settings.json." for key in _DESIRED_SETTINGS]
+
+    text = settings_path.read_text()
+    current = _tolerant_parse(text)
+    if current is None:
+        return [
+            "Could not parse .vscode/settings.json as JSON/JSONC; leaving it "
+            "untouched. Add manually: "
+            + ", ".join(f"{k}={json.dumps(v)}" for k, v in _DESIRED_SETTINGS.items()),
+        ]
+
+    messages: list[str] = []
+    for key, desired in _DESIRED_SETTINGS.items():
+        if key in current and current[key] == desired:
+            messages.append(f"{key} already in sync in .vscode/settings.json.")
+            continue
+        if key in current and not force:
+            messages.append(
+                f"{key} already set to a different value in .vscode/settings.json. "
+                "Use --force to overwrite.",
+            )
+            continue
+        text = _patch_key(text, key, desired)
+        verb = "Updated" if key in current else "Added"
+        suffix = " (--force)." if key in current and force else "."
+        messages.append(f"{verb} {key} in .vscode/settings.json{suffix}")
+
+    settings_path.write_text(text)
+    return messages
+
+
+def _render_fresh_file() -> str:
+    """Render a brand-new ``settings.json`` containing only the desired keys.
+
+    Returns
+    -------
+    str
+        A minimal JSON document (with a trailing newline) holding exactly
+        :data:`_DESIRED_SETTINGS`, ready to write to a new file.
+    """
+    lines = [
+        f'{_DEFAULT_INDENT}"{key}": {json.dumps(value)}' for key, value in _DESIRED_SETTINGS.items()
+    ]
+    return "{\n" + ",\n".join(lines) + "\n}\n"
+
+
+def _tolerant_parse(text: str) -> dict[str, object] | None:
+    """Strip JSONC comments/trailing commas and parse for inspection only.
+
+    The stripped text is only used to read current key values; mutations
+    are applied to the original ``text`` via :func:`_patch_key` so that
+    comments and formatting elsewhere in the file survive untouched.
+
+    Returns
+    -------
+    dict[str, object] | None
+        The parsed top-level object, or ``None`` if the file isn't valid
+        JSON/JSONC (or isn't an object) even after stripping.
+    """
+    no_line_comments = re.sub(r"//[^\n]*", "", text)
+    no_block_comments = re.sub(r"/\*.*?\*/", "", no_line_comments, flags=re.DOTALL)
+    no_trailing_commas = re.sub(r",(\s*[}\]])", r"\1", no_block_comments)
+    try:
+        data = json.loads(no_trailing_commas)
+    except json.JSONDecodeError:
+        return None
+    if not isinstance(data, dict):
+        return None
+    return data
+
+
+def _patch_key(text: str, key: str, value: object) -> str:
+    """Replace an existing ``key``'s value, or insert ``key`` after the opening brace.
+
+    Returns
+    -------
+    str
+        ``text`` with ``key`` set to ``value``.
+    """
+    escaped_key = re.escape(key)
+    value_text = json.dumps(value)
+    # _DESIRED_SETTINGS values are always a flat string list, bool, or number
+    # (never nested), so matching up to the first unmatched `]`/literal
+    # boundary is enough -- no need for a full JSON-aware value scanner.
+    existing_pattern = re.compile(
+        rf'"{escaped_key}"\s*:\s*(\[[^\]]*\]|"[^"]*"|true|false|-?\d+(?:\.\d+)?)'
+    )
+    if existing_pattern.search(text):
+        return existing_pattern.sub(f'"{key}": {value_text}', text, count=1)
+    return _insert_key(text, key, value_text)
+
+
+def _insert_key(text: str, key: str, value_text: str) -> str:
+    """Insert a new ``key: value_text`` property right after the opening ``{``.
+
+    Returns
+    -------
+    str
+        ``text`` with the new property inserted, or ``text`` unchanged if
+        it has no top-level ``{`` at all.
+    """
+    brace_match = re.search(r"\{", text)
+    if brace_match is None:
+        return text
+    insert_at = brace_match.end()
+    indent = _detect_indent(text)
+    # A comma is only needed when other properties still follow the
+    # insertion point; inserting into an otherwise-empty `{}` must not
+    # leave a dangling trailing comma before the closing brace.
+    has_more_content = bool(text[insert_at:].strip().rstrip("}").strip())
+    trailing_comma = "," if has_more_content else ""
+    new_property = f'\n{indent}"{key}": {value_text}{trailing_comma}'
+    return text[:insert_at] + new_property + text[insert_at:]
+
+
+def _detect_indent(text: str) -> str:
+    """Infer the file's indentation unit from its first indented line.
+
+    Returns
+    -------
+    str
+        The whitespace prefix of the first indented line, or two spaces
+        (VS Code's default) if the file has no indented lines at all.
+    """
+    match = re.search(r"\n([ \t]+)\S", text)
+    return match.group(1) if match else _DEFAULT_INDENT

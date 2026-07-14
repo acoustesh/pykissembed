@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import tomllib
 from textwrap import dedent
 from typing import TYPE_CHECKING
 
@@ -85,7 +86,9 @@ class TestInit:
         )
         monkeypatch.chdir(tmp_path)
         result = runner.invoke(app, ["init"])
-        assert result.exit_code != 0
+        # The pyproject.toml sub-step is skipped (not a fatal error) since the
+        # independent .vscode/settings.json sync still runs and succeeds.
+        assert result.exit_code == 0
         # Original block preserved
         text = pyproject.read_text()
         assert 'paths = ["lib"]' in text
@@ -113,6 +116,124 @@ class TestInit:
         text = pyproject.read_text()
         # Auto-detect: no src/ dir in the temp project → falls back to "."
         assert 'paths = ["."]' in text
+
+    @staticmethod
+    def test_init_with_force_overwrites_full_block(
+        tmp_path: Path,
+        monkeypatch: pytest.MonkeyPatch,
+    ) -> None:
+        r"""Init --force on a block that already has paths/mode/dirs stays valid TOML.
+
+        Regression test: the old ``[^\[]*`` substitution regex stopped at the
+        first ``[`` character anywhere in the block -- including the one
+        inside ``paths = ["."]`` -- leaving a mangled leftover fragment
+        (e.g. a stray ``["."]`` line) appended after the new block.
+        """
+        pyproject = tmp_path / "pyproject.toml"
+        pyproject.write_text(
+            dedent(
+                """
+                [project]
+                name = "demo"
+                version = "0.1.0"
+
+                [tool.pykissembed]
+                paths = ["."]
+                mode = "ratchet"
+                baseline_dir = "tests/baselines"
+                cache_dir = "tests/.pykissembed_cache"
+                """,
+            ),
+            encoding="utf-8",
+        )
+        monkeypatch.chdir(tmp_path)
+        result = runner.invoke(app, ["init", "--force"])
+        assert result.exit_code == 0
+        text = pyproject.read_text()
+        parsed = tomllib.loads(text)
+        assert parsed["tool"]["pykissembed"]["paths"] == ["."]
+        assert text.count("[tool.pykissembed]") == 1
+        # The old buggy regex left a dangling `["."]` fragment behind, which
+        # TOML happily (re-)parses as a bogus top-level table named ".".
+        assert set(parsed.keys()) == {"project", "tool"}
+
+    @staticmethod
+    def test_init_creates_vscode_settings(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+        """Init also creates .vscode/settings.json with pykissembed's pytest settings."""
+        pyproject = tmp_path / "pyproject.toml"
+        pyproject.write_text(
+            dedent(
+                """
+                [project]
+                name = "demo"
+                version = "0.1.0"
+                """,
+            ),
+            encoding="utf-8",
+        )
+        monkeypatch.chdir(tmp_path)
+        result = runner.invoke(app, ["init"])
+        assert result.exit_code == 0
+        settings = (tmp_path / ".vscode" / "settings.json").read_text()
+        assert '"python.testing.pytestArgs"' in settings
+        assert '"--pykissembed-all"' in settings
+        assert '"--cached-only"' not in settings
+        assert '"python.testing.pytestEnabled": true' in settings
+
+    @staticmethod
+    def test_init_vscode_settings_idempotent(
+        tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """Running init twice in a row is a no-op the second time."""
+        pyproject = tmp_path / "pyproject.toml"
+        pyproject.write_text(
+            dedent(
+                """
+                [project]
+                name = "demo"
+                version = "0.1.0"
+                """,
+            ),
+            encoding="utf-8",
+        )
+        monkeypatch.chdir(tmp_path)
+        runner.invoke(app, ["init"])
+        settings_path = tmp_path / ".vscode" / "settings.json"
+        first_run = settings_path.read_text()
+
+        result = runner.invoke(app, ["init"])
+
+        assert result.exit_code == 0
+        assert settings_path.read_text() == first_run
+
+    @staticmethod
+    def test_init_syncs_vscode_settings_without_force_on_existing_block(
+        tmp_path: Path,
+        monkeypatch: pytest.MonkeyPatch,
+    ) -> None:
+        """An already-onboarded project still gets .vscode/settings.json synced."""
+        pyproject = tmp_path / "pyproject.toml"
+        pyproject.write_text(
+            dedent(
+                """
+                [project]
+                name = "demo"
+                version = "0.1.0"
+
+                [tool.pykissembed]
+                paths = ["lib"]
+                """,
+            ),
+            encoding="utf-8",
+        )
+        monkeypatch.chdir(tmp_path)
+        result = runner.invoke(app, ["init"])
+        assert result.exit_code == 0
+        # pyproject.toml block untouched (no --force)
+        assert 'paths = ["lib"]' in pyproject.read_text()
+        # .vscode/settings.json was still synced
+        settings = (tmp_path / ".vscode" / "settings.json").read_text()
+        assert '"python.testing.pytestEnabled": true' in settings
 
 
 class TestAutoDetectPaths:

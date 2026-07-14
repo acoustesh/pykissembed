@@ -244,6 +244,51 @@ class TestIncludeNotebooks:
         assert config.include_notebooks is True
 
 
+class TestCachedOnly:
+    """Tests for the cached_only config flag."""
+
+    @staticmethod
+    def test_default_is_false(
+        tmp_path: Path,
+        monkeypatch: pytest.MonkeyPatch,
+    ) -> None:
+        """cached_only defaults to False so embeddings are auto-populated."""
+        (tmp_path / "pyproject.toml").write_text(
+            dedent(
+                """
+                [tool.pykissembed]
+                paths = ["src"]
+                """,
+            ),
+            encoding="utf-8",
+        )
+        (tmp_path / "src").mkdir()
+        monkeypatch.chdir(tmp_path)
+        config = load_config()
+        assert config.cached_only is False
+
+    @staticmethod
+    def test_explicit_true_is_loaded(
+        tmp_path: Path,
+        monkeypatch: pytest.MonkeyPatch,
+    ) -> None:
+        """cached_only = true enables cache-only similarity checks."""
+        (tmp_path / "pyproject.toml").write_text(
+            dedent(
+                """
+                [tool.pykissembed]
+                paths = ["src"]
+                cached_only = true
+                """,
+            ),
+            encoding="utf-8",
+        )
+        (tmp_path / "src").mkdir()
+        monkeypatch.chdir(tmp_path)
+        config = load_config()
+        assert config.cached_only is True
+
+
 class TestIterPyFiles:
     """Tests for the iter_py_files helper in paths.py."""
 

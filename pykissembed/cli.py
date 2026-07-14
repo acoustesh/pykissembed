@@ -7,7 +7,8 @@ Subcommands
 - ``pykissembed.providers list`` — show installed embedding providers
 - ``pykissembed populate-embeddings --provider NAME``
 - ``pykissembed type-review --json REPORT.json``
-- ``pykissembed init`` — (opt-in) scaffold a ``[tool.pykissembed]`` block
+- ``pykissembed init`` — (opt-in) scaffold a ``[tool.pykissembed]`` block and
+  sync VS Code pytest settings
 """
 
 from __future__ import annotations
@@ -31,6 +32,7 @@ from rich.table import Table
 from pykissembed import __version__
 from pykissembed.baselines_engine import ratchet
 from pykissembed.config import get_config, load_config
+from pykissembed.vscode_settings import sync_vscode_settings
 
 app = typer.Typer(
     name="pykissembed",
@@ -359,20 +361,26 @@ def init(
     force: bool = typer.Option(
         False,  # noqa: FBT003 — Typer's Option(default, *param_decls) requires this positional
         "--force",
-        help="Overwrite existing [tool.pykissembed] block.",
+        help=(
+            "Overwrite an existing [tool.pykissembed] block and any "
+            "conflicting .vscode/settings.json pytest values."
+        ),
     ),
 ) -> None:
-    """Scaffold a ``[tool.pykissembed]`` block in ``pyproject.toml``.
+    """Scaffold ``[tool.pykissembed]`` in ``pyproject.toml`` and sync VS Code pytest settings.
 
     Auto-detects source directories from the project layout (``src/``,
-    ``[tool.setuptools]`` packages, or ``.`` as fallback). Use ``--force``
-    to overwrite an existing block.
+    ``[tool.setuptools]`` packages, or ``.`` as fallback) for the
+    ``pyproject.toml`` block. Independently, adds
+    ``python.testing.pytestArgs``/``pytestEnabled`` to
+    ``.vscode/settings.json`` so VS Code's Test Explorer runs pykissembed's
+    checks. Each step is idempotent and only needs ``--force`` to overwrite
+    a value that already differs from pykissembed's own.
 
     Raises
     ------
     typer.Exit
-        If the project file is missing or an existing configuration would be
-        overwritten without ``--force``.
+        If ``pyproject.toml`` is missing entirely.
     """
     config = get_config()
     pyproject = config.root / "pyproject.toml"
@@ -382,26 +390,30 @@ def init(
     text = pyproject.read_text()
     if "[tool.pykissembed]" in text and not force:
         typer.echo("[tool.pykissembed] already present. Use --force to overwrite.")
-        raise typer.Exit(1)
-
-    # Auto-detect source directories from the project layout
-    detected_paths = _auto_detect_paths(config.root, text)
-    paths_str = ", ".join(f'"{p}"' for p in detected_paths)
-
-    block = (
-        "\n[tool.pykissembed]\n"
-        f"paths = [{paths_str}]\n"
-        'mode = "ratchet"\n'
-        'baseline_dir = "tests/baselines"\n'
-        'cache_dir = "tests/.pykissembed_cache"\n'
-    )
-    if "[tool.pykissembed]" in text:
-        # Replace the existing block (very simple; assumes our own format)
-        text = re.sub(r"\[tool\.pykissembed\][^\[]*", block.strip() + "\n", text, count=1)
     else:
-        text = text.rstrip() + "\n" + block
-    pyproject.write_text(text)
-    typer.echo(f"Added [tool.pykissembed] to {pyproject} (paths={detected_paths}).")
+        # Auto-detect source directories from the project layout
+        detected_paths = _auto_detect_paths(config.root, text)
+        paths_str = ", ".join(f'"{p}"' for p in detected_paths)
+
+        block = (
+            "\n[tool.pykissembed]\n"
+            f"paths = [{paths_str}]\n"
+            'mode = "ratchet"\n'
+            'baseline_dir = "tests/baselines"\n'
+            'cache_dir = "tests/.pykissembed_cache"\n'
+        )
+        if "[tool.pykissembed]" in text:
+            # Replace the existing block (very simple; assumes our own format).
+            # Stop only at the next TOML table header (a "[" at line start),
+            # not at any "[" -- values like `paths = ["."]` contain one too.
+            text = re.sub(r"\[tool\.pykissembed\][\s\S]*?(?=\n\[|\Z)", block.strip() + "\n", text, count=1)
+        else:
+            text = text.rstrip() + "\n" + block
+        pyproject.write_text(text)
+        typer.echo(f"Added [tool.pykissembed] to {pyproject} (paths={detected_paths}).")
+
+    for message in sync_vscode_settings(config.root, force=force):
+        typer.echo(message)
 
 
 def _auto_detect_paths(root: Path, pyproject_text: str) -> list[str]:

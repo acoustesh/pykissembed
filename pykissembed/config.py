@@ -35,6 +35,10 @@ class PyqtestConfig:
     include_notebooks
         Whether to apply ruff and similarity checks to ``.ipynb`` files.
         Defaults to ``False`` — notebooks are typically exploratory.
+    cached_only
+        Whether similarity checks should use only cached embeddings. Defaults
+        to ``False`` — missing embeddings are populated through configured
+        providers.
     wrapper_max_call_sites
         Maximum project-wide static call-site count allowed for an exact
         pass-through wrapper. Defaults to ``1``.
@@ -52,6 +56,7 @@ class PyqtestConfig:
     baseline_dir: str = "tests/baselines"
     cache_dir: str = "tests/.pykissembed_cache"
     include_notebooks: bool = False
+    cached_only: bool = False
     wrapper_max_call_sites: int = 1
     wrapper_exclude: list[str] = field(default_factory=list)
     wrapper_exempt_decorators: list[str] = field(default_factory=list)
@@ -221,6 +226,8 @@ def load_config(start: Path | None = None) -> PyqtestConfig:
     cache_dir = str(section.get("cache_dir", "tests/.pykissembed_cache"))
     include_notebooks_raw = section.get("include_notebooks", False)
     include_notebooks = bool(include_notebooks_raw)
+    cached_only_raw = section.get("cached_only", False)
+    cached_only = bool(cached_only_raw)
     wrapper_max_call_sites = _require_nonnegative_int(
         section.get("wrapper_max_call_sites", 1),
         key="wrapper_max_call_sites",
@@ -240,6 +247,7 @@ def load_config(start: Path | None = None) -> PyqtestConfig:
         baseline_dir=baseline_dir,
         cache_dir=cache_dir,
         include_notebooks=include_notebooks,
+        cached_only=cached_only,
         wrapper_max_call_sites=wrapper_max_call_sites,
         wrapper_exclude=wrapper_exclude,
         wrapper_exempt_decorators=wrapper_exempt_decorators,
@@ -270,6 +278,7 @@ def _auto_detect(root: Path) -> PyqtestConfig:
         baseline_dir="tests/baselines",
         cache_dir="tests/.pykissembed_cache",
         include_notebooks=False,
+        cached_only=False,
         root=root,
     )
 

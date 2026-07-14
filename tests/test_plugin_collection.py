@@ -365,6 +365,58 @@ class TestSubprocessCollection:
     """
 
     @staticmethod
+    @pytest.mark.parametrize(
+        ("cached_only_setting", "pytest_args", "expected"),
+        [
+            ("", [], "False"),
+            ("cached_only = true\n", [], "True"),
+            ("", ["--cached-only"], "True"),
+        ],
+        ids=["default-populates", "toml-cache-only", "cli-cache-only"],
+    )
+    def test_cached_only_fixture_uses_toml_or_cli_flag(
+        tmp_path: Path,
+        cached_only_setting: str,
+        pytest_args: list[str],
+        expected: str,
+    ) -> None:
+        """A consumer defaults to population unless TOML or CLI opts out."""
+        consumer = tmp_path / "consumer"
+        (consumer / "tests").mkdir(parents=True)
+        (consumer / "pyproject.toml").write_text(
+            f'[tool.pykissembed]\npaths = ["."]\n{cached_only_setting}',
+            encoding="utf-8",
+        )
+        (consumer / "tests" / "test_cache_mode.py").write_text(
+            f"def test_effective_cache_mode(cached_only):\n    assert cached_only is {expected}\n",
+            encoding="utf-8",
+        )
+
+        repo = Path(__file__).resolve().parents[1]
+        env = {**os.environ, "PYTHONPATH": str(repo)}
+        # S603: test-only argv uses sys.executable, pytest literals, and the
+        # literal parameterized flags above; no shell is involved.
+        result = subprocess.run(  # noqa: S603
+            [
+                sys.executable,
+                "-m",
+                "pytest",
+                "tests/test_cache_mode.py",
+                "-q",
+                *pytest_args,
+            ],
+            cwd=consumer,
+            env=env,
+            capture_output=True,
+            text=True,
+            check=False,
+        )
+
+        assert result.returncode == 0, (
+            f"consumer cache-mode test failed:\nstdout:\n{result.stdout}\nstderr:\n{result.stderr}"
+        )
+
+    @staticmethod
     def test_specific_nodeid_only_collects_that_test(
         tmp_path: Path,
     ) -> None:

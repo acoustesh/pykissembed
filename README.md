@@ -39,7 +39,7 @@ pytest -m lint         # lint + type-check gate
 pytest -m complexity   # CC + COG + MI + line counts + docstrings
 pytest -m density      # comment density
 pytest -m docstring_format  # NumPy docstring format (ruff D rules)
-pytest -m similarity    # embedding-based near-duplicate detection
+pytest -m similarity    # embedding-based near-duplicate detection; populates missing embeddings
 ```
 
 > **A bare `pytest` with no flag or marker does NOT run pykissembed's
@@ -82,6 +82,12 @@ automatic — bare `pytest` collects nothing from pykissembed. Pick one:
   only runs that one test.
 - Anything else (bare `pytest`, `-k` alone, `--deselect` alone) injects
   nothing from pykissembed, so your own tests run untouched.
+
+`pykissembed init` configures VS Code's Test Explorer with `tests` and
+`--pykissembed-all`, but does not add `--cached-only`. Therefore, a newly
+initialized consumer project auto-populates missing embeddings through its
+configured providers when it runs similarity checks. Existing VS Code pytest
+arguments are preserved until you run `pykissembed init --force`.
 
 The plugin's `pytest_collect_file` hook
 
@@ -131,6 +137,7 @@ The `[tool.pykissembed]` config reference:
 | `baseline_dir` | `"tests/baselines"` | Where committed JSON envelopes live |
 | `cache_dir` | `"tests/.pykissembed_cache"` | Where embedding caches live (gitignored) |
 | `include_notebooks` | `false` | If true, run ruff/similarity against `.ipynb` files |
+| `cached_only` | `false` | If true, skip similarity checks with missing embeddings instead of calling providers |
 | `wrapper_max_call_sites` | `1` | Maximum static call sites allowed for an exact pass-through wrapper |
 | `wrapper_exclude` | `[]` | Glob patterns for intentional wrappers (`relative/path.py:QualifiedName`) |
 | `wrapper_exempt_decorators` | `[]` | Glob patterns for decorators that mark intentional wrappers |
@@ -203,12 +210,14 @@ Each provider detects:
 
 ### Prerequisites
 
-Similarity requires embedding caches. Install an extra and populate the cache:
+Similarity uses cached embeddings when they are available. By default, a
+similarity test populates missing embeddings through its configured provider,
+then saves them for later runs. Install the extra and configure the provider
+you intend to use:
 
 ```bash
 # Local — no API key, runs offline once the model is downloaded
 pip install "pykissembed[local]"
-pykissembed populate-embeddings --provider local
 
 # Cloud — requires API keys
 pip install "pykissembed[cloud]"
@@ -216,6 +225,9 @@ export OPENAI_API_KEY=sk-...
 export OPENROUTER_API_KEY=sk-or-...
 export VOYAGE_API_KEY=pa-...
 export GOOGLE_API_KEY=...
+
+# Optional: pre-warm a cache before running similarity checks
+pykissembed populate-embeddings --provider local
 pykissembed populate-embeddings --provider openai-text
 pykissembed populate-embeddings --provider openai-ast
 # ... or populate all at once:
@@ -225,15 +237,27 @@ python -m pykissembed.similarity.populate_embeddings
 ### Running similarity tests
 
 ```bash
-# Run all similarity tests (uses cached embeddings; skips if missing)
+# Run all similarity tests (auto-populates missing embeddings through configured providers)
 pytest -m similarity
 
 # Use only cached embeddings — skip if any are missing (no API calls)
 pytest -m similarity --cached-only
 
-# Update baselines (auto-populates missing embeddings via API)
+# Update baselines (also auto-populates missing embeddings by default)
 pytest -m similarity --update-baselines
 ```
+
+For a persistent offline or cost-controlled workflow, set cache-only mode in
+your consumer `pyproject.toml`:
+
+```toml
+[tool.pykissembed]
+cached_only = true
+```
+
+The TOML setting and `--cached-only` both prevent provider/API calls. If an
+embedding is absent in either mode, the affected similarity check is skipped
+with a command showing how to pre-warm the cache.
 
 ### Similarity infrastructure
 
@@ -341,17 +365,23 @@ uv run pykissembed --version    # should show 0.1.4
 > version, delete `uv.lock` and run `uv lock` fresh. This forces a full
 > re-resolution from TestPyPI.
 
-After installing, populate the cache and run the suite:
+After installing, configure a provider and run the suite. Missing embeddings
+are populated automatically; the explicit population commands below are an
+optional pre-warming step:
 
 ```bash
 # Local — no API key, runs offline once the model is downloaded
-pykissembed populate-embeddings --provider local
 pytest -m similarity
+
+# Optional: pre-warm the local cache before running the suite
+pykissembed populate-embeddings --provider local
 
 # Cloud — one OpenRouter key enables openai/gemini/qwen; jina uses its own key
 export OPENROUTER_API_KEY=sk-or-...
 export JINA_API_KEY=jina_...
 # ... or drop the keys into a .env file at the project root
+
+# Optional: pre-warm cloud caches before running the suite
 pykissembed populate-embeddings --provider openai
 pykissembed populate-embeddings --provider gemini
 pykissembed populate-embeddings --provider qwen
@@ -373,7 +403,7 @@ pykissembed ratchet                        # lower baselines; refuse to raise
 pykissembed.providers list                 # show installed embedding providers
 pykissembed populate-embeddings --provider NAME
 pykissembed type-review --json REPORT.json # iterative type-fix helper
-pykissembed init                           # (opt-in) scaffold [tool.pykissembed]
+pykissembed init                           # (opt-in) scaffold [tool.pykissembed] and sync .vscode/settings.json
 ```
 
 ---

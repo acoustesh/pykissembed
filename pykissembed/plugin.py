@@ -23,6 +23,7 @@ from pathlib import Path
 import pytest
 from _pytest.stash import StashKey
 
+from pykissembed.config import get_config
 from pykissembed.paths import resolve_paths
 
 # Modules inside pykissembed/checks/ that contain test classes/functions.
@@ -83,14 +84,15 @@ def update_baselines(request: pytest.FixtureRequest) -> bool:
 
 @pytest.fixture
 def cached_only(request: pytest.FixtureRequest) -> bool:
-    """Fixture returning the ``--cached-only`` flag value.
+    """Fixture returning the effective cache-only setting.
 
     Returns
     -------
     bool
-        ``True`` if ``--cached-only`` was passed on the command line.
+        ``True`` when ``--cached-only`` was passed on the command line or
+        ``[tool.pykissembed] cached_only`` is enabled in ``pyproject.toml``.
     """
-    return bool(request.config.getoption("--cached-only"))
+    return bool(request.config.getoption("--cached-only") or get_config().cached_only)
 
 
 @pytest.fixture(scope="session")
