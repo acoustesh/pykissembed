@@ -181,15 +181,15 @@ class TestLegacyCachedOnlyArgs:
         )
         return settings_path
 
-    def test_legacy_args_are_preserved_without_force(self, tmp_path: Path) -> None:
-        """Normal sync never changes a consumer's established cache-only mode."""
+    def test_legacy_generated_args_are_migrated_without_force(self, tmp_path: Path) -> None:
+        """Normal sync removes the legacy generated cache-only argument."""
         settings_path = self._write_legacy_settings(tmp_path)
-        original = settings_path.read_text()
 
         messages = sync_vscode_settings(tmp_path, force=False)
 
-        assert settings_path.read_text() == original
-        assert any("pytestArgs" in message and "--force" in message for message in messages)
+        data = _tolerant_load(settings_path.read_text())
+        assert data["python.testing.pytestArgs"] == _DESIRED_ARGS
+        assert any("Migrated" in message and "cached-only" in message for message in messages)
 
     def test_force_replaces_legacy_args_only(self, tmp_path: Path) -> None:
         """Forced sync migrates pytest args while preserving unrelated settings."""

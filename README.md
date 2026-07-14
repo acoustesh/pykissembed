@@ -86,8 +86,10 @@ automatic — bare `pytest` collects nothing from pykissembed. Pick one:
 `pykissembed init` configures VS Code's Test Explorer with `tests` and
 `--pykissembed-all`, but does not add `--cached-only`. Therefore, a newly
 initialized consumer project auto-populates missing embeddings through its
-configured providers when it runs similarity checks. Existing VS Code pytest
-arguments are preserved until you run `pykissembed init --force`.
+configured providers when it runs similarity checks. If an older
+`pykissembed init` generated `--cached-only`, a subsequent `pykissembed init`
+automatically removes that stale flag; unrelated custom pytest arguments are
+left untouched.
 
 The plugin's `pytest_collect_file` hook
 

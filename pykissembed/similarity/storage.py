@@ -357,9 +357,7 @@ class EmbeddingRegistry:
     def base_providers(self) -> tuple[ProviderEntry, ...]:
         """The single-vector cosine providers (non-combined, non-standalone)."""
         return tuple(
-            p
-            for p in self._providers
-            if p.cache_key != self._combined_key and not p.standalone
+            p for p in self._providers if p.cache_key != self._combined_key and not p.standalone
         )
 
     @property
@@ -765,24 +763,25 @@ def load_provider_embeddings(
     -------
         Mapping of hash to embedding vector for the requested provider.
     """
-    # Already loaded?
-    if baselines.get(cache_key):
-        return _as_embedding_cache(baselines[cache_key], context=cache_key)
+    with _SAVE_LOCK:
+        # Already loaded?
+        if baselines.get(cache_key):
+            return _as_embedding_cache(baselines[cache_key], context=cache_key)
 
-    # Combined requires the 10 cosine base providers plus the 4 Jina raw caches
-    if cache_key == REGISTRY.combined.cache_key:
-        for dep_key in REGISTRY.combined_dependencies + REGISTRY.standalone_dependencies:
-            if dep_key not in baselines or not baselines[dep_key]:
-                file_path = REGISTRY.files.get(dep_key)
-                if file_path:
-                    baselines[dep_key] = _load_compressed_embeddings(file_path)
+        # Combined requires the 10 cosine base providers plus the 4 Jina raw caches
+        if cache_key == REGISTRY.combined.cache_key:
+            for dep_key in REGISTRY.combined_dependencies + REGISTRY.standalone_dependencies:
+                if dep_key not in baselines or not baselines[dep_key]:
+                    file_path = REGISTRY.files.get(dep_key)
+                    if file_path:
+                        baselines[dep_key] = _load_compressed_embeddings(file_path)
 
-    # Load the requested provider
-    file_path = REGISTRY.files.get(cache_key)
-    if file_path:
-        baselines[cache_key] = _load_compressed_embeddings(file_path)
+        # Load the requested provider
+        file_path = REGISTRY.files.get(cache_key)
+        if file_path:
+            baselines[cache_key] = _load_compressed_embeddings(file_path)
 
-    return _as_embedding_cache(baselines.get(cache_key, {}), context=cache_key)
+        return _as_embedding_cache(baselines.get(cache_key, {}), context=cache_key)
 
 
 def load_baselines() -> dict[str, object]:
@@ -810,6 +809,36 @@ def load_baselines() -> dict[str, object]:
 _SAVE_LOCK = threading.Lock()
 
 
+def merge_embedding_caches(
+    baselines: dict[str, object],
+    updates: dict[str, dict[str, list[float]]],
+) -> None:
+    """Merge provider updates into shared baselines under the storage lock.
+
+    Parameters
+    ----------
+    baselines : dict[str, object]
+        Shared in-memory baseline state.
+    updates : dict[str, dict[str, list[float]]]
+        Cache-key to newly fetched embedding mappings.
+
+    Notes
+    -----
+    Provider API calls can run concurrently, but their writes must not overlap
+    a persistence snapshot. This helper keeps those short in-memory merges
+    under the same lock used by :func:`save_baselines`.
+    """
+    with _SAVE_LOCK:
+        for cache_key, new_embeddings in updates.items():
+            raw_cache = baselines.get(cache_key)
+            if raw_cache is None:
+                cache: dict[str, list[float]] = {}
+                baselines[cache_key] = cache
+            else:
+                cache = _as_embedding_cache(raw_cache, context=cache_key)
+            cache.update(new_embeddings)
+
+
 def save_baselines(baselines: dict[str, object]) -> None:
     """Save baselines atomically. Embeddings and function_hashes are saved separately."""
     with _SAVE_LOCK:
@@ -821,24 +850,30 @@ def _save_baselines_unlocked(baselines: dict[str, object]) -> None:
     baselines_file = _constants.baselines_file()
     baselines_file.parent.mkdir(parents=True, exist_ok=True)
 
-    # Embedding vectors are popped out before the main baselines file is
-    # written so they land in their own smaller, per-provider compressed
-    # files instead of one large JSON blob — keeps the main baselines file
-    # (config, thresholds, function hashes) small and readable in a git
-    # diff, independent of how many embeddings are cached.
-    embedding_caches = {key: baselines.pop(key, {}) for key in REGISTRY.files}
-    function_hashes = _as_str_object_dict(
-        baselines.pop("function_hashes", {}),
-        context="function_hashes",
+    # Snapshot cache values without removing them from the shared dictionary.
+    # The provider similarity checks populate several cache keys concurrently;
+    # temporarily popping every key here made other workers observe empty
+    # caches and caused intermittent PCA/similarity failures.
+    embedding_caches = {
+        key: dict(
+            _as_embedding_cache(baselines.get(key, {}), context=key),
+        )
+        for key in REGISTRY.files
+    }
+    function_hashes = dict(
+        _as_str_object_dict(
+            baselines.get("function_hashes", {}),
+            context="function_hashes",
+        ),
     )
+    main_baselines = {
+        key: value
+        for key, value in baselines.items()
+        if key not in REGISTRY.files and key != "function_hashes"
+    }
 
     # Save main baselines
-    try:
-        _atomic_json_write(baselines, baselines_file, prefix="baselines_")
-    finally:
-        # Restore to dict
-        baselines.update(embedding_caches)
-        baselines["function_hashes"] = function_hashes
+    _atomic_json_write(main_baselines, baselines_file, prefix="baselines_")
 
     # Save function_hashes
     if function_hashes:

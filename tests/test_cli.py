@@ -158,6 +158,35 @@ class TestInit:
         assert set(parsed.keys()) == {"project", "tool"}
 
     @staticmethod
+    def test_init_with_force_preserves_cached_only_choice(
+        tmp_path: Path,
+        monkeypatch: pytest.MonkeyPatch,
+    ) -> None:
+        """Forced scaffolding keeps an explicit cached-only TOML setting."""
+        pyproject = tmp_path / "pyproject.toml"
+        pyproject.write_text(
+            dedent(
+                """
+                [project]
+                name = "demo"
+                version = "0.1.0"
+
+                [tool.pykissembed]
+                paths = ["lib"]
+                cached_only = true
+                """,
+            ),
+            encoding="utf-8",
+        )
+        monkeypatch.chdir(tmp_path)
+
+        result = runner.invoke(app, ["init", "--force"])
+
+        assert result.exit_code == 0
+        parsed = tomllib.loads(pyproject.read_text())
+        assert parsed["tool"]["pykissembed"]["cached_only"] is True
+
+    @staticmethod
     def test_init_creates_vscode_settings(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
         """Init also creates .vscode/settings.json with pykissembed's pytest settings."""
         pyproject = tmp_path / "pyproject.toml"

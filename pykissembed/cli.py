@@ -394,6 +394,11 @@ def init(
         # Auto-detect source directories from the project layout
         detected_paths = _auto_detect_paths(config.root, text)
         paths_str = ", ".join(f'"{p}"' for p in detected_paths)
+        existing_config = _toml_value(_parse_pyproject(text), "tool", "pykissembed")
+        preserve_cached_only = (
+            isinstance(existing_config, dict) and existing_config.get("cached_only") is True
+        )
+        cached_only_line = "cached_only = true\n" if preserve_cached_only else ""
 
         block = (
             "\n[tool.pykissembed]\n"
@@ -401,12 +406,15 @@ def init(
             'mode = "ratchet"\n'
             'baseline_dir = "tests/baselines"\n'
             'cache_dir = "tests/.pykissembed_cache"\n'
+            f"{cached_only_line}"
         )
         if "[tool.pykissembed]" in text:
             # Replace the existing block (very simple; assumes our own format).
             # Stop only at the next TOML table header (a "[" at line start),
             # not at any "[" -- values like `paths = ["."]` contain one too.
-            text = re.sub(r"\[tool\.pykissembed\][\s\S]*?(?=\n\[|\Z)", block.strip() + "\n", text, count=1)
+            text = re.sub(
+                r"\[tool\.pykissembed\][\s\S]*?(?=\n\[|\Z)", block.strip() + "\n", text, count=1
+            )
         else:
             text = text.rstrip() + "\n" + block
         pyproject.write_text(text)
@@ -433,9 +441,7 @@ def _auto_detect_paths(root: Path, pyproject_text: str) -> list[str]:
     """
     data = _parse_pyproject(pyproject_text)
     return (
-        _setuptools_source_paths(data)
-        or _hatch_source_paths(data)
-        or _default_source_paths(root)
+        _setuptools_source_paths(data) or _hatch_source_paths(data) or _default_source_paths(root)
     )
 
 

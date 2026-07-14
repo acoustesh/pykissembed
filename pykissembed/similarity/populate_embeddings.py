@@ -39,7 +39,12 @@ from pykissembed.similarity.embeddings import (
     is_str_object_dict,
     load_api_key_from_env,
 )
-from pykissembed.similarity.storage import REGISTRY, load_baselines, save_baselines
+from pykissembed.similarity.storage import (
+    REGISTRY,
+    load_baselines,
+    merge_embedding_caches,
+    save_baselines,
+)
 
 if TYPE_CHECKING:
     from collections.abc import Callable
@@ -77,9 +82,8 @@ def _get_embedding_cache(baselines: Baselines, cache_key: str) -> dict[str, list
     """
     cache_obj = baselines.get(cache_key)
     if cache_obj is None:
-        empty_cache: dict[str, list[float]] = {}
-        baselines[cache_key] = empty_cache
-        return empty_cache
+        merge_embedding_caches(baselines, {cache_key: {}})
+        cache_obj = baselines[cache_key]
     if not is_embedding_cache(cache_obj):
         msg = f"Expected {cache_key} to be dict[str, list[float]], got {type(cache_obj).__name__}"
         raise TypeError(msg)
@@ -222,9 +226,10 @@ def _populate_provider(
         else:
             embeddings = get_embeddings_batch(texts, provider=cfg.provider)
 
-        cache = _get_embedding_cache(baselines, cfg.cache_key)
-        for func, emb in zip(uncached, embeddings, strict=True):
-            cache[getattr(func, hash_attr)] = emb
+        new_embeddings = {
+            getattr(func, hash_attr): emb for func, emb in zip(uncached, embeddings, strict=True)
+        }
+        merge_embedding_caches(baselines, {cfg.cache_key: new_embeddings})
         print(f"{cfg.label}: cached {len(uncached)} new embeddings")  # noqa: T201
         return len(uncached)
     except ModuleNotFoundError as e:
@@ -298,10 +303,19 @@ def _populate_jina(baselines: Baselines, functions: list[FunctionInfo], cfg: _Ji
         query_texts, passage_texts = _jina_texts(uncached, cfg)
         query_embs = get_embeddings_batch(query_texts, provider="jina", task=cfg.query_task)
         passage_embs = get_embeddings_batch(passage_texts, provider="jina", task=cfg.passage_task)
+        query_updates: dict[str, list[float]] = {}
+        passage_updates: dict[str, list[float]] = {}
         for func, query_emb, passage_emb in zip(uncached, query_embs, passage_embs, strict=True):
             key = getattr(func, hash_attr)
-            query_cache[key] = query_emb
-            passage_cache[key] = passage_emb
+            query_updates[key] = query_emb
+            passage_updates[key] = passage_emb
+        merge_embedding_caches(
+            baselines,
+            {
+                cfg.query_cache_key: query_updates,
+                cfg.passage_cache_key: passage_updates,
+            },
+        )
         print(f"{cfg.label}: cached {len(uncached)} new embeddings")  # noqa: T201
         return len(uncached)
     except ModuleNotFoundError as e:
@@ -442,7 +456,8 @@ def cli_provider_name(cache_key: str) -> str:
         Provider name accepted by ``pykissembed populate-embeddings --provider``.
     """
     return (
-        cache_key.removesuffix("_embeddings")
+        cache_key
+        .removesuffix("_embeddings")
         .removesuffix("_query")
         .removesuffix("_passage")
         .replace("_", "-")

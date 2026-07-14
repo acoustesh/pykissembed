@@ -35,6 +35,7 @@ from pykissembed.similarity.exclusions import is_excluded_pair
 from pykissembed.similarity.jina_similarity import build_symmetrized_matrix
 from pykissembed.similarity.populate_embeddings import (
     _JINA_TEXT_CFG,
+    _get_embedding_cache,
     _jina_texts,
     _populate_combined,
     cli_provider_name,
@@ -51,6 +52,8 @@ from pykissembed.similarity.storage import (
     HashType,
     ProviderEntry,
     get_valid_hashes,
+    merge_embedding_caches,
+    save_baselines,
 )
 from pykissembed.similarity.types import FunctionInfo
 
@@ -542,6 +545,59 @@ class TestEmbeddingRegistry:
         assert all(key not in REGISTRY.combined_dependencies for key in expected)
         assert REGISTRY.by_cache_key("jina_text_query_embeddings").hash_type is HashType.TEXT
         assert REGISTRY.by_cache_key("jina_ast_query_embeddings").hash_type is HashType.AST
+
+
+class TestSaveBaselines:
+    """Tests for persistence of shared baseline state."""
+
+    @staticmethod
+    def test_save_keeps_embedding_caches_in_memory(
+        monkeypatch: pytest.MonkeyPatch,
+    ) -> None:
+        """Saving does not temporarily remove caches used by parallel workers."""
+        baselines: dict[str, object] = {
+            "config": {"similarity_threshold_pair": 0.86},
+            "function_hashes": {"function": "hash"},
+            "openai_text_embeddings": {"hash": [1.0, 0.0]},
+        }
+        writes: list[dict[str, object]] = []
+
+        monkeypatch.setattr(
+            "pykissembed.similarity.storage._atomic_json_write",
+            lambda data, *_args, **_kwargs: writes.append(data),
+        )
+        monkeypatch.setattr(
+            "pykissembed.similarity.storage._save_compressed_embeddings",
+            lambda *_args, **_kwargs: None,
+        )
+
+        save_baselines(baselines)
+
+        assert baselines["openai_text_embeddings"] == {"hash": [1.0, 0.0]}
+        assert "openai_text_embeddings" not in writes[0]
+        assert writes[0]["config"] == {"similarity_threshold_pair": 0.86}
+
+    @staticmethod
+    def test_merge_embedding_caches_updates_shared_state() -> None:
+        """Provider updates are merged into the cache held by baselines."""
+        baselines: dict[str, object] = {"openai_text_embeddings": {"old": [0.0]}}
+
+        merge_embedding_caches(
+            baselines,
+            {"openai_text_embeddings": {"new": [1.0]}},
+        )
+
+        assert baselines["openai_text_embeddings"] == {"old": [0.0], "new": [1.0]}
+
+    @staticmethod
+    def test_missing_embedding_cache_is_created() -> None:
+        """A missing provider cache is initialized in shared baselines."""
+        baselines: dict[str, object] = {}
+
+        cache = _get_embedding_cache(baselines, "jina_text_query_embeddings")
+
+        assert cache == {}
+        assert baselines["jina_text_query_embeddings"] is cache
 
 
 def _jina_func(content_hash: str) -> FunctionInfo:
