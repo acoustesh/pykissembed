@@ -39,3 +39,8 @@ tests/baselines/lint_typecheck_report.json
 tests/baselines/lint_typecheck_report.json
 tests/baselines/qwen_text_embeddings.json.zlib
 tests/baselines/qwen_ast_embeddings.json.zlib
+tests/baselines/jina_ast_passage_embeddings.json.zlib
+tests/baselines/jina_ast_query_embeddings.json.zlib
+tests/baselines/jina_text_passage_embeddings.json.zlib
+tests/baselines/jina_text_query_embeddings.json.zlib
+tests/baselines/function_hashes.json
