@@ -11,7 +11,7 @@ Usage:
 Options:
     --provider  One of: openai-text, openai-ast, codestral-text, codestral-ast,
                 voyage-text, voyage-ast, gemini-text, gemini-ast, qwen-text,
-                qwen-ast, combined, all
+                qwen-ast, jina-text, jina-ast, combined, all
                 (default: all)
 """
 
@@ -26,6 +26,12 @@ from typing import TYPE_CHECKING, TypedDict
 import pytest
 
 from pykissembed.similarity.ast_helpers import extract_all_function_infos
+from pykissembed.similarity.constants import (
+    JINA_CODE2CODE_PASSAGE,
+    JINA_CODE2CODE_QUERY,
+    JINA_NL2CODE_PASSAGE,
+    JINA_NL2CODE_QUERY,
+)
 from pykissembed.similarity.embeddings import (
     get_cached_embedding,
     get_embeddings_batch,
@@ -116,6 +122,31 @@ class _ProviderCfg:
     provider: str
 
 
+@dataclass(frozen=True)
+class _JinaCfg:
+    """Configuration for a Jina variant's populate step (query + passage caches).
+
+    Attributes
+    ----------
+    label : str
+        User-facing label (e.g. ``"Jina-Text"``).
+    query_cache_key, passage_cache_key : str
+        Raw caches written for this variant.
+    use_text : bool
+        ``True`` = nl2code (docstring query, code passage, keyed by ``text_hash``);
+        ``False`` = code2code (code query and passage, keyed by AST ``hash``).
+    query_task, passage_task : str
+        Jina tasks sent for the query and passage batches respectively.
+    """
+
+    label: str
+    query_cache_key: str
+    passage_cache_key: str
+    use_text: bool
+    query_task: str
+    passage_task: str
+
+
 def _find_uncached(
     baselines: Baselines,
     functions: list[FunctionInfo],
@@ -201,6 +232,79 @@ def _populate_provider(
         # pykissembed extra (see pyproject.toml dev-group comments) — spell
         # that out instead of the generic "failed to fetch" message, which
         # reads like an API failure rather than a missing package.
+        print(  # noqa: T201
+            f"{cfg.label}: skipping — '{e.name}' is not installed "
+            f"(pip install {e.name} to enable this provider)",
+        )
+        return 0
+    except Exception as e:  # noqa: BLE001 — external API boundary: network/auth/rate-limit
+        # failures for one provider must not abort populating the rest.
+        print(f"{cfg.label}: failed to fetch embeddings: {e}")  # noqa: T201
+        return 0
+
+
+def _jina_texts(uncached: list[FunctionInfo], cfg: _JinaCfg) -> tuple[list[str], list[str]]:
+    """Return the (query_texts, passage_texts) inputs for *uncached* under *cfg*.
+
+    Returns
+    -------
+    tuple[list[str], list[str]]
+        Parallel query and passage input texts, one per uncached function.
+    """
+    if cfg.use_text:
+        # nl2code: the docstring is the natural-language intent. Fall back to the
+        # signature text when a function has no docstring so it still gets a
+        # (weaker) query rather than dropping out of the matrix and Combined.
+        query_texts = [func.docstring or func.text_for_embedding for func in uncached]
+        passage_texts = [func.ast_text for func in uncached]
+    else:
+        # code2code: both query and passage are the function's code.
+        query_texts = [func.ast_text for func in uncached]
+        passage_texts = [func.ast_text for func in uncached]
+    return query_texts, passage_texts
+
+
+def _populate_jina(baselines: Baselines, functions: list[FunctionInfo], cfg: _JinaCfg) -> int:
+    """Populate a Jina variant's query + passage caches (asymmetric retrieval).
+
+    A function is considered uncached when *either* its query or passage vector
+    is missing, since the symmetrized score needs both.
+
+    Returns
+    -------
+    int
+        Number of functions newly embedded (query and passage together).
+    """
+    api_key = load_api_key_from_env("JINA_API_KEY", invalid_prefixes=("your_",), min_length=20)
+    if not api_key:
+        print(f"JINA_API_KEY not set or invalid, skipping {cfg.label}")  # noqa: T201
+        return 0
+
+    hash_attr = "text_hash" if cfg.use_text else "hash"
+    query_cache = _get_embedding_cache(baselines, cfg.query_cache_key)
+    passage_cache = _get_embedding_cache(baselines, cfg.passage_cache_key)
+    uncached = [
+        func
+        for func in functions
+        if query_cache.get(getattr(func, hash_attr)) is None
+        or passage_cache.get(getattr(func, hash_attr)) is None
+    ]
+    if not uncached:
+        print(f"{cfg.label}: all functions already cached")  # noqa: T201
+        return 0
+
+    print(f"{cfg.label}: fetching embeddings for {len(uncached)} functions...")  # noqa: T201
+    try:
+        query_texts, passage_texts = _jina_texts(uncached, cfg)
+        query_embs = get_embeddings_batch(query_texts, provider="jina", task=cfg.query_task)
+        passage_embs = get_embeddings_batch(passage_texts, provider="jina", task=cfg.passage_task)
+        for func, query_emb, passage_emb in zip(uncached, query_embs, passage_embs, strict=True):
+            key = getattr(func, hash_attr)
+            query_cache[key] = query_emb
+            passage_cache[key] = passage_emb
+        print(f"{cfg.label}: cached {len(uncached)} new embeddings")  # noqa: T201
+        return len(uncached)
+    except ModuleNotFoundError as e:
         print(  # noqa: T201
             f"{cfg.label}: skipping — '{e.name}' is not installed "
             f"(pip install {e.name} to enable this provider)",
@@ -306,22 +410,48 @@ _QWEN_AST_CFG = _ProviderCfg(
     provider="qwen",
 )
 
+_JINA_TEXT_CFG = _JinaCfg(
+    label="Jina-Text",
+    query_cache_key="jina_text_query_embeddings",
+    passage_cache_key="jina_text_passage_embeddings",
+    use_text=True,
+    query_task=JINA_NL2CODE_QUERY,
+    passage_task=JINA_NL2CODE_PASSAGE,
+)
+
+_JINA_AST_CFG = _JinaCfg(
+    label="Jina-AST",
+    query_cache_key="jina_ast_query_embeddings",
+    passage_cache_key="jina_ast_passage_embeddings",
+    use_text=False,
+    query_task=JINA_CODE2CODE_QUERY,
+    passage_task=JINA_CODE2CODE_PASSAGE,
+)
+
 
 def _populate_combined(
     baselines: Baselines,
     _functions: list[FunctionInfo],
 ) -> int:
-    """Rebuild Combined embeddings from all 10 base providers.
+    """Rebuild Combined embeddings from the 10 cosine base providers + Jina.
 
     Returns
     -------
     int
         Number of combined embeddings rebuilt.
     """
-    for cache_key in REGISTRY.combined_dependencies:
+    for cache_key in REGISTRY.combined_dependencies + REGISTRY.standalone_dependencies:
         raw = baselines.get(cache_key)
         if raw is None or not raw or not is_embedding_cache(raw):
-            provider = cache_key.removesuffix("_embeddings").replace("_", "-")
+            # Map a raw Jina cache key (…_query/…_passage_embeddings) back to its
+            # populate provider ("jina-text" / "jina-ast"); cosine keys are
+            # unaffected since they carry no _query/_passage suffix.
+            provider = (
+                cache_key.removesuffix("_embeddings")
+                .removesuffix("_query")
+                .removesuffix("_passage")
+                .replace("_", "-")
+            )
             pytest.skip(
                 f"Cannot build combined embeddings: {cache_key} is missing or invalid. "
                 f"Run: pykissembed populate-embeddings --provider {provider}",
@@ -351,6 +481,8 @@ _PROVIDER_MAP: dict[str, PopulateFn] = {
     "gemini-ast": lambda b, f: _populate_provider(b, f, _GEMINI_AST_CFG),
     "qwen-text": lambda b, f: _populate_provider(b, f, _QWEN_TEXT_CFG),
     "qwen-ast": lambda b, f: _populate_provider(b, f, _QWEN_AST_CFG),
+    "jina-text": lambda b, f: _populate_jina(b, f, _JINA_TEXT_CFG),
+    "jina-ast": lambda b, f: _populate_jina(b, f, _JINA_AST_CFG),
     "combined": _populate_combined,
 }
 
@@ -377,6 +509,8 @@ _ALL_PROVIDERS = [
     "gemini-ast",
     "qwen-text",
     "qwen-ast",
+    "jina-text",
+    "jina-ast",
     "combined",
 ]
 
@@ -387,7 +521,7 @@ def populate_embeddings(provider: str = "all") -> None:
     Parameters
     ----------
     provider : str
-        One of the 11 providers or ``"all"``.
+        One of the 13 providers or ``"all"``.
     """
     print("Loading baselines and extracting functions...")  # noqa: T201
     baselines = load_baselines()

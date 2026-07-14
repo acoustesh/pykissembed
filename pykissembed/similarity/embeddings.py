@@ -1,8 +1,8 @@
-"""Embedding API clients and utilities for OpenAI, Codestral, Voyage, Gemini, and Qwen.
+"""Embedding API clients and utilities for OpenAI, Codestral, Voyage, Gemini, Qwen, Jina.
 
 Ported from ``mega-scrapper/tests/similarity/embeddings.py``. The cloud
-provider clients (OpenAI, Codestral, Voyage, Gemini, Qwen) are imported lazily
-so the module is importable without cloud dependencies installed. The
+provider clients (OpenAI, Codestral, Voyage, Gemini, Qwen, Jina) are imported
+lazily so the module is importable without cloud dependencies installed. The
 local provider (sentence-transformers) is handled by
 ``pykissembed-local``.
 """
@@ -23,6 +23,8 @@ if TYPE_CHECKING:
 from pykissembed.similarity.constants import (
     CODESTRAL_EMBED_MODEL,
     GEMINI_EMBED_MODEL,
+    JINA_API_URL,
+    JINA_EMBED_MODEL,
     OPENROUTER_API_URL,
     QWEN_EMBED_MODEL,
     VOYAGE_CODE_MODEL,
@@ -37,6 +39,11 @@ _VOYAGE_MAX_TOKENS = 31000  # voyage-code-3 limit is 32000
 _CODESTRAL_MAX_TOKENS = 8000  # Conservative estimate
 _GEMINI_MAX_TOKENS = 2000  # gemini-embedding-001 limit is 2048
 _QWEN_MAX_TOKENS = 32000  # qwen3-embedding-8b limit
+# jina-code-embeddings-1.5b rejects long inputs with "Failed to encode text"
+# (empirically ~768+ cl100k tokens, and its own truncate=True does NOT help), so
+# we MUST truncate client-side. 512 cl100k tokens verified reliable across the
+# whole corpus; leaves margin for the cl100k -> Jina (Qwen) tokenizer mismatch.
+_JINA_MAX_TOKENS = 512
 
 # Maximum batch sizes per provider (number of texts per request)
 _OPENAI_MAX_BATCH_SIZE = 2048  # OpenAI allows large batches
@@ -44,6 +51,7 @@ _VOYAGE_MAX_BATCH_SIZE = 128  # Voyage recommends smaller batches
 _CODESTRAL_MAX_BATCH_SIZE = 128  # Conservative estimate
 _GEMINI_MAX_BATCH_SIZE = 100  # Gemini API limit is 100 requests per batch
 _QWEN_MAX_BATCH_SIZE = 32  # qwen3-embedding-8b OpenRouter batch limit
+_JINA_MAX_BATCH_SIZE = 32  # larger jina.ai batches intermittently 400; 32 verified reliable
 
 
 def _get_tiktoken_encoding() -> object:
@@ -227,10 +235,69 @@ def _require_api_key(env_var: str) -> str:
     return api_key
 
 
+def _build_jina_caller(
+    model: str,
+    timeout: float,
+    task: str,
+) -> tuple[Callable[[list[str]], list[list[float]]], Callable[[Exception], bool]]:
+    """Build the request/retry callables for the Jina embeddings endpoint.
+
+    Jina has its own (non-OpenRouter) endpoint and API key, and takes a per-call
+    ``task`` (``code2code.*`` / ``nl2code.*``) plus ``truncate`` in the request
+    body — hence a dedicated builder rather than the shared OpenRouter branch.
+
+    Returns
+    -------
+    tuple[Callable[[list[str]], list[list[float]]], Callable[[Exception], bool]]
+        ``(make_request, is_retryable)`` callables.
+    """
+    import requests  # noqa: PLC0415
+
+    api_key = _require_api_key("JINA_API_KEY")
+    headers = {"Authorization": f"Bearer {api_key}", "Content-Type": "application/json"}
+
+    def _jina_request(truncated: list[str]) -> list[list[float]]:
+        """Send an embedding request to the Jina API.
+
+        Returns
+        -------
+        list[list[float]]
+            Embedding vectors from the ``data`` field of the JSON response.
+
+        Raises
+        ------
+        ValueError
+            If the JSON response does not contain a ``data`` field.
+        """
+        payload: dict[str, str | bool | list[str]] = {
+            "model": model,
+            # Truncation is handled upstream via tiktoken; asking the model not
+            # to truncate makes an over-limit input error out instead of being
+            # silently shortened (and mis-embedded).
+            "truncate": False,
+            "input": truncated,
+        }
+        if task:
+            payload["task"] = task
+        response = requests.post(JINA_API_URL, headers=headers, json=payload, timeout=timeout)
+        response.raise_for_status()
+        data = response.json()
+        if "data" not in data:
+            msg = f"Unexpected API response: {data}"
+            raise ValueError(msg)
+        return [item["embedding"] for item in data["data"]]
+
+    return (
+        _jina_request,
+        lambda e: isinstance(e, (requests.exceptions.Timeout, requests.exceptions.HTTPError)),
+    )
+
+
 def _build_provider_caller(
     provider: str,
     model: str,
     timeout: float,
+    task: str = "",
 ) -> tuple[Callable[[list[str]], list[list[float]]], Callable[[Exception], bool]]:
     """Build request/retry callables for the specified embedding provider.
 
@@ -238,11 +305,13 @@ def _build_provider_caller(
     ----------
     provider : str
         One of ``"openai"``, ``"codestral"``, ``"voyage"``, ``"gemini"``,
-        ``"qwen"``.
+        ``"qwen"``, ``"jina"``.
     model : str
         Model identifier passed to the remote API.
     timeout : float
         Request timeout in seconds.
+    task : str
+        Jina task (e.g. ``"code2code.query"``); ignored by other providers.
 
     Returns
     -------
@@ -395,6 +464,9 @@ def _build_provider_caller(
             ),
         )
 
+    if provider == "jina":
+        return _build_jina_caller(model, timeout, task)
+
     if provider == "voyage":
         # Optional cloud SDK: not a pykissembed core dependency, only needed
         # if the caller actually requests the voyage provider.
@@ -444,6 +516,7 @@ _PROVIDER_DEFAULTS: dict[str, tuple[int, str, float, int]] = {
     "voyage": (_VOYAGE_MAX_TOKENS, VOYAGE_CODE_MODEL, 120.0, _VOYAGE_MAX_BATCH_SIZE),
     "gemini": (_GEMINI_MAX_TOKENS, GEMINI_EMBED_MODEL, 120.0, _GEMINI_MAX_BATCH_SIZE),
     "qwen": (_QWEN_MAX_TOKENS, QWEN_EMBED_MODEL, 120.0, _QWEN_MAX_BATCH_SIZE),
+    "jina": (_JINA_MAX_TOKENS, JINA_EMBED_MODEL, 120.0, _JINA_MAX_BATCH_SIZE),
 }
 
 
@@ -454,6 +527,7 @@ def get_embeddings_batch(
     model: str | None = None,
     max_retries: int = 3,
     timeout: float | None = None,
+    task: str = "",
 ) -> list[list[float]]:
     """Get embeddings for a list of texts from a supported provider.
 
@@ -463,7 +537,7 @@ def get_embeddings_batch(
         Input texts to embed.
     provider : str, optional
         One of ``"openai"``, ``"codestral"``, ``"voyage"``, ``"gemini"``,
-        ``"qwen"``
+        ``"qwen"``, ``"jina"``
         (default ``"openai"``).
     model : str | None, optional
         Model override.  ``None`` uses the provider default.
@@ -472,6 +546,9 @@ def get_embeddings_batch(
     timeout : float | None, optional
         Request timeout override in seconds.  ``None`` uses the provider
         default.
+    task : str, optional
+        Jina task passed in the request body (e.g. ``"nl2code.query"``).
+        Ignored by non-Jina providers.
 
     Returns
     -------
@@ -483,6 +560,7 @@ def get_embeddings_batch(
         provider,
         model or default_model,
         timeout if timeout is not None else default_timeout,
+        task=task,
     )
     return _get_embeddings_with_retry(
         texts,
@@ -523,6 +601,41 @@ def compute_cosine_similarity(a: list[float], b: list[float]) -> float:
     return float(dot_product / (norm_a * norm_b))
 
 
+def _l2_normalize(vec: list[float]) -> list[float]:
+    """Return *vec* scaled to unit L2 norm (unchanged if its norm is zero).
+
+    Returns
+    -------
+    list[float]
+        The unit-norm vector, or the input unchanged when its norm is zero.
+    """
+    arr = np.asarray(vec, dtype=np.float64)
+    norm = float(np.linalg.norm(arr))
+    if norm > 0:
+        return (arr / norm).tolist()
+    return list(vec)
+
+
+def jina_combined_members(
+    query: list[float],
+    passage: list[float],
+) -> tuple[list[float], list[float]]:
+    """Build the two Combined members for one Jina variant from its Q/P vectors.
+
+    Jina's similarity is asymmetric, so it cannot be a single cosine-of-concat
+    member. Instead each variant contributes two members — treated as if from two
+    providers — the normalised ``concat(Q, P)`` and ``concat(P, Q)``. Feeding both
+    orderings lets the downstream PCA reduction of Combined capture the
+    query/passage pairing symmetrically.
+
+    Returns
+    -------
+    tuple[list[float], list[float]]
+        ``(normalize(concat(Q, P)), normalize(concat(P, Q)))``.
+    """
+    return _l2_normalize(query + passage), _l2_normalize(passage + query)
+
+
 def compute_combined_embedding(
     openai_text_emb: list[float],
     openai_ast_emb: list[float],
@@ -534,14 +647,19 @@ def compute_combined_embedding(
     gemini_ast_emb: list[float],
     qwen_text_emb: list[float],
     qwen_ast_emb: list[float],
+    jina_text_qp_emb: list[float],
+    jina_text_pq_emb: list[float],
+    jina_ast_qp_emb: list[float],
+    jina_ast_pq_emb: list[float],
 ) -> list[float]:
-    """Compute a combined embedding by concatenating all ten base embeddings and L2-normalising.
+    """Compute a combined embedding by concatenating all 14 members and L2-normalising.
 
-    The ten input embeddings are concatenated in order (OpenAI text,
-    OpenAI AST, Codestral text, Codestral AST, Voyage text, Voyage AST,
-    Gemini text, Gemini AST, Qwen text, Qwen AST) using Python list addition,
-    and the resulting vector is L2-normalised. If the combined vector has zero norm, it is
-    returned unnormalised.
+    The members are concatenated in order (OpenAI text, OpenAI AST, Codestral
+    text, Codestral AST, Voyage text, Voyage AST, Gemini text, Gemini AST, Qwen
+    text, Qwen AST, then the four Jina members — Text ``concat(Q,P)``, Text
+    ``concat(P,Q)``, AST ``concat(Q,P)``, AST ``concat(P,Q)``) using Python list
+    addition, and the resulting vector is L2-normalised. If the combined vector
+    has zero norm, it is returned unnormalised.
 
     Parameters
     ----------
@@ -565,11 +683,19 @@ def compute_combined_embedding(
         Qwen embedding of the raw text.
     qwen_ast_emb : list[float]
         Qwen embedding of the AST representation.
+    jina_text_qp_emb : list[float]
+        Jina nl2code Text member ``normalize(concat(Q, P))``.
+    jina_text_pq_emb : list[float]
+        Jina nl2code Text member ``normalize(concat(P, Q))``.
+    jina_ast_qp_emb : list[float]
+        Jina code2code AST member ``normalize(concat(Q, P))``.
+    jina_ast_pq_emb : list[float]
+        Jina code2code AST member ``normalize(concat(P, Q))``.
 
     Returns
     -------
     list[float]
-        L2-normalised concatenation of the ten input embeddings.
+        L2-normalised concatenation of the 14 input members.
     """
     combined = (
         openai_text_emb
@@ -582,14 +708,13 @@ def compute_combined_embedding(
         + gemini_ast_emb
         + qwen_text_emb
         + qwen_ast_emb
+        + jina_text_qp_emb
+        + jina_text_pq_emb
+        + jina_ast_qp_emb
+        + jina_ast_pq_emb
     )
 
-    # L2 normalize the combined vector
-    norm = np.linalg.norm(combined)
-    if norm > 0:
-        combined = (np.array(combined) / norm).tolist()
-
-    return combined
+    return _l2_normalize(combined)
 
 
 def _is_float_embedding(value: object) -> TypeGuard[list[float]]:

@@ -29,6 +29,18 @@ VOYAGE_CODE_MODEL = "voyage-code-3"
 # Gemini config
 GEMINI_EMBED_MODEL = "gemini-embedding-001"
 
+# Jina config — native (non-OpenRouter) API with asymmetric query/passage tasks.
+# Each function is embedded twice (once as query, once as passage); similarity is
+# the symmetrized cross-score, so Jina uses a dedicated path, not single-vector
+# cosine. See pykissembed.similarity.jina_similarity.
+JINA_API_URL = "https://api.jina.ai/v1/embeddings"
+JINA_EMBED_MODEL = "jina-code-embeddings-1.5b"
+# code2code: code-vs-code equivalence. nl2code: documented intent vs implementation.
+JINA_CODE2CODE_QUERY = "code2code.query"
+JINA_CODE2CODE_PASSAGE = "code2code.passage"
+JINA_NL2CODE_QUERY = "nl2code.query"
+JINA_NL2CODE_PASSAGE = "nl2code.passage"
+
 
 def baselines_dir() -> Path:
     """Return the configured baselines directory.
@@ -94,5 +106,15 @@ VOYAGE_AST_EMBEDDINGS_FILE = _embedding_cache_file("voyage_ast")
 GEMINI_AST_EMBEDDINGS_FILE = _embedding_cache_file("gemini_ast")
 QWEN_AST_EMBEDDINGS_FILE = _embedding_cache_file("qwen_ast")
 
-# Combined (10-way concatenation, keyed by text_hash)
+# Jina raw caches — query + passage per variant (asymmetric retrieval).
+# Text variant (nl2code): query = docstring, passage = code, keyed by text_hash.
+# AST variant (code2code): query = code, passage = code, keyed by AST hash.
+JINA_TEXT_QUERY_EMBEDDINGS_FILE = _embedding_cache_file("jina_text_query")
+JINA_TEXT_PASSAGE_EMBEDDINGS_FILE = _embedding_cache_file("jina_text_passage")
+JINA_AST_QUERY_EMBEDDINGS_FILE = _embedding_cache_file("jina_ast_query")
+JINA_AST_PASSAGE_EMBEDDINGS_FILE = _embedding_cache_file("jina_ast_passage")
+
+# Combined (14-way concatenation, keyed by text_hash): the 10 cosine members
+# plus 4 Jina members (normalized concat(Q,P) and concat(P,Q) for each variant),
+# derived on the fly from the raw caches above.
 COMBINED_EMBEDDINGS_FILE = _embedding_cache_file("combined")

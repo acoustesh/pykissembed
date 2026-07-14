@@ -11,7 +11,8 @@ Providers:
 - Voyage-Text, Voyage-AST (voyage-code-3)
 - Gemini-Text, Gemini-AST (gemini-embedding-001)
 - Qwen-Text, Qwen-AST (qwen3-embedding-8b)
-- Combined (10-way concatenation)
+- Jina-Text (nl2code), Jina-AST (code2code) — asymmetric query/passage retrieval
+- Combined (14-way concatenation)
 
 Modules
 -------
@@ -19,7 +20,8 @@ Modules
     storage: Embedding compression/decompression and cache management
     ast_helpers: Function extraction from Python AST
     pca: PCA dimensionality reduction and clustering
-    embeddings: Embedding API clients (OpenAI, Codestral, Voyage, Gemini, Qwen)
+    embeddings: Embedding API clients (OpenAI, Codestral, Voyage, Gemini, Qwen, Jina)
+    jina_similarity: Symmetrized query/passage similarity for the Jina providers
     refactor_index: Refactor index computation
     complexity: Complexity map loaders (CC, COG)
     checks: Unified similarity check workflow
@@ -39,12 +41,15 @@ from pykissembed.similarity.checks import (
     COMBINED_PROVIDER,
     GEMINI_AST_PROVIDER,
     GEMINI_TEXT_PROVIDER,
+    JINA_AST_PROVIDER,
+    JINA_TEXT_PROVIDER,
     OPENAI_AST_PROVIDER,
     OPENAI_TEXT_PROVIDER,
     QWEN_AST_PROVIDER,
     QWEN_TEXT_PROVIDER,
     VOYAGE_AST_PROVIDER,
     VOYAGE_TEXT_PROVIDER,
+    run_jina_similarity_checks,
     run_provider_similarity_checks,
 )
 from pykissembed.similarity.complexity import (
@@ -89,6 +94,8 @@ __all__ = [
     "COMBINED_PROVIDER",
     "GEMINI_AST_PROVIDER",
     "GEMINI_TEXT_PROVIDER",
+    "JINA_AST_PROVIDER",
+    "JINA_TEXT_PROVIDER",
     "OPENAI_AST_PROVIDER",
     "OPENAI_TEXT_PROVIDER",
     "QWEN_AST_PROVIDER",
@@ -122,6 +129,7 @@ __all__ = [
     "load_complexity_maps",
     "load_minimal_baselines",
     "load_provider_embeddings",
+    "run_jina_similarity_checks",
     "run_provider_similarity_checks",
     "save_baselines",
     "transform_embeddings_with_pca",

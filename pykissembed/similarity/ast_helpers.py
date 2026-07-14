@@ -266,6 +266,9 @@ def _extract_function_from_node(
     text_for_embedding = extract_text_for_embedding(node, source)
     text_hash = compute_content_hash(text_for_embedding)
 
+    # Raw docstring — the natural-language intent used as the Jina nl2code query.
+    docstring = ast.get_docstring(node) or ""
+
     return FunctionInfo(
         name=node.name,
         file=file_name,
@@ -277,6 +280,7 @@ def _extract_function_from_node(
         text_for_embedding=text_for_embedding,
         text_hash=text_hash,
         ast_text=ast_text,
+        docstring=docstring,
     )
 
 

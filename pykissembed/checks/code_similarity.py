@@ -4,7 +4,8 @@ Ported from ``aa-ml/mega-scrapper/tests/test_code_similarity.py``. This
 module detects near-duplicate functions using embedding providers:
 - Text variants: signature + docstring + comments (keyed by text_hash)
 - AST variants: ast.unparse() output (keyed by hash)
-- Combined: 10-way concatenation of all base embeddings
+- Jina variants: asymmetric query/passage retrieval (symmetrized cross-score)
+- Combined: 14-way concatenation of all base embeddings
 
 Each variant detects:
 - Pairwise similarity detection (finds copy-paste code)
@@ -17,7 +18,8 @@ Providers:
 - Voyage-Text, Voyage-AST (voyage-code-3)
 - Gemini-Text, Gemini-AST (gemini-embedding-001)
 - Qwen-Text, Qwen-AST (qwen3-embedding-8b)
-- Combined (10-way concatenation)
+- Jina-Text (nl2code), Jina-AST (code2code) (jina-code-embeddings-1.5b)
+- Combined (14-way concatenation)
 
 Baseline Management:
     Run ``pytest --update-baselines`` to update similarity baselines.
@@ -41,6 +43,8 @@ from pykissembed.similarity import (
     COMBINED_PROVIDER,
     GEMINI_AST_PROVIDER,
     GEMINI_TEXT_PROVIDER,
+    JINA_AST_PROVIDER,
+    JINA_TEXT_PROVIDER,
     OPENAI_AST_PROVIDER,
     OPENAI_TEXT_PROVIDER,
     QWEN_AST_PROVIDER,
@@ -49,6 +53,7 @@ from pykissembed.similarity import (
     VOYAGE_TEXT_PROVIDER,
     FunctionInfo,
     ProviderEntry,
+    run_jina_similarity_checks,
     run_provider_similarity_checks,
 )
 from pykissembed.similarity.complexity import load_all_complexity_maps
@@ -217,7 +222,12 @@ def _run_similarity_test(
         if func.loc >= min_loc and not any(directory in func.file for directory in excluded_dirs)
     ]
 
-    run_provider_similarity_checks(
+    # Jina providers are asymmetric (query/passage) and use a dedicated
+    # symmetrized-matrix path; every other provider uses single-vector cosine.
+    run_checks = (
+        run_jina_similarity_checks if provider.standalone else run_provider_similarity_checks
+    )
+    run_checks(
         baselines=shared_baselines,
         functions=functions,
         update_baselines=update_baselines,
@@ -242,6 +252,8 @@ _PARALLEL_PROVIDERS: list[ProviderEntry] = [
     GEMINI_AST_PROVIDER,
     QWEN_TEXT_PROVIDER,
     QWEN_AST_PROVIDER,
+    JINA_TEXT_PROVIDER,
+    JINA_AST_PROVIDER,
 ]
 
 
@@ -296,7 +308,7 @@ def test_providers_parallel(
     # One worker per provider (not a bounded pool): each `_run_one` call
     # does network I/O against a distinct API, so full parallelism here
     # bounds wall-clock time by the slowest single provider rather than by
-    # the sum of all ten.
+    # the sum of all twelve.
     with ThreadPoolExecutor(max_workers=len(_PARALLEL_PROVIDERS)) as executor:
         futures = {executor.submit(_run_one, p): p for p in _PARALLEL_PROVIDERS}
         for future in as_completed(futures):

@@ -21,7 +21,7 @@ from typing import cast
 import numpy as np
 
 from pykissembed.similarity import constants as _constants
-from pykissembed.similarity.embeddings import compute_combined_embedding
+from pykissembed.similarity.embeddings import compute_combined_embedding, jina_combined_members
 
 
 def _as_float_list(value: object, *, context: str) -> list[float]:
@@ -215,6 +215,12 @@ class ProviderEntry:
         Default neighbor similarity threshold.
     default_pca_variance : float
         Default PCA variance retention threshold.
+    standalone : bool
+        When ``True`` this entry is not a single-vector cosine provider — it is a
+        raw Jina query/passage cache handled by the dedicated
+        ``pykissembed.similarity.jina_similarity`` path. Standalone entries are
+        excluded from ``base_providers`` (and thus from the cosine flow and the
+        per-member Combined concatenation), but are still persisted via ``files``.
     """
 
     name: str
@@ -225,6 +231,7 @@ class ProviderEntry:
     default_threshold_pair: float = 0.86
     default_threshold_neighbor: float = 0.80
     default_pca_variance: float = 0.99
+    standalone: bool = False
 
     @property
     def hash_field(self) -> str:
@@ -247,13 +254,88 @@ class ProviderEntry:
         return f"{self.name}_pca_variance_threshold"
 
 
+def _build_combined_row(
+    text_hash: str,
+    ast_hash: str,
+    text_caches: dict[str, dict[str, list[float]]],
+    ast_caches: dict[str, dict[str, list[float]]],
+    jina_caches: dict[str, dict[str, list[float]]],
+) -> list[float] | None:
+    """Build one function's 14-way combined vector, or ``None`` if incomplete.
+
+    All-or-nothing gate: the combined embedding is only built once every cosine
+    base provider AND all four Jina raw caches have embedded the function, so a
+    function stays absent (rather than getting a partial/zero-padded vector)
+    until the slowest provider catches up. The four Jina members are derived
+    here from the raw query/passage vectors via :func:`jina_combined_members`.
+
+    Returns
+    -------
+    list[float] | None
+        The concatenated, L2-normalised combined vector, or ``None`` when any
+        member is still missing.
+    """
+    openai_text = text_caches["openai_text"].get(text_hash)
+    openai_ast = ast_caches["openai_ast"].get(ast_hash)
+    codestral_text = text_caches["codestral_text"].get(text_hash)
+    codestral_ast = ast_caches["codestral_ast"].get(ast_hash)
+    voyage_text = text_caches["voyage_text"].get(text_hash)
+    voyage_ast = ast_caches["voyage_ast"].get(ast_hash)
+    gemini_text = text_caches["gemini_text"].get(text_hash)
+    gemini_ast = ast_caches["gemini_ast"].get(ast_hash)
+    qwen_text = text_caches["qwen_text"].get(text_hash)
+    qwen_ast = ast_caches["qwen_ast"].get(ast_hash)
+    jina_text_query = jina_caches["jina_text_query_embeddings"].get(text_hash)
+    jina_text_passage = jina_caches["jina_text_passage_embeddings"].get(text_hash)
+    jina_ast_query = jina_caches["jina_ast_query_embeddings"].get(ast_hash)
+    jina_ast_passage = jina_caches["jina_ast_passage_embeddings"].get(ast_hash)
+
+    if (
+        openai_text is None
+        or openai_ast is None
+        or codestral_text is None
+        or codestral_ast is None
+        or voyage_text is None
+        or voyage_ast is None
+        or gemini_text is None
+        or gemini_ast is None
+        or qwen_text is None
+        or qwen_ast is None
+        or jina_text_query is None
+        or jina_text_passage is None
+        or jina_ast_query is None
+        or jina_ast_passage is None
+    ):
+        return None
+
+    jina_text_qp, jina_text_pq = jina_combined_members(jina_text_query, jina_text_passage)
+    jina_ast_qp, jina_ast_pq = jina_combined_members(jina_ast_query, jina_ast_passage)
+    return compute_combined_embedding(
+        openai_text,
+        openai_ast,
+        codestral_text,
+        codestral_ast,
+        voyage_text,
+        voyage_ast,
+        gemini_text,
+        gemini_ast,
+        qwen_text,
+        qwen_ast,
+        jina_text_qp,
+        jina_text_pq,
+        jina_ast_qp,
+        jina_ast_pq,
+    )
+
+
 class EmbeddingRegistry:
     """Central catalogue of all embedding providers.
 
     Parameters
     ----------
     providers : list[ProviderEntry]
-        All 11 provider entries (10 base + 1 combined).
+        All provider entries: 10 cosine base + 4 standalone Jina query/passage
+        caches + 1 combined.
     combined_key : str
         The ``cache_key`` that identifies the combined provider.
     """
@@ -273,8 +355,17 @@ class EmbeddingRegistry:
 
     @property
     def base_providers(self) -> tuple[ProviderEntry, ...]:
-        """The 8 non-combined providers."""
-        return tuple(p for p in self._providers if p.cache_key != self._combined_key)
+        """The single-vector cosine providers (non-combined, non-standalone)."""
+        return tuple(
+            p
+            for p in self._providers
+            if p.cache_key != self._combined_key and not p.standalone
+        )
+
+    @property
+    def standalone_providers(self) -> tuple[ProviderEntry, ...]:
+        """The standalone (Jina query/passage) cache entries."""
+        return tuple(p for p in self._providers if p.standalone)
 
     @property
     def combined(self) -> ProviderEntry:
@@ -283,8 +374,13 @@ class EmbeddingRegistry:
 
     @property
     def combined_dependencies(self) -> list[str]:
-        """Cache keys of the 10 base providers needed to build combined."""
+        """Cache keys of the 10 cosine base providers needed to build combined."""
         return [p.cache_key for p in self.base_providers]
+
+    @property
+    def standalone_dependencies(self) -> list[str]:
+        """Cache keys of the raw Jina query/passage caches feeding combined."""
+        return [p.cache_key for p in self.standalone_providers]
 
     @property
     def files(self) -> dict[str, Path]:
@@ -380,9 +476,11 @@ class EmbeddingRegistry:
         return stats
 
     def rebuild_combined(self, baselines: dict[str, object]) -> int:
-        """Rebuild combined embeddings from the 10 base providers.
+        """Rebuild combined embeddings from the 10 cosine base providers + Jina.
 
-        Modifies ``baselines[combined.cache_key]`` in place.
+        Modifies ``baselines[combined.cache_key]`` in place. The 10 cosine
+        members are joined with the four Jina Combined members (derived from the
+        raw query/passage caches) into a 14-way concatenation per function.
 
         Parameters
         ----------
@@ -406,59 +504,24 @@ class EmbeddingRegistry:
             for p in self.base_providers
             if p.hash_type == HashType.AST
         }
+        jina_caches: dict[str, dict[str, list[float]]] = {
+            key: _get_cache(baselines, key) for key in self.standalone_dependencies
+        }
 
         combined_cache: dict[str, list[float]] = {}
         for text_hash in valid_text:
             ast_hash = text_to_ast.get(text_hash)
             if not ast_hash:
                 continue
-
-            openai_text = text_caches["openai_text"].get(text_hash)
-            openai_ast = ast_caches["openai_ast"].get(ast_hash)
-            codestral_text = text_caches["codestral_text"].get(text_hash)
-            codestral_ast = ast_caches["codestral_ast"].get(ast_hash)
-            voyage_text = text_caches["voyage_text"].get(text_hash)
-            voyage_ast = ast_caches["voyage_ast"].get(ast_hash)
-            gemini_text = text_caches["gemini_text"].get(text_hash)
-            gemini_ast = ast_caches["gemini_ast"].get(ast_hash)
-            qwen_text = text_caches["qwen_text"].get(text_hash)
-            qwen_ast = ast_caches["qwen_ast"].get(ast_hash)
-
-            # All-or-nothing gate: a function's combined embedding is only
-            # built once every one of the 10 base providers has embedded it.
-            # This means a function stays absent from `combined_cache`
-            # (rather than getting a partial/zero-padded vector) until the
-            # slowest provider to populate catches up.
-            if (
-                openai_text is not None
-                and openai_ast is not None
-                and codestral_text is not None
-                and codestral_ast is not None
-                and voyage_text is not None
-                and voyage_ast is not None
-                and gemini_text is not None
-                and gemini_ast is not None
-                and qwen_text is not None
-                and qwen_ast is not None
-            ):
-                combined_cache[text_hash] = compute_combined_embedding(
-                    openai_text,
-                    openai_ast,
-                    codestral_text,
-                    codestral_ast,
-                    voyage_text,
-                    voyage_ast,
-                    gemini_text,
-                    gemini_ast,
-                    qwen_text,
-                    qwen_ast,
-                )
+            row = _build_combined_row(text_hash, ast_hash, text_caches, ast_caches, jina_caches)
+            if row is not None:
+                combined_cache[text_hash] = row
 
         baselines[self.combined.cache_key] = combined_cache
         return len(combined_cache)
 
 
-# Module-level registry instance with all 11 providers
+# Module-level registry: 10 cosine base + 4 Jina raw caches + 1 combined
 REGISTRY = EmbeddingRegistry(
     providers=[
         ProviderEntry(
@@ -550,6 +613,41 @@ REGISTRY = EmbeddingRegistry(
             hash_type=HashType.AST,
             default_threshold_pair=0.90,
             default_threshold_neighbor=0.85,
+        ),
+        # Jina raw query/passage caches (standalone=True): persisted and
+        # orphan-cleaned like any cache, but consumed by the dedicated Jina
+        # similarity path and the Combined build — never the cosine flow.
+        ProviderEntry(
+            name="jina_text_query",
+            label="Jina-Text-Query",
+            cache_key="jina_text_query_embeddings",
+            file_path=_constants.JINA_TEXT_QUERY_EMBEDDINGS_FILE,
+            hash_type=HashType.TEXT,
+            standalone=True,
+        ),
+        ProviderEntry(
+            name="jina_text_passage",
+            label="Jina-Text-Passage",
+            cache_key="jina_text_passage_embeddings",
+            file_path=_constants.JINA_TEXT_PASSAGE_EMBEDDINGS_FILE,
+            hash_type=HashType.TEXT,
+            standalone=True,
+        ),
+        ProviderEntry(
+            name="jina_ast_query",
+            label="Jina-AST-Query",
+            cache_key="jina_ast_query_embeddings",
+            file_path=_constants.JINA_AST_QUERY_EMBEDDINGS_FILE,
+            hash_type=HashType.AST,
+            standalone=True,
+        ),
+        ProviderEntry(
+            name="jina_ast_passage",
+            label="Jina-AST-Passage",
+            cache_key="jina_ast_passage_embeddings",
+            file_path=_constants.JINA_AST_PASSAGE_EMBEDDINGS_FILE,
+            hash_type=HashType.AST,
+            standalone=True,
         ),
         ProviderEntry(
             name="combined",
@@ -660,7 +758,8 @@ def load_provider_embeddings(
     """Load a single provider's embeddings lazily.
 
     If already loaded in baselines, returns existing. Otherwise loads from file.
-    For combined provider, also loads all 10 base providers if needed.
+    For combined provider, also loads the 10 cosine base providers and the 4 Jina
+    raw query/passage caches if needed.
 
     Returns
     -------
@@ -670,9 +769,9 @@ def load_provider_embeddings(
     if baselines.get(cache_key):
         return _as_embedding_cache(baselines[cache_key], context=cache_key)
 
-    # Combined requires all base providers
+    # Combined requires the 10 cosine base providers plus the 4 Jina raw caches
     if cache_key == REGISTRY.combined.cache_key:
-        for dep_key in REGISTRY.combined_dependencies:
+        for dep_key in REGISTRY.combined_dependencies + REGISTRY.standalone_dependencies:
             if dep_key not in baselines or not baselines[dep_key]:
                 file_path = REGISTRY.files.get(dep_key)
                 if file_path:

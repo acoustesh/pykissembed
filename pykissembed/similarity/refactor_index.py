@@ -15,6 +15,7 @@ from pykissembed.similarity.constants import (
     DEFAULT_REFACTOR_INDEX_THRESHOLD,
     DEFAULT_REFACTOR_INDEX_TOP_N,
 )
+from pykissembed.similarity.exclusions import is_excluded_pair
 
 if TYPE_CHECKING:
     from collections.abc import Mapping
@@ -204,14 +205,49 @@ def compute_refactor_indices(
     return 0.25 * cc_values + 0.15 * cog_values + 0.6 * similarity_indices
 
 
+def _zero_excluded_similarities(
+    similarity_matrix: Float32Array,
+    functions: list[FunctionInfo],
+    excluded_file_pairs: list[list[str]],
+    excluded_function_pairs: list[list[str]],
+    class_function_proximity: int,
+) -> None:
+    """Zero similarity-matrix entries for structurally excluded pairs in place.
+
+    Mirrors the pair exclusions applied during violation detection so a method
+    is not surfaced as a refactor priority merely because its ``MaxSim`` is
+    inflated by the class that contains it.
+    """
+    for i, func_a in enumerate(functions):
+        # Only the upper triangle is walked; each excluded pair zeros both the
+        # (i, j) and (j, i) cells to keep the matrix symmetric.
+        for j in range(i + 1, len(functions)):
+            if is_excluded_pair(
+                func_a,
+                functions[j],
+                excluded_file_pairs,
+                excluded_function_pairs,
+                class_function_proximity,
+            ):
+                similarity_matrix[i, j] = np.float32(0.0)
+                similarity_matrix[j, i] = np.float32(0.0)
+
+
 def get_refactor_priority_message(
     functions: list[FunctionInfo],
     cc_map: dict[str, int],
     cog_map: dict[str, int],
     threshold: float = DEFAULT_REFACTOR_INDEX_THRESHOLD,
     top_n: int = DEFAULT_REFACTOR_INDEX_TOP_N,
+    excluded_file_pairs: list[list[str]] | None = None,
+    excluded_function_pairs: list[list[str]] | None = None,
+    class_function_proximity: int = 0,
 ) -> str | None:
     """Generate refactoring priority message for functions above threshold.
+
+    The exclusion arguments suppress structurally related class/function pairs
+    (defaulting to no exclusions) so a method's ``MaxSim`` is not inflated by
+    the class that encloses it.
 
     Returns
     -------
@@ -223,6 +259,13 @@ def get_refactor_priority_message(
         return None
 
     similarity_matrix: Float32Array = compute_similarity_matrix(functions)
+    _zero_excluded_similarities(
+        similarity_matrix,
+        functions,
+        excluded_file_pairs or [],
+        excluded_function_pairs or [],
+        class_function_proximity,
+    )
     max_sims: Float64Array = compute_max_similarities(similarity_matrix)
     similarity_indices: Float64Array = compute_similarity_indices(max_sims)
 

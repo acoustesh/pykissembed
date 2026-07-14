@@ -28,13 +28,18 @@ from pykissembed.similarity.embeddings import (
     compute_cosine_similarity,
     is_float_embedding,
     is_str_object_dict,
+    jina_combined_members,
     load_api_key_from_env,
 )
+from pykissembed.similarity.exclusions import is_excluded_pair
+from pykissembed.similarity.jina_similarity import build_symmetrized_matrix
+from pykissembed.similarity.populate_embeddings import _JINA_TEXT_CFG, _jina_texts
 from pykissembed.similarity.refactor_index import (
     compute_max_similarities,
     compute_refactor_indices,
     compute_similarity_indices,
     compute_similarity_matrix,
+    get_refactor_priority_message,
 )
 from pykissembed.similarity.storage import (
     REGISTRY,
@@ -118,7 +123,7 @@ class TestSimilarityProximityExclusions:
             text="def test_case():\n    pass",
         )
 
-        assert similarity_checks._is_excluded_pair(  # noqa: SLF001
+        assert is_excluded_pair(
             test_class,
             test_function,
             [],
@@ -148,7 +153,7 @@ class TestSimilarityProximityExclusions:
             text="def test_case(self):\n    pass",
         )
 
-        assert similarity_checks._is_excluded_pair(  # noqa: SLF001
+        assert is_excluded_pair(
             test_class,
             test_method,
             [],
@@ -163,6 +168,56 @@ class TestSimilarityProximityExclusions:
             threshold_neighbor=0.8,
             class_function_proximity=1,
         ) == ([], [])
+
+    @staticmethod
+    def test_nested_pair_excluded_from_refactor_priority() -> None:
+        """A nested class/method pair no longer drives the refactor recommendation."""
+        test_class = FunctionInfo(
+            name="TestCase",
+            file="module.py",
+            start_line=1,
+            end_line=10,
+            loc=4,
+            hash="class-hash",
+            text="class TestCase:\n    def test_case(self): ...",
+        )
+        test_method = FunctionInfo(
+            name="test_case",
+            file="module.py",
+            start_line=2,
+            end_line=3,
+            loc=2,
+            hash="method-hash",
+            text="def test_case(self):\n    pass",
+        )
+        test_class.embedding = [1.0, 0.0]
+        test_method.embedding = [1.0, 0.0]
+        functions = [test_class, test_method]
+
+        # Negative proximity disables the containment exclusion, so the
+        # identical embeddings still drive a recommendation.
+        assert (
+            get_refactor_priority_message(
+                functions,
+                {},
+                {},
+                threshold=1.0,
+                class_function_proximity=-1,
+            )
+            is not None
+        )
+        # With the exclusion active the nested pair is ignored and nothing is
+        # recommended from its structural similarity alone.
+        assert (
+            get_refactor_priority_message(
+                functions,
+                {},
+                {},
+                threshold=1.0,
+                class_function_proximity=1,
+            )
+            is None
+        )
 
 
 class TestApiKeyLoading:
@@ -335,36 +390,29 @@ class TestComputeCombinedEmbedding:
 
     @staticmethod
     def test_length_is_sum_of_inputs() -> None:
-        """Combined embedding length equals sum of input lengths."""
-        inputs = [[1.0] for _ in range(10)]
+        """Combined embedding length equals sum of all 14 member lengths."""
+        inputs = [[1.0] for _ in range(14)]
         combined = compute_combined_embedding(*inputs)
-        assert len(combined) == 10
+        assert len(combined) == 14
 
     @staticmethod
     def test_is_normalized() -> None:
         """Combined embedding is L2-normalized."""
-        inputs = [
-            [3.0, 0.0],
-            [4.0, 0.0],
-            [0.0, 0.0],
-            [0.0, 0.0],
-            [0.0, 0.0],
-            [0.0, 0.0],
-            [0.0, 0.0],
-            [0.0, 0.0],
-            [0.0, 0.0],
-            [0.0, 0.0],
-        ]
+        inputs = [[3.0, 0.0], [4.0, 0.0]] + [[0.0, 0.0] for _ in range(12)]
         combined = compute_combined_embedding(*inputs)
         norm = sum(c**2 for c in combined) ** 0.5
         assert norm == pytest.approx(1.0)
 
     @staticmethod
-    def test_qwen_vectors_are_included() -> None:
-        """Qwen text and AST embeddings occupy the final two vector segments."""
-        inputs = [[0.0] for _ in range(8)] + [[3.0], [4.0]]
+    def test_jina_members_occupy_final_four_segments() -> None:
+        """The four Jina members occupy the final four segments of the concat."""
+        inputs = [[0.0] for _ in range(10)] + [[3.0], [4.0], [6.0], [8.0]]
         combined = compute_combined_embedding(*inputs)
-        assert combined == pytest.approx([0.0] * 8 + [0.6, 0.8])
+        # Whole vector is L2-normalized: only the last four entries are non-zero,
+        # with magnitude sqrt(9+16+36+64) = sqrt(125).
+        norm = 125.0**0.5
+        expected = [0.0] * 10 + [3.0 / norm, 4.0 / norm, 6.0 / norm, 8.0 / norm]
+        assert combined == pytest.approx(expected)
 
 
 class TestGetValidHashes:
@@ -469,6 +517,127 @@ class TestEmbeddingRegistry:
             "qwen_ast_embeddings",
         ]
         assert len(REGISTRY.base_providers) == 10
+
+    @staticmethod
+    def test_jina_raw_caches_are_standalone_not_cosine_base() -> None:
+        """The four Jina query/passage caches are standalone, excluded from cosine base."""
+        expected = [
+            "jina_text_query_embeddings",
+            "jina_text_passage_embeddings",
+            "jina_ast_query_embeddings",
+            "jina_ast_passage_embeddings",
+        ]
+        assert REGISTRY.standalone_dependencies == expected
+        for key in expected:
+            entry = REGISTRY.by_cache_key(key)
+            assert entry.standalone is True
+            assert key in REGISTRY.files  # still persisted round-trip
+        # Standalone caches do not inflate the cosine base / combined concat.
+        assert len(REGISTRY.base_providers) == 10
+        assert all(key not in REGISTRY.combined_dependencies for key in expected)
+        assert REGISTRY.by_cache_key("jina_text_query_embeddings").hash_type is HashType.TEXT
+        assert REGISTRY.by_cache_key("jina_ast_query_embeddings").hash_type is HashType.AST
+
+
+def _jina_func(content_hash: str) -> FunctionInfo:
+    """Build a minimal FunctionInfo keyed by *content_hash* for Jina matrix tests.
+
+    Returns
+    -------
+    FunctionInfo
+        A minimal function whose ``hash`` field equals *content_hash*.
+    """
+    return FunctionInfo(
+        name=content_hash,
+        file="f.py",
+        start_line=1,
+        end_line=2,
+        loc=1,
+        hash=content_hash,
+        text="x",
+    )
+
+
+class TestJinaCombinedMembers:
+    """Tests for jina_combined_members (Combined representation of a Jina variant)."""
+
+    @staticmethod
+    def test_returns_two_unit_norm_orderings() -> None:
+        """Both members are unit-norm and are the (Q,P)/(P,Q) orderings of each other."""
+        qp, pq = jina_combined_members([1.0, 0.0], [0.0, 1.0])
+        assert len(qp) == len(pq) == 4
+        assert sum(c**2 for c in qp) ** 0.5 == pytest.approx(1.0)
+        assert sum(c**2 for c in pq) ** 0.5 == pytest.approx(1.0)
+        inv = 1.0 / 2.0**0.5
+        assert qp == pytest.approx([inv, 0.0, 0.0, inv])
+        assert pq == pytest.approx([0.0, inv, inv, 0.0])
+
+    @staticmethod
+    def test_zero_vectors_returned_unnormalized() -> None:
+        """A zero concat is returned unchanged (no divide-by-zero)."""
+        qp, pq = jina_combined_members([0.0, 0.0], [0.0, 0.0])
+        assert qp == [0.0, 0.0, 0.0, 0.0]
+        assert pq == [0.0, 0.0, 0.0, 0.0]
+
+
+class TestBuildSymmetrizedMatrix:
+    """Tests for the Jina symmetrized query/passage similarity matrix."""
+
+    @staticmethod
+    def test_symmetric_zero_diagonal_and_cross_score() -> None:
+        """S is symmetric, zero-diagonal, and equals (cos(Qi,Pj)+cos(Qj,Pi))/2."""
+        functions = [_jina_func("a"), _jina_func("b")]
+        query_cache = {"a": [1.0, 0.0], "b": [1.0, 0.0]}
+        passage_cache = {"a": [1.0, 0.0], "b": [0.0, 1.0]}
+        matrix = build_symmetrized_matrix(functions, query_cache, passage_cache, "hash")
+        assert matrix.shape == (2, 2)
+        assert matrix[0, 0] == pytest.approx(0.0)
+        assert matrix[1, 1] == pytest.approx(0.0)
+        # cos(Qa,Pb)=0, cos(Qb,Pa)=1 -> 0.5
+        assert matrix[0, 1] == pytest.approx(0.5)
+        assert matrix[1, 0] == pytest.approx(matrix[0, 1])
+
+    @staticmethod
+    def test_missing_vectors_contribute_zero() -> None:
+        """A function absent from either cache contributes zero similarity."""
+        functions = [_jina_func("a"), _jina_func("b")]
+        matrix = build_symmetrized_matrix(functions, {"a": [1.0, 0.0]}, {"a": [1.0, 0.0]}, "hash")
+        assert matrix[0, 1] == pytest.approx(0.0)
+
+
+class TestJinaTexts:
+    """Tests for the Jina nl2code query/passage input-text selection."""
+
+    @staticmethod
+    def test_nl2code_uses_docstring_with_signature_fallback() -> None:
+        """nl2code query is the docstring, falling back to the signature text."""
+        documented = FunctionInfo(
+            name="a",
+            file="f.py",
+            start_line=1,
+            end_line=2,
+            loc=1,
+            hash="a",
+            text="x",
+            text_for_embedding="def a(): ...",
+            ast_text="def a():\n    return 1",
+            docstring="Do the thing.",
+        )
+        undocumented = FunctionInfo(
+            name="b",
+            file="f.py",
+            start_line=1,
+            end_line=2,
+            loc=1,
+            hash="b",
+            text="x",
+            text_for_embedding="def b(): ...",
+            ast_text="def b():\n    return 2",
+            docstring="",
+        )
+        query_texts, passage_texts = _jina_texts([documented, undocumented], _JINA_TEXT_CFG)
+        assert query_texts == ["Do the thing.", "def b(): ..."]
+        assert passage_texts == [documented.ast_text, undocumented.ast_text]
 
 
 class TestRefactorIndex:

@@ -11,6 +11,6 @@ key into a project-root ``.env`` instead of exporting it.
 
 from __future__ import annotations
 
-__version__ = "0.1.19"
+__version__ = "0.1.20"
 
 __all__ = ["__version__"]

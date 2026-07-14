@@ -1,18 +1,18 @@
-"""Shared base class for the OpenRouter-routed cloud providers.
+"""Shared base class for the OpenAI-compatible cloud providers.
 
-Every bundled provider (``openai``, ``gemini``, ``qwen``) is just a thin
-``OpenAICompatProvider`` subclass that sets the right identity attributes
-and the OpenRouter model id. Everything else — client construction,
-batching, response parsing, ``is_configured`` — lives here.
-
-A single ``OPENROUTER_API_KEY`` environment variable enables all three
-providers, since they share the same OpenRouter base URL.
+Most bundled providers (``openai``, ``gemini``, ``qwen``) are thin
+``OpenAICompatProvider`` subclasses that only set identity attributes and the
+OpenRouter model id; a single ``OPENROUTER_API_KEY`` enables all three. A
+provider on a different OpenAI-compatible endpoint (``jina``) additionally
+overrides ``base_url``, ``api_key_env``, ``api_key_url``, and ``extra_body``.
+Everything else — client construction, batching, response parsing,
+``is_configured`` — lives here.
 """
 
 from __future__ import annotations
 
 import os
-from typing import TYPE_CHECKING, Any
+from typing import TYPE_CHECKING, Any, ClassVar
 
 if TYPE_CHECKING:
     from collections.abc import Sequence
@@ -21,6 +21,13 @@ if TYPE_CHECKING:
 # See https://openrouter.ai/docs for the upstream contract.
 _OPENROUTER_BASE_URL: str = "https://openrouter.ai/api/v1/"
 _API_KEY_ENV: str = "OPENROUTER_API_KEY"
+_OPENROUTER_KEY_URL: str = "https://openrouter.ai/keys"
+
+# Every provider's ``is_configured`` loads this whole set from ``.env`` on the
+# first call. The dotenv loader caches per working-directory, not per key, so
+# loading only one provider's key would mask the others when several providers
+# (with different keys, e.g. OpenRouter vs Jina) are queried in one process.
+_KEY_ENVS: tuple[str, ...] = ("OPENROUTER_API_KEY", "JINA_API_KEY")
 
 
 class OpenAICompatProvider:
@@ -47,6 +54,16 @@ class OpenAICompatProvider:
         truncate inputs beyond this limit.
     batch_size
         Maximum number of texts per ``embed`` API call.
+    base_url
+        OpenAI-compatible API base URL (defaults to OpenRouter).
+    api_key_env
+        Environment variable holding this provider's API key (defaults to
+        ``OPENROUTER_API_KEY``).
+    api_key_url
+        Page where a user can obtain the key, shown in the error message.
+    extra_body
+        Extra JSON fields merged into each ``embeddings.create`` request (e.g.
+        Jina's ``{"task": ..., "truncate": False}``). ``None`` sends none.
     """
 
     name: str
@@ -54,6 +71,11 @@ class OpenAICompatProvider:
     schema_version: str
     max_tokens: int
     batch_size: int
+    # Endpoint/auth config — class-level (not part of the Provider protocol).
+    base_url: ClassVar[str] = _OPENROUTER_BASE_URL
+    api_key_env: ClassVar[str] = _API_KEY_ENV
+    api_key_url: ClassVar[str] = _OPENROUTER_KEY_URL
+    extra_body: ClassVar[dict[str, Any] | None] = None
 
     def embed(self, texts: Sequence[str]) -> list[list[float]]:
         """Compute embedding vectors for *texts*.
@@ -75,8 +97,8 @@ class OpenAICompatProvider:
         """
         if not self.is_configured():
             msg = (
-                f"Provider {self.name!r} requires {_API_KEY_ENV!r} in the environment. "
-                "Get one at https://openrouter.ai/keys"
+                f"Provider {self.name!r} requires {self.api_key_env!r} in the environment. "
+                f"Get one at {self.api_key_url}"
             )
             raise RuntimeError(msg)
 
@@ -84,36 +106,40 @@ class OpenAICompatProvider:
         # installed (e.g. when only reading metadata).
         from openai import OpenAI
 
-        client = OpenAI(base_url=_OPENROUTER_BASE_URL, api_key=os.environ[_API_KEY_ENV])
+        client = OpenAI(base_url=self.base_url, api_key=os.environ[self.api_key_env])
         inputs = list(texts)
         if not inputs:
             return []
+        # Only forward extra_body when set so providers without extra request
+        # fields keep the exact create() signature the OpenAI SDK expects.
+        extra = {"extra_body": self.extra_body} if self.extra_body else {}
         vectors: list[list[float]] = []
         for start in range(0, len(inputs), self.batch_size):
             chunk = inputs[start : start + self.batch_size]
-            response = client.embeddings.create(input=chunk, model=self.model_id)
+            response = client.embeddings.create(input=chunk, model=self.model_id, **extra)
             vectors.extend(_extract_embeddings(response))
         return vectors
 
     def is_configured(self) -> bool:
-        """Return True iff the OpenRouter API key is present in the environment.
+        """Return True iff this provider's API key is present in the environment.
 
         Lazily walks up from cwd looking for a ``.env`` file on the
         first call, so users can drop their key into ``.env`` instead
-        of exporting it. The explicit ``$OPENROUTER_API_KEY`` env var
-        always wins over the file.
+        of exporting it. The explicit env var always wins over the file.
+        The full :data:`_KEY_ENVS` set is loaded (not just this provider's
+        key) so a mixed set of providers all see their keys after one walk.
 
         Returns
         -------
         bool
-            ``True`` if ``OPENROUTER_API_KEY`` is set in the environment
+            ``True`` if ``self.api_key_env`` is set in the environment
             (after the optional ``.env`` lookup).
         """
         # Lazy import: avoid the filesystem touch on simple imports
         from pykissembed_cloud.dotenv import ensure_loaded
 
-        ensure_loaded((_API_KEY_ENV,))
-        return bool(os.environ.get(_API_KEY_ENV))
+        ensure_loaded(_KEY_ENVS)
+        return bool(os.environ.get(self.api_key_env))
 
 
 def _extract_embeddings(response: Any) -> list[list[float]]:

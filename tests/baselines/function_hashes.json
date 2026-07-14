@@ -1,0 +1,1334 @@
+{
+  "pykissembed/baselines_engine.py:BaselineEnvelope:58": {
+    "hash": "1a88662c159fb934524d7dbd9b4294f62690571d2daa10d204aea731c0744029",
+    "text_hash": "13804e1779bd8f79384f8cbecb29e1a3331af7bbdc7df181bb10be36d22d6012"
+  },
+  "pykissembed/baselines_engine.py:_load_validator:42": {
+    "hash": "85a9d8d3b6c8ad81abf71657d555d1ae8af9a800d196eaa3d9bbb965cdd164b1",
+    "text_hash": "3725f556630b7219a6844edc9698bf9d00ce19090364b4c6481003195cdee65f"
+  },
+  "pykissembed/baselines_engine.py:is_v1_envelope:78": {
+    "hash": "79fcbb0c62948001840c1304cad9440aedc2670d2a4d943fbad39f5a41eafbb6",
+    "text_hash": "dee66edc07f94622062159c67c820ac75bd72690a8c378cd11c2665d62f09d31"
+  },
+  "pykissembed/baselines_engine.py:load_envelope:96": {
+    "hash": "92e9d5c51bf9849f5156e2bfaec8d4369542373bc2683ae3b839d9b614aff752",
+    "text_hash": "24692802d0b615033c71ec18445af963face0430370a9c97ae9b84a54f7b186c"
+  },
+  "pykissembed/baselines_engine.py:locked_envelope:175": {
+    "hash": "eccf7e002bbc27ecd8b2e0bb52b1871ab34a00398688f3254bd717150e10bdc6",
+    "text_hash": "220e2f4bafec907c1071e733e7163c4c730d211e977f09ee598c0d579485d060"
+  },
+  "pykissembed/baselines_engine.py:ratchet:206": {
+    "hash": "372519f68c3937e77f3fe01a90a7b3d96a5e94c624f17406cbfc874d3d4b2cd4",
+    "text_hash": "56a0d94632c4b613e808c3dc86cb42813ab34b91868ac07bee2caec44c12b1ed"
+  },
+  "pykissembed/baselines_engine.py:save_envelope:151": {
+    "hash": "d7b761e1893a4b0624f1caeb446b538e22c7abeebe3aec2ca4f271815357b8fc",
+    "text_hash": "c01ef2991839b9916068304cab50ca886e5ec6222e6ba6d00e55d28aa3bdd19c"
+  },
+  "pykissembed/checks/code_complexity.py:TestCyclomaticComplexity:426": {
+    "hash": "d6a491905e30c1a6f638daeb2abe1ddc71eefd0e9ede114356404afd9fe215e6",
+    "text_hash": "9f4e1b2b2f452c73c0a71249eeaf3e90aa12382721c33258cdc009d5d5e24ba4"
+  },
+  "pykissembed/checks/code_complexity.py:TestDocstringCoverage:340": {
+    "hash": "381a78d2a6efbf133b2ade34652a9ee6f20fa14f0d7ecdc3dc7b0f8b4c9409e9",
+    "text_hash": "a957eb1f9246d67a2ca06189755f924dc37972540d52a60600668ca8f0d78fac"
+  },
+  "pykissembed/checks/code_complexity.py:TestLineCount:390": {
+    "hash": "3a2c14ee8f4fba5b28c3475979ee6669cef93e11bf3bbf66c563016073ca7c19",
+    "text_hash": "c3e8cc91715231ec296855212da199dd89e450ed806bab5355e50f8ad4f0e361"
+  },
+  "pykissembed/checks/code_complexity.py:TestMaintainabilityIndex:535": {
+    "hash": "907c7e82ccbf706d5e5f8642c18b2cb466789c3b189a191e613526fa0b47f9d4",
+    "text_hash": "a27f72b93b3178f8b17b27bd2f0c2f318d40c69359f464b9309f438c65d259d4"
+  },
+  "pykissembed/checks/code_complexity.py:TestWrapperProliferation:501": {
+    "hash": "2cb8a54b016b35d0fc95eb13237ee282ba03c1c0cb1dbada153963bb2b69f5f1",
+    "text_hash": "105f4f44e7a31772ca4f24de871921b35d8971d822d106bbb926a084a1d2e10e"
+  },
+  "pykissembed/checks/code_complexity.py:_BaselineConfig:28": {
+    "hash": "f278fad4962a9ca1697819aa5718b9746f45edcc370fcd089e7bc7f5b0c91fa2",
+    "text_hash": "efc2a516c67e679e6fda24aac1445019afbb836a2528231eda20047cefe424c4"
+  },
+  "pykissembed/checks/code_complexity.py:_DefaultConfig:37": {
+    "hash": "d487c1e0dc1c471c9616e1b3a085f2fa144e1b960a2d239687dd4ee89116c1ab",
+    "text_hash": "e4a15ce9ee9f13c830453e42c07a1b1c89c6aacd0da607b426d66fc7bd11a0d6"
+  },
+  "pykissembed/checks/code_complexity.py:_collect_metric_results:248": {
+    "hash": "69e26233cce54b47bf2f38750a99f922aaf04b936b3fb58f51c09f276380ec8e",
+    "text_hash": "fe10866a131f7b7f9070b3ca23262b4ed7e0af48c6d5f0ad6722f08532e1feb6"
+  },
+  "pykissembed/checks/code_complexity.py:_complexity_failure_message:286": {
+    "hash": "9b0a6cfa6b95ced9229ae96d8b75b65c5ba6a11ab59c75253499f560a59ae229",
+    "text_hash": "dd0a4146366eab6278a60c864d8f7195751777f2896b58d135ab084ee97df4fc"
+  },
+  "pykissembed/checks/code_complexity.py:_decorator_tail:128": {
+    "hash": "3744564d5544c7720975a684bcb7946c7870ef610a15f9170e9ba46c7543d52e",
+    "text_hash": "ac0fbdeb3412280d40c1897f2797b5bcccd0dd9cedefbbf7f9c9e9dd8ba9374a"
+  },
+  "pykissembed/checks/code_complexity.py:_extract_items_with_docstrings:79": {
+    "hash": "dae42ba870222520257191fa70c61bcd9763c10413d2af72332ed71d4e1ca275",
+    "text_hash": "f867cfeae79b0d690276d801d432a68caccc527867e4e25b3ae39f512016b821"
+  },
+  "pykissembed/checks/code_complexity.py:_get_cc:148": {
+    "hash": "35e02c48dfec19c1cb7d253e8c69fdfd131eb0814a7f0a4af66977aab813f797",
+    "text_hash": "98515dd047f8366f6e13081ff781ae11da46cc1ca6777721647ade9dbfc5c980"
+  },
+  "pykissembed/checks/code_complexity.py:_get_cog:184": {
+    "hash": "96bc86a3d1bbf15066ed7074145bf4c3f3e406da943483ae6c6b2c5fc7ebd6df",
+    "text_hash": "7630e636a4be889eaa62388786ec2b3d5a7335cd616f4df62b6fbcb8395d5fd8"
+  },
+  "pykissembed/checks/code_complexity.py:_get_line_count:143": {
+    "hash": "ba64618cb1df19e5b9ceb7182b8e1cab3f7e5cb28b2ace08d3474c3e5f626360",
+    "text_hash": "1a0a69d22598fe43be4b7d5edb13e07a0844151b8bf908ac05e2f3507caf498c"
+  },
+  "pykissembed/checks/code_complexity.py:_get_mi:221": {
+    "hash": "f6835d5d6d65ad50bf213994f2e1ee438f42c2db5d47da83de5eab6f5f9ac2df",
+    "text_hash": "fba4b6ee18691b08f0432e939590f474c9bc02e72712983ab3c547887a50cdf9"
+  },
+  "pykissembed/checks/code_complexity.py:_is_overload_stub:117": {
+    "hash": "c095a3fa6df6cecab8c48521489c070f3add93a41af59d3c9407f5603eb0a301",
+    "text_hash": "f209ca459799b8203cc2f796b3d8ab1bc87a66cb41e2bb6920e5c783be386c61"
+  },
+  "pykissembed/checks/code_complexity.py:_load_callable:68": {
+    "hash": "0f01ba9f8ec237ae0e9d489f2126d13f7150d72384355f54fe4a6d5ae3e913b9",
+    "text_hash": "5e09ea2169bed3df1ce2003c54e1a5d8307287a90a28d8eb5a688bc263a39643"
+  },
+  "pykissembed/checks/code_complexity.py:_locked_envelope:320": {
+    "hash": "6355938127e286c21423842daf8571e48e1a4c03ff094c6617a0578e22532472",
+    "text_hash": "af529c2112ebc62752a9a7899602f5fd8ba3b857d45e479cc025ae90c844b403"
+  },
+  "pykissembed/checks/code_complexity.py:_record_excess_metric_baselines:276": {
+    "hash": "29fe15e5d2d9288d6f570f66382510204e706d1086537309c415b8b2b8a3b52a",
+    "text_hash": "6361f39af167ac4e4a77356ff8a2ca13a5b39115f4f85f1ffcac206ead4f548c"
+  },
+  "pykissembed/checks/code_complexity.py:test_cyclomatic_complexity:431": {
+    "hash": "a99b17f4c6e7e6b0319eb8f57b12725f8e72117d756ccf66616afddf655b3fe5",
+    "text_hash": "024a99a5d875b8cd76865b3e4e8cabca78a9e3627edcd3112159f2903a2a76b8"
+  },
+  "pykissembed/checks/code_complexity.py:test_docstring_coverage:345": {
+    "hash": "843bc27644e817b8b3259b90b232e310e95a73f4a2667767bb3d929e70ddeff6",
+    "text_hash": "dbbc4447f64f941a7a08d30142899fcf21bc44c43f7393f832e16c107de7e2f7"
+  },
+  "pykissembed/checks/code_complexity.py:test_file_line_counts:395": {
+    "hash": "cfd25fc8869a78578ce763a88486c8f87a220f6369cd42f1ea84d0e331e95447",
+    "text_hash": "705c8a15cf76e1ac2e079b6caa1aa062465e8f8326222fd3de9d962c421c751e"
+  },
+  "pykissembed/checks/code_complexity.py:test_maintainability_index:540": {
+    "hash": "d8a8897dc6193b8b607affebfe113da54d21a60782d7f973813686827824db19",
+    "text_hash": "0f656ce9030c19d5f40c4711c33657e2488268a15357e2a6e97b50043aa72083"
+  },
+  "pykissembed/checks/code_complexity.py:test_wrapper_proliferation:506": {
+    "hash": "309a44e206bff3a66fc8e8f1efc093cdc455bba4eefca72c7ccb226b1e2f7128",
+    "text_hash": "62e3cb3b39194f2e313995d9c6ee1f83133ffb22cc807c062b7a66ec55f16c71"
+  },
+  "pykissembed/checks/code_similarity.py:_extract_float:129": {
+    "hash": "554a850d70357cfbe0f88468cbf644e11f6da6e132ff1b9db568ec2c968f6027",
+    "text_hash": "74d99101f0eebed284be82649dade3385f03015628d32f91a6ecea3bad89f375"
+  },
+  "pykissembed/checks/code_similarity.py:_extract_int:69": {
+    "hash": "39f7ed3cd1af1ccf374060487f9b9ad53acbfbc020a9e067bdbbf8e1e39bca6d",
+    "text_hash": "a604833f68bd2f9aac83d6e2c89a0ccf75fdefb15093eb631b7ba5ce4c3b0498"
+  },
+  "pykissembed/checks/code_similarity.py:_extract_str_list:98": {
+    "hash": "fb476973e8d7aa0fa41b5e7b351a161e48105ef1ae95f677dcead208465f4a76",
+    "text_hash": "16a0dd748837a9a38ccefdb0ed852a47d6926a068dd3f58fc033215cd6db9dbb"
+  },
+  "pykissembed/checks/code_similarity.py:_run_one:296": {
+    "hash": "cc37323ed0de77828319bf4811d76b824918554a407f7d6ad5da3af948a3471c",
+    "text_hash": "53c2bb6ab58a82f9e397dd688c62612814c514658144059e64bfe3553a91f708"
+  },
+  "pykissembed/checks/code_similarity.py:_run_similarity_test:158": {
+    "hash": "a08f7e6044f1c8a97277d78c0c475258e22517ab186aa99549c755e1da1a1638",
+    "text_hash": "a442af4d3033a0547f3a3c2eb8187362d33d0f1d266978de8fb20704bc23ac4a"
+  },
+  "pykissembed/checks/code_similarity.py:test_combined_similarity:341": {
+    "hash": "ea23b6363686e393eb4b7852ddf0b0c877e1ab9c2c5b080e2b3a4b86d48e6485",
+    "text_hash": "adcd626b4ed2aad5baa3248e44a330e1b43a799eb9d192a574076dc3767c882b"
+  },
+  "pykissembed/checks/code_similarity.py:test_providers_parallel:261": {
+    "hash": "c308e1c13937e42aa742f463a51086d77ebc07335b4b986fc59a56ace72812a1",
+    "text_hash": "39dec30a5de7a498a17591289a17ee6eb59dcaa3542eb0f5bd444ded8dc7b82a"
+  },
+  "pykissembed/checks/comment_density.py:CommentStats:29": {
+    "hash": "ff02be8ee1fbb0f9a32b81d51d8acc196eb27cbdabf9679dcc4e60dfb2706dc2",
+    "text_hash": "91b1f2772a91a884fa9c048c3423135bca40cd8d4400d28620005f554195fae2"
+  },
+  "pykissembed/checks/comment_density.py:TestCommentDensity:141": {
+    "hash": "a75e8fc7dfe5c8d4d9574f7c597fb7ab50ad03443de49cdc70fc87df9e50f946",
+    "text_hash": "f36e0027f34f9d3b42e5eb9ed92085ca3bfedef79ba4af04d944a9a24e7d7e93"
+  },
+  "pykissembed/checks/comment_density.py:_all_functions_short:101": {
+    "hash": "78ddd30ed7b8c6207011018416173eb931de64682405c71fbcc2c61d94df37fe",
+    "text_hash": "6a81e242a3aed6e6814433d0867b367850fd12868d66d060df1ae77536279d02"
+  },
+  "pykissembed/checks/comment_density.py:_code_body_lines:71": {
+    "hash": "8556d35d74c3a9bc7b28feb086b5c11d1789670b1a3b54d39190b3ebfbdd7592",
+    "text_hash": "59b4b07daf75b8b23f02ca4f4f10f5222c210be99bc9f6038d09dfb4b6f8113a"
+  },
+  "pykissembed/checks/comment_density.py:_comment_density_from_source:47": {
+    "hash": "fe0259f516f1ecdccb91e22d49f27b72e93d15b77eb23a47cf2c5cec47f41b9c",
+    "text_hash": "24a8c55000df296732b438c49c92ade2c79dc57f9ab49bd4acc990b8e48c1b64"
+  },
+  "pykissembed/checks/comment_density.py:_file_stats:132": {
+    "hash": "592bfef56e735039fedf399d5c88368aa57a17a638bcad450d25caad3784b6d8",
+    "text_hash": "66536ae36d0affc598655c4c5965a03bf6c20c675ca4fbb32bb14bdec0435dd7"
+  },
+  "pykissembed/checks/comment_density.py:_get_int_attr:37": {
+    "hash": "cf1bfde7031eaab48a08c4eea4cef9da70ffca59e22b4e46921687e01f3d5a44",
+    "text_hash": "2e544600df1ea596f583ff5cad770afdc9e37b30bfbda04641d91183f005c1e6"
+  },
+  "pykissembed/checks/comment_density.py:test_comment_density:146": {
+    "hash": "abaafd03fa747504b608bc0fa3b5b7205d06ba43266cdecdb12aa601a856e300",
+    "text_hash": "9f94644116e5050efb9e72509c598c51607f37c9fcf8b70148aede8b5792eadf"
+  },
+  "pykissembed/checks/docstring_format.py:DocstringViolation:23": {
+    "hash": "97b28f23f4399c7792c6c4a15b65fe263526ad3700246f254a12444fbac989c1",
+    "text_hash": "8c8683bab40b2274e4e4654b27c2d8ae4a6531ef6d1462f61a55acc070f47e5c"
+  },
+  "pykissembed/checks/docstring_format.py:TestDocstringFormat:243": {
+    "hash": "7bb0485b176c726b714df4492d930724b461e5e52813893b2aceea7a2680d720",
+    "text_hash": "df2ded418e05fa25ecb13b612fde7f4d2006930ba0b0062f506b863872bbc99b"
+  },
+  "pykissembed/checks/docstring_format.py:__str__:32": {
+    "hash": "c8ebbe4b885343d51554cc1c7b6b81444b293f7e8384f7971c7acc12c7fe77b2",
+    "text_hash": "7aaadcd41712a408235d19340c7fd46ec73e2cbd5096844cccbee19486a63fd6"
+  },
+  "pykissembed/checks/docstring_format.py:_classify_docstring_violations:149": {
+    "hash": "5a136464faf73ff91a11aff7a8ff2494826f1b29dc7c3e688d6970e22369ce55",
+    "text_hash": "3257895468936b0687ef6c6b4e6b0cc730785fd5094802e05f875d900cc70a0a"
+  },
+  "pykissembed/checks/docstring_format.py:_collect_docstring_violations:119": {
+    "hash": "53689fea5c7561dfd8acdfbb38794e3568308b1f9d6db652d2fa007e202dab10",
+    "text_hash": "9af5defdc7625c646d6802a8a83209492519d5fe65d750931e67794c7c81d842"
+  },
+  "pykissembed/checks/docstring_format.py:_count_violations_by_code:182": {
+    "hash": "93bda8e2c2759e6cb56bed8f2907495afe57a58885b92034b27e4e2045baf3a7",
+    "text_hash": "706ee2040e1ce7f93202b6cc920d86e152c7d191d8582176d27115ea9020e67f"
+  },
+  "pykissembed/checks/docstring_format.py:_docstring_failure_message:213": {
+    "hash": "215c2fd5904c666de8bc3731ade0e8163c93c249b3c8ac5c39f31b979ee052a3",
+    "text_hash": "45f8eb744d044d921f3fd687450360d77b28af0b828a9ca09aeab0ba97304486"
+  },
+  "pykissembed/checks/docstring_format.py:_group_violations_by_file:133": {
+    "hash": "e8c553974490aecff285c1c360b791943ba21ffb74f64fbade5fe5abad2b51de",
+    "text_hash": "4af2cdb9a2aa5c58d514161cb8e98904559ea0be50db1525b5ee3f8032b6f645"
+  },
+  "pykissembed/checks/docstring_format.py:_run_ruff_docstring_check:36": {
+    "hash": "b0e5f94c2f1cce106e493bbc76cc8e6038a8e5a20a13027f92fe22b6047425cc",
+    "text_hash": "ea34850adf6a1151d03abeeeb4d133f228662f8b338bc4563aa2f8c26de43cce"
+  },
+  "pykissembed/checks/docstring_format.py:_violation_headers:199": {
+    "hash": "3ed5436c582abd7e03047ec8da1c1d43c985cfe439e63598031041947686e47b",
+    "text_hash": "c4bd16727d2561b3b0044158fa76b8d6710ce2b594bdd7486102f8b139487f50"
+  },
+  "pykissembed/checks/docstring_format.py:test_docstring_format:248": {
+    "hash": "dd88814c8854b4b919dd24bf8542feeec9ea70a04badcebaa5854435ce60d942",
+    "text_hash": "a6def91f64ac942fe2d04d53432ee23a867a40e59e8788936b54a6a40810e7c7"
+  },
+  "pykissembed/checks/lint_typecheck.py:_build_report:107": {
+    "hash": "80c99d77f1d5753ce90785b7303a101c81d09a038589571c1a49f3b55e7653f2",
+    "text_hash": "3f5b793698ee8c92ada73b65fca0f29751ea15f963b6c4eefd49d5195b6c700c"
+  },
+  "pykissembed/checks/lint_typecheck.py:_resolve_tool:28": {
+    "hash": "f910f3b09a91192a53624b02a5b9131fdf8d6db7f6d8a3fc20384ffc9d20531c",
+    "text_hash": "7c42243f0a89744119e3e7c8efbe3c1d40baf2d57e7f0b7a3dfbe226ff698260"
+  },
+  "pykissembed/checks/lint_typecheck.py:_run_pyright:80": {
+    "hash": "f9237341dc4120e28e3ce7f4dcb07caa3ca924e28d18e885dc118f5ce442488a",
+    "text_hash": "b30085aa78c3ee6f78b3d5b0099424e3002af5637ebd94cb9fc5552de4d5d082"
+  },
+  "pykissembed/checks/lint_typecheck.py:_run_ruff:41": {
+    "hash": "ef3e622b263936ecf5c248ef41b88fd5b24c93b5f39202e41c9c1b20e6ba1a3d",
+    "text_hash": "9eca7c74de38e6cc553cfacca079583cb3a327cfb62ca9e2100bba1691adc202"
+  },
+  "pykissembed/checks/lint_typecheck.py:test_no_lint_or_type_errors:185": {
+    "hash": "c1368ff449d53aebffa25c8b9d6a8c7b7cb453a243f1db3adee5787b8e88b4d3",
+    "text_hash": "672fce108e83a08331cbbc70ebe97f4ab9f8a3f5a83c0a0a82dc6a6dd59afc4b"
+  },
+  "pykissembed/cli.py:_auto_detect_paths:407": {
+    "hash": "26b39c253dce30dce5aed1146217eb71a65c8855e83df953b3453bdfd5f77ecd",
+    "text_hash": "ecc5984aaa780f6171ff727cf9e86efe80ef9dfacc35ec8288a3ad9b153e9632"
+  },
+  "pykissembed/cli.py:_compute_current_for:165": {
+    "hash": "306cfbb6e1bd4141ce8a802062e252e93f1a4396b6b7b33999bb328f8c66fff7",
+    "text_hash": "81a1033baa7ae4ac4bebd6b7ca1d9b814a712cd9460fcf4aeffb278dcb78a4b0"
+  },
+  "pykissembed/cli.py:_default_source_paths:515": {
+    "hash": "729b6a52fc70d1f847ee711947760ddffd4c62b1b9493d971fb6dcac04d3ae6c",
+    "text_hash": "900429a102cab63a74982ee2dc89b9f8cfc3c45383958b5c3da1be8c989287dc"
+  },
+  "pykissembed/cli.py:_hatch_source_paths:457": {
+    "hash": "701bcdba91471b1a0992c1d3a10b6d2013fc070bc04447f30f9635d8141a7d36",
+    "text_hash": "e3e30de12a6a1687034c9a6979829a9fa8ba072eef338dc4477442e9ede27f10"
+  },
+  "pykissembed/cli.py:_main_callback:45": {
+    "hash": "969012bf1c9a040e3899d48386e300f5d2ece9465785917ff4ca609c03422fc6",
+    "text_hash": "59d031c4508eccf1036e7603da39652b2b9c6342a1b5a710f4af4e10bbe095f8"
+  },
+  "pykissembed/cli.py:_package_roots:500": {
+    "hash": "5cde090e7c9fb91f7aa4483482cc699941cfad87d6c18da37159fec1a8817a66",
+    "text_hash": "b74b560289fd530546cee89e295520e87bd7129e7e48aecb65cb4c1c7158ed95"
+  },
+  "pykissembed/cli.py:_parse_pyproject:430": {
+    "hash": "e79793943e1bcec93f7087800335aa2bd98e3bdcc12e73216c33c6bb0c433c84",
+    "text_hash": "62c8aa6ecb6a4d0b03384bdc409dda0099ee8aa2384a6ec13ac91087371a4e7a"
+  },
+  "pykissembed/cli.py:_path_values:485": {
+    "hash": "f8310461ca62e559b0ba622e94ff257d51119b1d24a48e50e6678b586a30a045",
+    "text_hash": "9c3ac76d611440b472d2da3567bac8c58b1fa3b214f29c7ecb180541fad6a1ba"
+  },
+  "pykissembed/cli.py:_setuptools_source_paths:444": {
+    "hash": "470e921e667578a1db6eb9dc88b1f81a3cbd2435651cbeb5ee14b115f32bd1fe",
+    "text_hash": "d42ceed51f537d0b9b3b6be4490cf683f9ddfdf32a274e282bbe4edd0dffb2d2"
+  },
+  "pykissembed/cli.py:_toml_value:469": {
+    "hash": "0f0dcc8836f5fd7ff65557090ef6c5ed07776b6c4f9ca61f2689c59c4b080859",
+    "text_hash": "124e460eb36fde8cf6b5a5c08105de5d653c9207b812cbf3791fb4423e3a4745"
+  },
+  "pykissembed/cli.py:check:75": {
+    "hash": "594142a7876e5524bcc0fdea9660103ff025a545e6533555170c2144fd370682",
+    "text_hash": "4a26cf6d1f35b4a16f056afbe921f0f80e3f5a51d70d639d7a361fdf1e37c407"
+  },
+  "pykissembed/cli.py:init:357": {
+    "hash": "166caf9ab74f5599ff50a0f370d42f3839037b092a5609f877dc2e9b8f4ec817",
+    "text_hash": "2d5498f50e0ccdd3128d18ce9c56402f9813cd2181f6f1633b34ec4b3653449c"
+  },
+  "pykissembed/cli.py:populate_embeddings:256": {
+    "hash": "8c22b7bc0c1c471c53d6e492cecd67aa5c9fdc1912f94ea8b8b6d2764328af64",
+    "text_hash": "9eeb4de29af5b48fe29164d744cd3eb75ca60b7a2f43bb90142168f545fb6ada"
+  },
+  "pykissembed/cli.py:providers_list:209": {
+    "hash": "177d6f56712b7323e2c6432fdbe6c0528c83115fd9a90fabf6928d6419a6945b",
+    "text_hash": "9308bdbc427d1d7d3d5f7327df08f53de2e9ecef1890da4f4ef2f2dc702c7237"
+  },
+  "pykissembed/cli.py:ratchet_cmd:111": {
+    "hash": "79ff3739728e7cec374af6ad50ad056c1dbdcb05ebd94a866f99e361d83c4edf",
+    "text_hash": "afe84fe0e848f4915250031b8cb62eee754770e04b88d96d3fa937b75b0835e1"
+  },
+  "pykissembed/cli.py:type_review:319": {
+    "hash": "5d4b2f6f6113bbe81c84892aeec18463629bc931556cdb3fa4559ffb562b36fd",
+    "text_hash": "1e9409cf2ddb8220c187652fb94adf1646416b7b144aaf9bbd0254258a5f0487"
+  },
+  "pykissembed/config.py:PyqtestConfig:20": {
+    "hash": "922b9e70c4a2d5231dc975deec82d54f44f4666713e3b3390399bde265800f75",
+    "text_hash": "f521b6ee2a3018474ff601f47e184fe991ae307aef1b8a5f160a59a3ee18684a"
+  },
+  "pykissembed/config.py:_auto_detect:250": {
+    "hash": "3d8b74c5fd66fa86fa920b6c6b2e5e7d2c45d337e3967060043f39ce5d39c34f",
+    "text_hash": "b781f4d86a37d43ec6675a501b1f5a164af83b28135f7cdcada939420bfa09a2"
+  },
+  "pykissembed/config.py:_coerce_str_list:95": {
+    "hash": "265abb382ba430c75ebbac75081a13f3561d4cff0b6c4c80063907d994a8aaf9",
+    "text_hash": "3c34096cb758449a127346abdc2f54e7fe61871d084830eb68ee2f6273d1cbb7"
+  },
+  "pykissembed/config.py:_read_toml:81": {
+    "hash": "1c3642c8668fd1212d0adbcc4482657ede928b93fb8a4bf2ffdb34c3f0cfa018",
+    "text_hash": "8e5246ea87de1849a458e6fe9b8150eae054c46c93206d5f635f48eba065c751"
+  },
+  "pykissembed/config.py:_require_nonnegative_int:141": {
+    "hash": "37119ae1820be9e588147272a2f25428f815d4bd95944563350ee10746312910",
+    "text_hash": "35eea7f74eed958292fa4526766c436d72fe6d991c4cbccb656fca6bc7025fdb"
+  },
+  "pykissembed/config.py:_require_str_list:122": {
+    "hash": "eb3bdb5f65a0aaaca69f223844a4bc0270d74264f56837539d53459f075e7687",
+    "text_hash": "1341b80c19952934c51d1f6c0baf4a9fc1881f39c50140787e3fd6888a8755bb"
+  },
+  "pykissembed/config.py:baseline_path:61": {
+    "hash": "c976619d16b1ac64bc9dfc99da02442e64155705f68c82cc80d89c13bbf44a8b",
+    "text_hash": "873264c9c6f20dac5e0dbcd2bfb7f6dd6d8403b09ec9b58dbe14a58442dfcccd"
+  },
+  "pykissembed/config.py:cache_path:66": {
+    "hash": "49878a9951598061cb1afc9b6cc1e66e49df93c4bfe5f2e7ffc084e3729c81c5",
+    "text_hash": "0cde6f8639e2f6758ad171b4e8550b9120a9e9583812a47bec6141b22db5170c"
+  },
+  "pykissembed/config.py:get_config:277": {
+    "hash": "21220c7229e6ed39a78080cd923be5e74d4f59086f7c09768cac3904233ce2bb",
+    "text_hash": "6058bd7548f198b2f6336d7fa5d8b7dfed9f1b2984e9209a5f78c35842b033d7"
+  },
+  "pykissembed/config.py:load_config:160": {
+    "hash": "7ece467c73df452928deae5c370ccea010e1ba554a52fb4b0b9740ce6e6b3977",
+    "text_hash": "cf3d8cac40c2fd58dbd92f3ac6c1dfd67107917902f8463540cca3b53b39fb8e"
+  },
+  "pykissembed/config.py:reset_config_cache:300": {
+    "hash": "a373db35c38d63b8a7a4ebb87541d118a932e0dc26ad11b26875a86bae8fe236",
+    "text_hash": "4b25bd46047ed96b775e940496b97ee32d5fb60eea5aa69f7c2b92b950efb6d4"
+  },
+  "pykissembed/config.py:resolved_paths:70": {
+    "hash": "5ff192cf9c12360c96054f37cb34c35790309d13cf3055dc8532b02a7df71320",
+    "text_hash": "117f29fb2bd1064acb3934c32b5df2b027cd0b43c71e9f6d57b9d37dc87f8539"
+  },
+  "pykissembed/conftest.py:_make:41": {
+    "hash": "ef6051946f47ec6c8af6b0d37d7ac377dbfe16c2ef173cd27a6ed290ec2c6923",
+    "text_hash": "4afcf8b276ba1f3bd0490b97f49d389e75cba31348d927feb802de5878de8a0b"
+  },
+  "pykissembed/conftest.py:baseline_factory:31": {
+    "hash": "dffa06db129d16fd153630da9c650ef54aa1138028ed37c8948ffb4fa9ac193f",
+    "text_hash": "8a2abfdfcf2c649f3993ffb6bc634a857311e93dc27b9bc78fcc14eb9aa2121d"
+  },
+  "pykissembed/conftest.py:pykissembed_config:18": {
+    "hash": "5ec496441d4f8a014140c272e49e96d7eeea39d00ef2694dfe206500f3951308",
+    "text_hash": "12f2c99e132169651dd46113556a38b6edafc2e81275cd925bb4bcfe730968f7"
+  },
+  "pykissembed/paths.py:_should_skip:53": {
+    "hash": "e7927cab752e3367f8f7b149403849acd0047aaa3e9614f705e5c6ece4ddf054",
+    "text_hash": "cc4b08c194f02685a66e0191d05292cb32bd972466a55a9dbe2844c2bec00191"
+  },
+  "pykissembed/paths.py:include_notebooks:136": {
+    "hash": "3a51edf6c6f40a9c4674c76f7df58c085400a83cc15e28646d87a5c986538e6a",
+    "text_hash": "a445d46cc4aece6480a0024e38c9219f839d329d6d0bb6f42543f1687bc77e65"
+  },
+  "pykissembed/paths.py:iter_py_files:69": {
+    "hash": "bc153eb8b89ca11542ce69007c85ffe0d3899b09338f9754a12d7e822165c211",
+    "text_hash": "a4646ef24a1a84cdb47e03ac2dfc5112491f7d4e4da7b3dd16b3df02fdc99ca0"
+  },
+  "pykissembed/paths.py:resolve_paths:101": {
+    "hash": "b75c526e4a697e21874cf52a98f31a7acb496cb7d1861b1c2fc95e331ca2af1e",
+    "text_hash": "a484a9973305db31c059dc746fdc840b952a8995e56241eb56421c0d9ff10cb7"
+  },
+  "pykissembed/paths.py:root:125": {
+    "hash": "f5d94b5c5849a3e9fdfda44483f9764c158bc92edbab863c153a6db7f9ace4b5",
+    "text_hash": "0748f4e1f69fbeadbb1cd1c1aeb03b97637fa8a408a6167947ec7b0774eafe7c"
+  },
+  "pykissembed/paths.py:warn_non_utf8:150": {
+    "hash": "fe024e4f9fbdc02e91a7d1f1cf846813003c572e4e6da8cb0496e08ad2fff813",
+    "text_hash": "cde521a8f83138d64c42adbdc7f24693a37c205a6ad856edb44551089db12395"
+  },
+  "pykissembed/plugin.py:_already_targets_check_file:388": {
+    "hash": "c5e9c4ee23aec7ae69a1cefcdf31e5e0e6089cd4051fb13cbc6575dc46e468d9",
+    "text_hash": "cf00142aeccf734da4e1db1c8c74a799bceea1a90a1f2fd4cf3346ea6efc4dee"
+  },
+  "pykissembed/plugin.py:_check_candidate:358": {
+    "hash": "7dc8c4bcc7932852cb34f9e4d268bc34384f0c096f13b14eb4cf655d88cd23c6",
+    "text_hash": "05ed1f9fa88f85e1b016fcb8f0c3365b8d4fa89be9719f1cea42bcfa4943b69d"
+  },
+  "pykissembed/plugin.py:_checks_dir:420": {
+    "hash": "443af06fe3f2cfd9b6f4bd7a0f06373fcd79126739509e0b6f2da4446c12b5a5",
+    "text_hash": "ed131a816c820e7a523b37c4ddbc50325b4c16248f661d4b682d2ba97d3ac133"
+  },
+  "pykissembed/plugin.py:_decide_injection:223": {
+    "hash": "03026c075913e121109e801dc2065f72513e1f99e4f5bf0f502eeb0c132aa3cb",
+    "text_hash": "ce992f661fccba1c2702212cef3c2dfc864900e0b45ecd984f66e34207e9d88c"
+  },
+  "pykissembed/plugin.py:_first_node_id:331": {
+    "hash": "8d88239e1152d79e8843f12e09bc06d3a6e8dcc8c5e239b971c7264fd49de9f5",
+    "text_hash": "fab3ca817a58431a0ae110a5e16bf0a70d1d70ccc717fe0e56c8393952b88556"
+  },
+  "pykissembed/plugin.py:_has_deselect_filter:320": {
+    "hash": "44674751b640bc5b554fb441594f6cc4e67e08f776c32b8531fe1926093424c1",
+    "text_hash": "033a10338c6c4a0e6fe34190dbd8a22d237a31ff68176f8046e0ce8087cf81fb"
+  },
+  "pykissembed/plugin.py:_has_keyword_filter:309": {
+    "hash": "5c7011b9872d81d08301d6b20099fc00a18f529121371f64ffa67b15ba9fc8e0",
+    "text_hash": "df935c194d4e252581ef3245338fcb779ede6f0aad5dd112bf783df882424b6c"
+  },
+  "pykissembed/plugin.py:_has_marker_filter:298": {
+    "hash": "3366df91d254ab9e0104e9b05fc8c33eb150995ae7c5730a72f720ddc5a1dbd5",
+    "text_hash": "5a8a3ec6f95d16337b8dd760fecef65118706917e31f4e371951ab75fc5a65a7"
+  },
+  "pykissembed/plugin.py:_is_installed_check_path:399": {
+    "hash": "6adf416b269543de48c5892e8a88ecec097487ee37e0ca8629939d4a7f86d963",
+    "text_hash": "e51090b10898198645348c55991f2548d4d5e1448be50a83ab07b664a17427aa"
+  },
+  "pykissembed/plugin.py:_is_same_file:373": {
+    "hash": "89c6c94c1ea8b78722d5e8800656689e5ed1de7d6a7a9d9d38dad3511db9b001",
+    "text_hash": "2bc8d9aedb5b7428e348c22d7b979be31b8ff272c2d586afaa50861a8874fc6c"
+  },
+  "pykissembed/plugin.py:_smart_restricted_target:342": {
+    "hash": "ae686d6207a2ed2cafa7c9e4265395855c0ae98abf848d1c9b99982f78f32d86",
+    "text_hash": "fa7a5ebbc593abb77a981e741ee39783092bc8a6abdc0dc247c69408abc07756"
+  },
+  "pykissembed/plugin.py:cached_only:85": {
+    "hash": "c8c1a2c46f9e3fe3e31ca4c1d6e8192a390fba76fe30a58105e420f2d64e2c38",
+    "text_hash": "6e02607c1f3803197b8f73c9025ed93faa78600e4380189a02ac9140bd39bb74"
+  },
+  "pykissembed/plugin.py:pca_cache:149": {
+    "hash": "991b3cfc82e06168aa893b6b2c4ed0fb0db165a75e9db22d978906d6bac7cd6f",
+    "text_hash": "c52ad4ce264527512d01624258732de08bf76aa00b3f2e3b27742827ffaaccec"
+  },
+  "pykissembed/plugin.py:pykissembed_paths:97": {
+    "hash": "009347bad40f455f618f1e26bb260d84f6a8b1dd0b565c4ba2f066a9f7642f7d",
+    "text_hash": "2b99604a64e7efcfcb3048150a84da1d787beec954dc960b33f892f5aab65c6c"
+  },
+  "pykissembed/plugin.py:pytest_addoption:44": {
+    "hash": "5efaa4b1948eaa809b8b1038d1c81cb9e86da3635c96e5cba8400b1d97bb60a3",
+    "text_hash": "b8e56ec9fffea7ac1c598c7826adee1d627ab76ccd5a52d19360fcb0d708c26e"
+  },
+  "pykissembed/plugin.py:pytest_collect_file:452": {
+    "hash": "9cf68967f66ebdf3fdb3e050f73011391de99cf56ccc20188f202208763b177e",
+    "text_hash": "4a4beee15ef10db8e981e44bf907133b1a2d12090baf3d6cb96bad80273b5dc4"
+  },
+  "pykissembed/plugin.py:pytest_configure:161": {
+    "hash": "7b98a4f18a3b0d4888a88dc472a9cf9577981d07c849e957e90e70deebcaf0a3",
+    "text_hash": "abd4a1969fbe1a8539a0ad1cd1b808defa650c4ed4b092c0153bd84020ad0bf9"
+  },
+  "pykissembed/plugin.py:shared_baselines:115": {
+    "hash": "3ba4ba817b006f4c60ff88e090cb310e70ca7d49453ddcb1d7426be401298bc3",
+    "text_hash": "802ddb9cd5bbbf5f05e0d92a8a85e5d78eb5656e53ef8ffb943d9ce4b0ce3feb"
+  },
+  "pykissembed/plugin.py:shared_functions:132": {
+    "hash": "318145bb9f71c15ee9f492adbf194980ce676bcd1f281f6d36c82bdf67e55d90",
+    "text_hash": "215dfc6977b64cabbf3a52e046b59597c787596c328b2ed2de9c9b004b48495e"
+  },
+  "pykissembed/plugin.py:update_baselines:73": {
+    "hash": "db7f82e2bd0f1a58ebee98640f6d3696a146f01c8a229417893fe468775d25ba",
+    "text_hash": "4651e967e2a8253142c1ed2fee187ac17c2a1f2f260cf785823255f84fa96fa8"
+  },
+  "pykissembed/providers/base.py:Provider:21": {
+    "hash": "d28c6d306e24aaedd300e3ba6c4e2fd65e72d6348ee9f82e37349ab4e46624cd",
+    "text_hash": "c3dfb5c5b59ce91131b2a2600d604e474e46b7519397fe0b00614760604042e2"
+  },
+  "pykissembed/providers/base.py:embed:48": {
+    "hash": "3c8aa6e07aec4816f1afc7a65e3c8ccdb31134a22ff3a6fc200444cdd8accfca",
+    "text_hash": "be721782744e4b0f12cdde1332285bf36c1afe7dd71bb1416df08725b7cdc64f"
+  },
+  "pykissembed/providers/base.py:is_configured:59": {
+    "hash": "805bf0d74894293e366f28be03fb7d8a43915c273c6a137e5eaa8b1e47d6f569",
+    "text_hash": "7f12c22855ec3bf2fba7a6176189ddd4e4603faf456bea85acd8b9a0ea5f0b8d"
+  },
+  "pykissembed/providers/local.py:LocalProvider:24": {
+    "hash": "de765cac6b9e06ea031e2c4d9876282bf58f440a214ab0a3c705addad99f1413",
+    "text_hash": "7175302e7f95e139b7e6d8d72d49598275633b5cdfdbf3b8a1666c54ee2060b8"
+  },
+  "pykissembed/providers/local.py:embed:33": {
+    "hash": "69ec04c9ead13128ac48187b638c8fca5aa8a5dd2deaa73f774ac417478014e0",
+    "text_hash": "f1894f706d46f8c7772a9b520081c632f5ffd9077070ba4c63893fd9a9881659"
+  },
+  "pykissembed/providers/local.py:is_configured:37": {
+    "hash": "2f76d175c8f6201b770e0a5c42aa038773bd63f9aefbbbf72d8a92d521971f58",
+    "text_hash": "856737796788485372e6164189587e1d1770efa739afd477da56f7b000a0d254"
+  },
+  "pykissembed/providers/registry.py:ProviderRegistry:19": {
+    "hash": "ab6cd38debcedb7c870b433f28945a71a7545cddceaabd06b10789bc54d40001",
+    "text_hash": "d485777db12c3bf7c0b1d12610609c8713d0bd38d22b66a287409b64d166014b"
+  },
+  "pykissembed/providers/registry.py:__contains__:87": {
+    "hash": "126e9577a0c930263ca759fade1bb791f5a740b848814ff6e6509205f4ecab4d",
+    "text_hash": "b807df7a7b3fe8effb7524ccdda5b74c00a862f2c34ebd1c0e0e911e6386d3a3"
+  },
+  "pykissembed/providers/registry.py:__len__:90": {
+    "hash": "f0c134cb1c888f12cc68113620fb37b0c567401758ded78af2430a8503004a22",
+    "text_hash": "ace9b8adffb8bab37157789ebfc7e7da0555a9560da534862cc4d720a55c6477"
+  },
+  "pykissembed/providers/registry.py:__repr__:93": {
+    "hash": "0d91960e65a789df2a22bdaebe741c31ff572fd64c9004b8e9ddf322aeeea41b",
+    "text_hash": "70d15aeaa131b344f3e63282aca91fe48b40c9580b22d11eb763e45171bfe42a"
+  },
+  "pykissembed/providers/registry.py:all:66": {
+    "hash": "a57147a12b89d4d2805ab9e3273d9c572173d95fef86eca84170d5ac1a21a8ef",
+    "text_hash": "e4b1d056b5d2b0c4d38aa7f6df4b8d6ff12d4ead4332a6841f3ba3325aa0184d"
+  },
+  "pykissembed/providers/registry.py:cache_key:140": {
+    "hash": "592607695166c95a41b24a69de26bab8f7bffcffcd9c7869076b7921c279022c",
+    "text_hash": "fd0ac0ffc029625bfdc30012d60b93460530af8cce065c1c3526d4d79f85deb7"
+  },
+  "pykissembed/providers/registry.py:clear:31": {
+    "hash": "375cdc57f351833d4beb76905401c7399895717c0d39332cdc8be881b0317f9a",
+    "text_hash": "f049d78bbc09fc767f3091a1f8ef2eaf866422e96b04d05451f7810b9efba866"
+  },
+  "pykissembed/providers/registry.py:discover:35": {
+    "hash": "af9384188c12e5086eca7a82b67a3dd44a4216a34dd53f64be0a46a479af7e88",
+    "text_hash": "7eefad4b2c36431547bf888ab52f28b8914543a73141238a55568f6683da6638"
+  },
+  "pykissembed/providers/registry.py:discover_all:108": {
+    "hash": "4b0f596120c66e8258b4dad66ea3dc7f4c2f3cbf4deb4dd4ed7ed7878fb6cb12",
+    "text_hash": "627dd1f7a368e8345c3764720c00afc4afc0e350e38d76627850773584f04a08"
+  },
+  "pykissembed/providers/registry.py:discover_builtin:103": {
+    "hash": "9c4b0eb086fd189609b53512eeb2f5e791ab222208c66d83719b44893af0bf15",
+    "text_hash": "2bee2f25a7517df041365946b3b268b4d90fd4ea25347fbb251fdcb7789ce7b4"
+  },
+  "pykissembed/providers/registry.py:get:122": {
+    "hash": "719f8eb7791894c8d575f94019da28a7c02e06296373b42ddac6f6b1bce5337b",
+    "text_hash": "8992c21644756cf355e4ed76edd825cb5590bd7534ba38f169aa411f31ed4df8"
+  },
+  "pykissembed/providers/registry.py:get:76": {
+    "hash": "cb429effb661dd8ca8c6099b44d538c01a774e5dc9c3d68dcb9861f8af754429",
+    "text_hash": "aa60662580d337cedbf3495c530c76fdbaf678190a6be005489848d562c3625c"
+  },
+  "pykissembed/providers/registry.py:register:27": {
+    "hash": "d9253eb26fd0b107d12d2a8a7683edc86acef5adb7642c18882e9a9df24a299b",
+    "text_hash": "c9aa9056194255d5535b0d6f2aad8b1e9a3539ce168f44769552bc9048015a60"
+  },
+  "pykissembed/similarity/ast_helpers.py:_append_unique_comment_lines:182": {
+    "hash": "48cec3bd7aa6b3d6b52b95636cb563b713a23657f7db540dd33c5c5d70e56d8d",
+    "text_hash": "bda51acdbdc183f7c7317f683d3cd22d2ac228f1612d9ebb65cfed2bb3071531"
+  },
+  "pykissembed/similarity/ast_helpers.py:_comment_lines:130": {
+    "hash": "d04d16eedf963ead472062b71de658962383fcfa12ec863db1f1804ec3c0fb7c",
+    "text_hash": "7da6da03ca8465c50a5d1ff8ad6219dd1ba57d5b589bf959d2d3e87f5086e802"
+  },
+  "pykissembed/similarity/ast_helpers.py:_count_executable_lines:191": {
+    "hash": "5d616803ff2e6e83d069c456671b8195311548191e1e9010e63bcb8b3bf694f5",
+    "text_hash": "27c10e0c8229023616e312f02b01f1a3be66fb4df594a3bb17341038e394bcb0"
+  },
+  "pykissembed/similarity/ast_helpers.py:_decorator_lines:91": {
+    "hash": "2dbebcfbb28f63dc59f6a84a79d76e02dcf583fe57352ed1c84930d1a3f6d382",
+    "text_hash": "70494d36127bfe1295d72c8bb5b1771d18c2218cec6de8f60e361cbb65732e44"
+  },
+  "pykissembed/similarity/ast_helpers.py:_extract_function_from_node:232": {
+    "hash": "af436c4bb0913a4bd24e37baab619766aee2608c471c1103f7ecbe730c57b75b",
+    "text_hash": "5d3830c778c0070c8200af11d5c076bc11cbb39464b7c42a6a82693446d1b62e"
+  },
+  "pykissembed/similarity/ast_helpers.py:_extract_functions_from_source:287": {
+    "hash": "b72cdb2f6bce158c91775b83aeaec5b599dc5f8b60015a3c154f2f31990a3e20",
+    "text_hash": "fd103d0d42617bfa0e173351953d4aea518819949dc8efabd99ff31ac8c998cf"
+  },
+  "pykissembed/similarity/ast_helpers.py:_fallback_comment_lines:167": {
+    "hash": "da0bb42a0babb3a8b00ffa9397f5fd7f0bdfa28dbd64cc782d1f8d3c9c817425",
+    "text_hash": "f01849859ce308910090131da39c38eb7163400a383c19c35aca7756b42311a1"
+  },
+  "pykissembed/similarity/ast_helpers.py:_signature_lines:112": {
+    "hash": "8f820e81b4629c85ed2522bba146dc9bd5fa2eaced879b558802b53e92edb4d7",
+    "text_hash": "e7b69313a10c9264fa5f52c4fa7dcea48bcb61ae4a82ab1025e6705a59702cd5"
+  },
+  "pykissembed/similarity/ast_helpers.py:_tokenized_comment_lines:147": {
+    "hash": "1075e6813af0bb1c57258ba190ea03dc179ede3dc7c338500b02114400c1b0fb",
+    "text_hash": "c32e10464a35877ed2f876391382c922e5c09e2cdfc717e6edfbc5cb9d9c25a1"
+  },
+  "pykissembed/similarity/ast_helpers.py:compute_content_hash:50": {
+    "hash": "aae03a7caae5c127464f37f2f0eda24d4b614a117ac5ac3227a5d24d1798b9cf",
+    "text_hash": "c12fa116684e3fbc264bab1a3c003100b212fff7bd91700df45dcd7c570c9322"
+  },
+  "pykissembed/similarity/ast_helpers.py:extract_all_function_infos:366": {
+    "hash": "6b0ff036bee3c184b1a14994cf2f612c9f3b36bc64d515cc81d9197644173fe7",
+    "text_hash": "9ff6eb30a007429529c2e27599386f21b95e5e682b11d7df68567081aba8c6b2"
+  },
+  "pykissembed/similarity/ast_helpers.py:extract_function_infos:316": {
+    "hash": "964d20a24ea8ceadf2fdc19b24163edc426b64c955d9c7f1298acce985fc1a27",
+    "text_hash": "5288d6c6c92b5fae000624b51147868d0e9d63a598a7bf305e401b5b8c64b375"
+  },
+  "pykissembed/similarity/ast_helpers.py:extract_function_infos_from_file:394": {
+    "hash": "812482b88b8c687d33b9907f4c38f9576e4395e0b53708cc0c1bdfa29ee24131",
+    "text_hash": "03d1b925d75d368e25aafa9769f4208334f1e5eea09132a313ea8e20fe97b9e3"
+  },
+  "pykissembed/similarity/ast_helpers.py:extract_text_for_embedding:60": {
+    "hash": "9fde6c6eedebc49669050e496079f8f9343dffaeaaedac2c47aca3d5b5494f17",
+    "text_hash": "3de502fd0c4ff26094cded93f6a3943c476455b53417177bb98168b9e561c5b3"
+  },
+  "pykissembed/similarity/ast_helpers.py:get_function_text:24": {
+    "hash": "f4f54f96fa60514a0b0776f00971dd8ae9076f48be56972ae57a32d699561419",
+    "text_hash": "b0fc42c417af1276626b459704abdbbe095387785d70f6502fbaedebc89e42af"
+  },
+  "pykissembed/similarity/ast_helpers.py:normalize_ast_tokens:40": {
+    "hash": "c7c146092d9f5349fc7a0f1d0b0c6b77c090daa6b7e5a7be544bda89b1c0a40b",
+    "text_hash": "98f3e24347b4a426fc5fd07631b556f976280e4bbf1adff3667b3d4ad1448f3f"
+  },
+  "pykissembed/similarity/checks.py:_check_against_others:161": {
+    "hash": "13fb5d947609953280397ff0f01fdfd99c3f64511ec8d09742dcea9aec021301",
+    "text_hash": "f5eafc903d3e3078c73470a31aa86b1b9826f6dff67c3c43e16c0c7836fddd3f"
+  },
+  "pykissembed/similarity/checks.py:_extract_config:581": {
+    "hash": "b8bc7ce8d7ea0abf7087559e108b564f6913b6e5890ae846c9bdc3bcbffce1be",
+    "text_hash": "9214b0f99b6d3e8ae4ede3ed80453d03059ea57845d0d289bcfafd2670f356a8"
+  },
+  "pykissembed/similarity/checks.py:_extract_embedding_cache:666": {
+    "hash": "d2a0f56e40762c61c0121e3d2c3086782b98933be576471973553c62b3630c85",
+    "text_hash": "15b54daf64864832fa62bd4521c3e4f89fff9d74df3d04dd6c8008002d734898"
+  },
+  "pykissembed/similarity/checks.py:_extract_excluded_pairs:691": {
+    "hash": "d101b38537677ad08d366e111a7c9f9e2bbc7c2b2824d97a71725096030b4e8a",
+    "text_hash": "0c503df6f489c1273558762dcf682a7180c38788b81dbead0b737aa8335439bd"
+  },
+  "pykissembed/similarity/checks.py:_extract_pca_variance:601": {
+    "hash": "a2a4d993b2cc2a92dd46d7e3ef1669d5e02a335f585ad10a69bf6fbf64c120c1",
+    "text_hash": "51fe3de562c166878ef37e51478a8df827e1bc2cacdc039623207242bacf95df"
+  },
+  "pykissembed/similarity/checks.py:_extract_refactor_index_threshold:626": {
+    "hash": "12cc3af60113ef858c1074cf12b26712cdc7e3446ee5faf9c22064c12bec2435",
+    "text_hash": "1c23b778fa4208aaff50bb173ff28b98a425ca9af5bb23f082903f60f09deac2"
+  },
+  "pykissembed/similarity/checks.py:_extract_refactor_index_top_n:646": {
+    "hash": "8ba757a7f9a494452e702acaade9f28e7b536eaf49ce6b6c4e6e82a23809773f",
+    "text_hash": "a0acf92695835973a16f5009097db9827e200128d179c8972b24b01f063d87db"
+  },
+  "pykissembed/similarity/checks.py:_find_matrix_violations:431": {
+    "hash": "e0427339b2c607d19495f00b6d295e38dae0f1a0a9bb187a1030e179c060e713",
+    "text_hash": "60f680906aa89bbf6ed1386d96eefd94d5344ddcd286a1847d980fee94e9cb2b"
+  },
+  "pykissembed/similarity/checks.py:_find_violations:207": {
+    "hash": "f42d1d7b69f9b7d3a873d5bffad6617f94436f13ae4ba19e8b3580637bb41f89",
+    "text_hash": "dfd403004be566c7b5649449e4ca340df3cca0bad9e750058cf779517e52daba"
+  },
+  "pykissembed/similarity/checks.py:_format_neighbor_violation:146": {
+    "hash": "4716126f8a1fb61b568c4bb3e0257e21ef1107b726f87dadc638ecac32f20190",
+    "text_hash": "db52f0fb21ba8f7729d912df5abe810013fd2300b9867b0f083032cdcc9bd454"
+  },
+  "pykissembed/similarity/checks.py:_format_pair_violation:131": {
+    "hash": "faf23f2e915a5893aef5be9bf5c8065a86e1480346323725d399c4f01e0976e1",
+    "text_hash": "51a0cf12b09ac84c3ded78d88700e2cff95a058ec70e2ec959b50425dfbcce29"
+  },
+  "pykissembed/similarity/checks.py:_jina_uncached:409": {
+    "hash": "3fb5c1bd6b9a4bf25de6399f4bb96de840e0c8ec77349186d54c5a7fb666ac4c",
+    "text_hash": "143a8994b56e1b52d1162ff4a10abc2d304fe4dfe44409e6c479ef91d1b36876"
+  },
+  "pykissembed/similarity/checks.py:_load_cached_embeddings:92": {
+    "hash": "d270fd0c769d130fe8bb688eefa53ef7eafbb3042484957e82014a53ab1783ff",
+    "text_hash": "dfa23375c27cb2d0f5fc90630abbb1d748bec08c24ff9fda4ac63903b48427f5"
+  },
+  "pykissembed/similarity/checks.py:_report_violations:247": {
+    "hash": "00aa46f00a071f3971a31d64389682e6f9a7fa5a9fc445d0d007f36a58e27d3f",
+    "text_hash": "5fd53020c32f36fd880370326daa057c184a367bf52e663d603d5b58c7747731"
+  },
+  "pykissembed/similarity/checks.py:_skip_missing_embeddings:116": {
+    "hash": "4192d6a362fc2a0ed5b5273c1de4c96fb873acd4a7e588c25d3db696c3f15960",
+    "text_hash": "d5de1a34393eca7b8e71ba798cb47201229bb022e30ae9194388f586aa621ead"
+  },
+  "pykissembed/similarity/checks.py:run_jina_similarity_checks:473": {
+    "hash": "343feb5d96b7f800a9b1f9517dcbe2234f613c13f56e1c1ccc75944eeb3287ee",
+    "text_hash": "269a9faabe673605394ee4f9c3ab8b7a2dbb730fe51bf07a238eccd1f914968d"
+  },
+  "pykissembed/similarity/checks.py:run_provider_similarity_checks:296": {
+    "hash": "1fe7226715e2a4df2845c3df52a6be620c7e4af9fb9c506f3f9b7a0ff849792c",
+    "text_hash": "d63d6e558c0621e3ebcbebcf2c687b8697c47b2acb8c1ca85dfe668c54b66940"
+  },
+  "pykissembed/similarity/complexity.py:_cc_complexities_from_source:50": {
+    "hash": "8c610f2e22c28b75578112e2dbdb8480142931f4d62bdbc674a2b321a8137b3f",
+    "text_hash": "71c243a87bfa1b4dc98c79ac119b29a2d7257b1589cfab95f6b6e8bbb8bc9be0"
+  },
+  "pykissembed/similarity/complexity.py:_extract_block_tuple:20": {
+    "hash": "788ecb37b01884d0bfef5b0d8875ee0f2a633c30ab0f65350dacf9bdfab95686",
+    "text_hash": "259f500ec1b1b6c623d21ac59163490dbbaf0e0c5ebc4c1e2acc646459f4c1d1"
+  },
+  "pykissembed/similarity/complexity.py:_get_complexities:78": {
+    "hash": "b7204a0526a4f8ac524a7e7eb61e46806f8f6ef4812796196508546012f03cc4",
+    "text_hash": "20e85ef202155aef7e4688a0b722164b2c5872c8537cfe098abcea9301034071"
+  },
+  "pykissembed/similarity/complexity.py:_load_dir_complexity:116": {
+    "hash": "6439d70550cc4f038beb164816444873e7914106737e77f9db7338baa639ba95",
+    "text_hash": "8c2d55f6cd702f62636dd62b1329564d61d7f011ff07b6330769f949af6a22b7"
+  },
+  "pykissembed/similarity/complexity.py:load_all_complexity_maps:178": {
+    "hash": "b88ba4731640fcc6f06a807a1a635443032c6f212da8c8b5a4c3e35d6766bf18",
+    "text_hash": "3b1b99ebe75c14559020b0dc53bfd2d2ae51e420fe69a0e3cf93c86a68504e59"
+  },
+  "pykissembed/similarity/complexity.py:load_complexity_maps:158": {
+    "hash": "65368dfc751e4021cb75d2a02f59d7249ab3bb38ac9c9be7370b2186415e8f27",
+    "text_hash": "7f03e24a12d725e3c640ddca7e52e4e99e547c13e1e10855d624e5f36d1d6eaa"
+  },
+  "pykissembed/similarity/constants.py:_embedding_cache_file:78": {
+    "hash": "267a52dfc0199feb039471c5c88ea8207fd3e7f0f181d2358a647162bfaa743b",
+    "text_hash": "865be7162f97243293676e18f873ee3b520bb00b751439c3031f88273e4a2869"
+  },
+  "pykissembed/similarity/constants.py:baselines_dir:45": {
+    "hash": "f16afe7472c1a0d46eb19d330e1de406a1c89f2a6563a10d74c508a9715e2c67",
+    "text_hash": "398db56385e200e887ca5e4c82e238e6c24eb0aefe9f54ba3c5441dcde5480cc"
+  },
+  "pykissembed/similarity/constants.py:baselines_file:56": {
+    "hash": "75928822247dfcf0400c6b93a158448ed1c657749297eb68a213e66e3f2fe2b0",
+    "text_hash": "957a01e804c464edf1e915697e823074f4617a8b4f46bf376de61c4e262813b0"
+  },
+  "pykissembed/similarity/constants.py:function_hashes_file:67": {
+    "hash": "856613f33d032f768a57c74953f9b7bbd3d5c79718c259d576785ec6975942d3",
+    "text_hash": "fa5557230196f146bf602cd0b6b545886a97350b8227c0db4f989537b24c85ba"
+  },
+  "pykissembed/similarity/embeddings.py:_build_jina_caller:236": {
+    "hash": "963071924f16203b5e9fe971c81c873a76f26a8d9234ab8260446e9aad7e3f43",
+    "text_hash": "fdc3e39ccbc379f2ecb31ffc1a0762c37d878c97b9d8a8733173e5c228817fec"
+  },
+  "pykissembed/similarity/embeddings.py:_build_jina_caller:238": {
+    "hash": "963071924f16203b5e9fe971c81c873a76f26a8d9234ab8260446e9aad7e3f43",
+    "text_hash": "fdc3e39ccbc379f2ecb31ffc1a0762c37d878c97b9d8a8733173e5c228817fec"
+  },
+  "pykissembed/similarity/embeddings.py:_build_provider_caller:294": {
+    "hash": "a36cab4a3fed715300466bebcb1399bf7a24dd69dfd22598c3f11ce79fea74c1",
+    "text_hash": "5b3c9a390cd4db917e807374863a39b097b41618c097eade84d5e87d39ea0e7c"
+  },
+  "pykissembed/similarity/embeddings.py:_build_provider_caller:296": {
+    "hash": "a36cab4a3fed715300466bebcb1399bf7a24dd69dfd22598c3f11ce79fea74c1",
+    "text_hash": "5b3c9a390cd4db917e807374863a39b097b41618c097eade84d5e87d39ea0e7c"
+  },
+  "pykissembed/similarity/embeddings.py:_gemini_is_retryable:368": {
+    "hash": "53dc6725a080f724f9672352b1b2ff0603d92c86a6c7314225892203c6392aa0",
+    "text_hash": "4b5ea9ec057cac18f1c505f3701ec51422599f0fb5086dc8955d95afe560e024"
+  },
+  "pykissembed/similarity/embeddings.py:_gemini_is_retryable:370": {
+    "hash": "53dc6725a080f724f9672352b1b2ff0603d92c86a6c7314225892203c6392aa0",
+    "text_hash": "4b5ea9ec057cac18f1c505f3701ec51422599f0fb5086dc8955d95afe560e024"
+  },
+  "pykissembed/similarity/embeddings.py:_gemini_request:336": {
+    "hash": "efcc452e68e87a9571561121e9fc9c23d7e310082a1e3841d6a2cd05177e5d55",
+    "text_hash": "73c0e0999fce12f257b32f632af431773e580c0fd0c730009caed17de63cf168"
+  },
+  "pykissembed/similarity/embeddings.py:_gemini_request:338": {
+    "hash": "efcc452e68e87a9571561121e9fc9c23d7e310082a1e3841d6a2cd05177e5d55",
+    "text_hash": "73c0e0999fce12f257b32f632af431773e580c0fd0c730009caed17de63cf168"
+  },
+  "pykissembed/similarity/embeddings.py:_get_embeddings_with_retry:157": {
+    "hash": "97962953e4fde59bf17ae17dd7d7e191ffb579feb5f1e21b2cd93981d13d6684",
+    "text_hash": "283c29e9fbb439b2a25f3f9fd726a005f0bbf6a7918106ab0b4a2af38852ef04"
+  },
+  "pykissembed/similarity/embeddings.py:_get_embeddings_with_retry:159": {
+    "hash": "97962953e4fde59bf17ae17dd7d7e191ffb579feb5f1e21b2cd93981d13d6684",
+    "text_hash": "283c29e9fbb439b2a25f3f9fd726a005f0bbf6a7918106ab0b4a2af38852ef04"
+  },
+  "pykissembed/similarity/embeddings.py:_get_tiktoken_encoding:55": {
+    "hash": "1a580a01a96d05a9666db17f3220708e465c11f5b33dbfcb0950771184f45634",
+    "text_hash": "7fdf0915888945353b8c5076fd2b5c74e59cb335d4e121e08ecf8cb5674a33b0"
+  },
+  "pykissembed/similarity/embeddings.py:_get_tiktoken_encoding:57": {
+    "hash": "1a580a01a96d05a9666db17f3220708e465c11f5b33dbfcb0950771184f45634",
+    "text_hash": "7fdf0915888945353b8c5076fd2b5c74e59cb335d4e121e08ecf8cb5674a33b0"
+  },
+  "pykissembed/similarity/embeddings.py:_is_embedding_cache:760": {
+    "hash": "accaa3a9607b1ab269c6bd52baad909872442361c24905c32d3a0906819fa161",
+    "text_hash": "95c06c550dd8bdce4a19910ba64bbe0af99c8b8b6133270372c1ccbdf61616a6"
+  },
+  "pykissembed/similarity/embeddings.py:_is_embedding_cache:762": {
+    "hash": "accaa3a9607b1ab269c6bd52baad909872442361c24905c32d3a0906819fa161",
+    "text_hash": "95c06c550dd8bdce4a19910ba64bbe0af99c8b8b6133270372c1ccbdf61616a6"
+  },
+  "pykissembed/similarity/embeddings.py:_is_float_embedding:718": {
+    "hash": "f47b4738abf9794ddb5350a966994da0ca9f7798bf4a26a9328b16e7b4ad94da",
+    "text_hash": "f06ec1e95024b7dfc4dd69c1edee976b83b1bcbbcf47b54246a87eb4f9efc2df"
+  },
+  "pykissembed/similarity/embeddings.py:_is_float_embedding:720": {
+    "hash": "f47b4738abf9794ddb5350a966994da0ca9f7798bf4a26a9328b16e7b4ad94da",
+    "text_hash": "f06ec1e95024b7dfc4dd69c1edee976b83b1bcbbcf47b54246a87eb4f9efc2df"
+  },
+  "pykissembed/similarity/embeddings.py:_is_str_object_dict:739": {
+    "hash": "564dd0e7c81a78c4ea00214d8e627e41cd916e285f3221e9d9cb31bba2cf9ce6",
+    "text_hash": "983fc856a3bf306f8d8e3523de8531568faf3afff0f079eb0ea852b18e98b977"
+  },
+  "pykissembed/similarity/embeddings.py:_is_str_object_dict:741": {
+    "hash": "564dd0e7c81a78c4ea00214d8e627e41cd916e285f3221e9d9cb31bba2cf9ce6",
+    "text_hash": "983fc856a3bf306f8d8e3523de8531568faf3afff0f079eb0ea852b18e98b977"
+  },
+  "pykissembed/similarity/embeddings.py:_jina_request:257": {
+    "hash": "3a35933ba8669b1203d8cedc3c963cbb73efd1caba97afb3d2f34eb69b4d0a59",
+    "text_hash": "7768158ccc7c5186e8984e5875ec4476144407a203bc8b86f2f1153c66b902f1"
+  },
+  "pykissembed/similarity/embeddings.py:_jina_request:259": {
+    "hash": "3a35933ba8669b1203d8cedc3c963cbb73efd1caba97afb3d2f34eb69b4d0a59",
+    "text_hash": "7768158ccc7c5186e8984e5875ec4476144407a203bc8b86f2f1153c66b902f1"
+  },
+  "pykissembed/similarity/embeddings.py:_l2_normalize:602": {
+    "hash": "d95724798122485586b3da1a832c765a1f1c64191a689c5046d3d92847ad54dd",
+    "text_hash": "c1a69e0e10ca0bcaf975f674ca5bf54b55d5e49fc4680e3b4b7183437c726c52"
+  },
+  "pykissembed/similarity/embeddings.py:_l2_normalize:604": {
+    "hash": "d95724798122485586b3da1a832c765a1f1c64191a689c5046d3d92847ad54dd",
+    "text_hash": "c1a69e0e10ca0bcaf975f674ca5bf54b55d5e49fc4680e3b4b7183437c726c52"
+  },
+  "pykissembed/similarity/embeddings.py:_load_api_key_from_env:107": {
+    "hash": "1025315d42cd68e4c0408cae3b730bb38865906259a0b8e78a8185c92919bdcf",
+    "text_hash": "93de1135fc06495b489fd36342bc2faf69e021392fbc298247c761cdf91df16c"
+  },
+  "pykissembed/similarity/embeddings.py:_load_api_key_from_env:109": {
+    "hash": "1025315d42cd68e4c0408cae3b730bb38865906259a0b8e78a8185c92919bdcf",
+    "text_hash": "93de1135fc06495b489fd36342bc2faf69e021392fbc298247c761cdf91df16c"
+  },
+  "pykissembed/similarity/embeddings.py:_openrouter_request:420": {
+    "hash": "c2292b241566c69cdf6ee1929669078657889c583b123825c1b9bbeacfeec20c",
+    "text_hash": "d9c359cde0203ae2a23086a23ded02a5d601808aa5448a9039df06d64e41188d"
+  },
+  "pykissembed/similarity/embeddings.py:_openrouter_request:422": {
+    "hash": "c2292b241566c69cdf6ee1929669078657889c583b123825c1b9bbeacfeec20c",
+    "text_hash": "d9c359cde0203ae2a23086a23ded02a5d601808aa5448a9039df06d64e41188d"
+  },
+  "pykissembed/similarity/embeddings.py:_require_api_key:211": {
+    "hash": "d4114e23d80559a708c968ad3346a61d5e8f456147f28ceb580423b8204f150a",
+    "text_hash": "09ab10c7177df15f401021eccc5ba4c51971a306742413cf27cc259fbcd2c012"
+  },
+  "pykissembed/similarity/embeddings.py:_require_api_key:213": {
+    "hash": "d4114e23d80559a708c968ad3346a61d5e8f456147f28ceb580423b8204f150a",
+    "text_hash": "09ab10c7177df15f401021eccc5ba4c51971a306742413cf27cc259fbcd2c012"
+  },
+  "pykissembed/similarity/embeddings.py:_truncate_to_token_limit:76": {
+    "hash": "a13e10c83634508e7bf77ecbd96455ef77d5abe770c5be8c8331b4cb07a43bb4",
+    "text_hash": "5c25d11664299c793c5f6b1bf53cb143245049dbf08efed5b1e6e6b1c8493599"
+  },
+  "pykissembed/similarity/embeddings.py:_truncate_to_token_limit:78": {
+    "hash": "a13e10c83634508e7bf77ecbd96455ef77d5abe770c5be8c8331b4cb07a43bb4",
+    "text_hash": "5c25d11664299c793c5f6b1bf53cb143245049dbf08efed5b1e6e6b1c8493599"
+  },
+  "pykissembed/similarity/embeddings.py:_voyage_is_retryable:478": {
+    "hash": "33cd4084c339d246735040a77e4981880962a417ba794971a7c479261fbe2daa",
+    "text_hash": "93134fdc2495abe88d702d2e777c08d26606e7c28533446d5dff06d6b74c6036"
+  },
+  "pykissembed/similarity/embeddings.py:_voyage_is_retryable:480": {
+    "hash": "33cd4084c339d246735040a77e4981880962a417ba794971a7c479261fbe2daa",
+    "text_hash": "93134fdc2495abe88d702d2e777c08d26606e7c28533446d5dff06d6b74c6036"
+  },
+  "pykissembed/similarity/embeddings.py:compute_combined_embedding:637": {
+    "hash": "05c787a2df946513793614d0f6bc889d91f6efe2d96683f70218723a5fb05366",
+    "text_hash": "6d4098a5dac0ac79803ca6a9e477590d03a84982b1a0b3696a9e0910935a410f"
+  },
+  "pykissembed/similarity/embeddings.py:compute_combined_embedding:639": {
+    "hash": "05c787a2df946513793614d0f6bc889d91f6efe2d96683f70218723a5fb05366",
+    "text_hash": "6d4098a5dac0ac79803ca6a9e477590d03a84982b1a0b3696a9e0910935a410f"
+  },
+  "pykissembed/similarity/embeddings.py:compute_cosine_similarity:573": {
+    "hash": "c66f9be7fce1eb5782d7186237995ac165f690fc669d0677a93735874fb78855",
+    "text_hash": "6308921bc4fed55de3be0b0dc0ec16e533b71e0eb04d621a11de4cf72d7017d5"
+  },
+  "pykissembed/similarity/embeddings.py:compute_cosine_similarity:575": {
+    "hash": "c66f9be7fce1eb5782d7186237995ac165f690fc669d0677a93735874fb78855",
+    "text_hash": "6308921bc4fed55de3be0b0dc0ec16e533b71e0eb04d621a11de4cf72d7017d5"
+  },
+  "pykissembed/similarity/embeddings.py:get_cached_embedding:782": {
+    "hash": "887dd1abfca88fcd5531d19388003377999d5f6f0ffe6eaf38f41ec85b3f5586",
+    "text_hash": "0ad1b8569a419b985e9f7eb6462d6d4a89bcfb681670d73f17f577900dd760ff"
+  },
+  "pykissembed/similarity/embeddings.py:get_cached_embedding:784": {
+    "hash": "887dd1abfca88fcd5531d19388003377999d5f6f0ffe6eaf38f41ec85b3f5586",
+    "text_hash": "0ad1b8569a419b985e9f7eb6462d6d4a89bcfb681670d73f17f577900dd760ff"
+  },
+  "pykissembed/similarity/embeddings.py:get_embeddings_batch:521": {
+    "hash": "a2f71ad40d4f60882e4b79cdd84f3c219e158f18e241fe14aa202ceec1428756",
+    "text_hash": "0c52747a0dfebdd82d78abff03869ef740c4be8b4abc0452b1938afce92195f1"
+  },
+  "pykissembed/similarity/embeddings.py:get_embeddings_batch:523": {
+    "hash": "a2f71ad40d4f60882e4b79cdd84f3c219e158f18e241fe14aa202ceec1428756",
+    "text_hash": "0c52747a0dfebdd82d78abff03869ef740c4be8b4abc0452b1938afce92195f1"
+  },
+  "pykissembed/similarity/embeddings.py:jina_combined_members:617": {
+    "hash": "e4b6ddd276acdcc9660ff8182a2a50c8f26bc645c2af0681e601a705329bd5f6",
+    "text_hash": "787b1b85d004254c6fc92f02029be3f32fad8dc3e9e18f67b00a23ecc13c3cf6"
+  },
+  "pykissembed/similarity/embeddings.py:jina_combined_members:619": {
+    "hash": "e4b6ddd276acdcc9660ff8182a2a50c8f26bc645c2af0681e601a705329bd5f6",
+    "text_hash": "787b1b85d004254c6fc92f02029be3f32fad8dc3e9e18f67b00a23ecc13c3cf6"
+  },
+  "pykissembed/similarity/exclusions.py:is_excluded_pair:23": {
+    "hash": "5ad120d10cc2de5f2f734768e74e7c63975f666782942c78045ea903cc7e413b",
+    "text_hash": "e61ea4af4eb366e87450e9d867de244634adff6e123c4fc859e7cd425c681192"
+  },
+  "pykissembed/similarity/file_split.py:_as_config:48": {
+    "hash": "3773f8a001a631496fcf32c1cb4791a3bd300b1be01a7e114cae3e7eb3d86efa",
+    "text_hash": "d1502011781d68f45ff7dadabfbd9b648fc08efe6d3190af04af57d90df5b073"
+  },
+  "pykissembed/similarity/file_split.py:_as_embeddings_cache:20": {
+    "hash": "0a2b29a922b74884cb6113c9f1febc610fa065b27324801c2dca8762e7d3f431",
+    "text_hash": "bef6eaddfe4e36e3efdb82e20ae6a5d8eeeab67f1db90c180cc82036ffa23869"
+  },
+  "pykissembed/similarity/file_split.py:generate_file_split_proposal:62": {
+    "hash": "4f75d815b74f69552bc4fae87b1bb515bad4bb6ecb185954c4a303af20c51325",
+    "text_hash": "15e25fe2a44ffd0dcf7a1c059c4a790f5c4605fce7bf73b125608d88d7200833"
+  },
+  "pykissembed/similarity/jina_similarity.py:_infer_dim:29": {
+    "hash": "195a4b76892762e0df8cae70f73314306550b15b77e08b878332fcfe2d86d258",
+    "text_hash": "9ce345120e78b6edf9f474d3ecb7c40ce00b785a473a9fb30ed556635e224242"
+  },
+  "pykissembed/similarity/jina_similarity.py:_row_normalize:69": {
+    "hash": "4e301e30adf45084a85228175272c2590611c30d13c8d59f825da707ae75a0da",
+    "text_hash": "4ab7e19a126af4d69d46bf97c9a85054da70aaea2dc7f04dee825a2191969ff0"
+  },
+  "pykissembed/similarity/jina_similarity.py:_stacked:44": {
+    "hash": "698424debb5c6742e0e25079c83513b967ed81ee22fd12faca78a90830c2ff87",
+    "text_hash": "c34c32b674164eb74141ff91fab1c935f6ab49e8693748fb66817c8bbdd32a11"
+  },
+  "pykissembed/similarity/jina_similarity.py:build_symmetrized_matrix:83": {
+    "hash": "d7b0b323bf46747a3b5db6a29eb418d757f7d98065c134d2c08ca6b3690f0697",
+    "text_hash": "d38ebae5dffa857c3939096e6dfb68c8c6c6e19bd4f7aa4a4e8e38a2474fb37b"
+  },
+  "pykissembed/similarity/pca.py:_CupyArray:22": {
+    "hash": "2a1458de14d8650bf732b81de4f60810731f8fa1fffea12de7783315dc41dc15",
+    "text_hash": "cf9f3b6724d2516b11779109989cfd3252da3419884ecce3299a6f0a3bf166f7"
+  },
+  "pykissembed/similarity/pca.py:_CupyModule:34": {
+    "hash": "7d64c2c57b475fdaf7e57bb49ceb53fff3d50480bb97541183899778d4b98ad3",
+    "text_hash": "b27e2fe09e2badee23e45503c13031d2a6d4cc4dd2d5b68c5437deef642a6873"
+  },
+  "pykissembed/similarity/pca.py:_GpuPCAModel:48": {
+    "hash": "2075954cda8ff86f5316203c71f58e73d8c88b315c573e6e5b6befaf10b7da1d",
+    "text_hash": "a868ad0bd836054360ccfa72e63922caeac4eac858652f90fc2b3beacea51440"
+  },
+  "pykissembed/similarity/pca.py:__getitem__:29": {
+    "hash": "c5ddf5b42e3655c94ef06614c50ea945b8844c514561c8162db32c8ec8fdd241",
+    "text_hash": "c0095a46718574d1b839a9982971f8e25967a788b82fab3782c94734ee8fdb7d"
+  },
+  "pykissembed/similarity/pca.py:_get_pca_class:168": {
+    "hash": "bd4f5861b28a72e214a2120453f7f151ee08501e58b0097db3ea94e632721284",
+    "text_hash": "3ee197700b2abf42aa33c6596a3b055e97ae2175f30ce887cffed89eea3dfdb4"
+  },
+  "pykissembed/similarity/pca.py:_load_cupy_module:62": {
+    "hash": "d5bea1dda679699c68cbca01311c04749e1f0c73444b3d54dfb0763e675caafe",
+    "text_hash": "4b49c1c44b55cbab261ff5ceea1d41791a20fb3100024b49e2aa5b35395a6877"
+  },
+  "pykissembed/similarity/pca.py:_load_sklearn_kmeans_class:148": {
+    "hash": "ad89ac826a9b0e60dfcf514a76f11861dc3e04cf3b2b271a2573637c05f0e259",
+    "text_hash": "d926efc99d3057e7769d43feb298f14cda20a337e7537ac54b6b4812c2ab33f9"
+  },
+  "pykissembed/similarity/pca.py:_load_sklearn_pca_class:128": {
+    "hash": "c836341e32e32d44ab1ee70ea68dbc118b8a746b0f6e9d28861581a8bde8b523",
+    "text_hash": "8fd7cbd0a1cd693a44548e151083bd04be13b431b638c85b554fd02b55457af7"
+  },
+  "pykissembed/similarity/pca.py:_make_kmeans:311": {
+    "hash": "6dfd977e6000873acc3fc8b2453d7e6e69803c623975d234e2d34422e1cff012",
+    "text_hash": "7d3390c3a37ba2673c9891eb37ae1925ea35aa6aaaeb8fe1db953dc8600bb030"
+  },
+  "pykissembed/similarity/pca.py:_to_numpy_float_array:87": {
+    "hash": "33198e980ccc0f8c101c6ee2153a5402a8ac368310a48defb51eeec2d35c6cdc",
+    "text_hash": "81fdc28ed3c9cb3fa77f09826f401f8cf5b5c6580b4ac9c4550824fe2fa693c0"
+  },
+  "pykissembed/similarity/pca.py:_to_numpy_from_cupy:109": {
+    "hash": "6bdfa4afd97c456b13e1fa321ae041cc664f10315cedafba09969135bf57f0b4",
+    "text_hash": "c8acaedd3a9cdc26ef320a6693fd4850672d3353447a3dae6c7f8c42ddc1c662"
+  },
+  "pykissembed/similarity/pca.py:asarray:39": {
+    "hash": "b13c670243fca175fd4925c10057dea3969fc0d1d7050638583b35069dce47ca",
+    "text_hash": "08a83b78f939ceef9006155661397a0c438d56a5848460e46d8f12dd21d4d903"
+  },
+  "pykissembed/similarity/pca.py:cluster_functions_kmeans_with_pca:346": {
+    "hash": "15f75425c582306dc0689029c18cc7c5004de8a72639c4d78f85fe988f652fe4",
+    "text_hash": "391abc36df8ec7422d6c1976e926915eed9fa28b611708bfc0cd9d3e4c2b7a2b"
+  },
+  "pykissembed/similarity/pca.py:cumsum:43": {
+    "hash": "69664e062da83ef848a94e31b229c710ae6ccfb7a068718c08f0e8e1c95c2fc8",
+    "text_hash": "35589931e18b97c0a9c9ba71e21aabd74649df9a7823293120b5c571114e20b3"
+  },
+  "pykissembed/similarity/pca.py:fit:53": {
+    "hash": "9741524660f30f7838ae83d09f1a7cebbb32196e5765a387a880a9bcd3d9aa06",
+    "text_hash": "8396bef29cb696e5fe9a67f01525ab134c7460264c729832e3560db0ebc896a6"
+  },
+  "pykissembed/similarity/pca.py:fit_pca:193": {
+    "hash": "54247f273b567d0d003313579793e091300480af555d0b8d717b1270bf732d32",
+    "text_hash": "d4ae3a3050aeb1bf52bde1ac3514308a492e6e636d446a3fa866aaf1d4ac6f0f"
+  },
+  "pykissembed/similarity/pca.py:get:25": {
+    "hash": "f1550b8f82adf309706d435d7faa0e8fee4542b68e65db82b97f1b93723e702d",
+    "text_hash": "1472603bbf630236581f36855a4b681e142e49ea344c0101661e6c6d704e31b8"
+  },
+  "pykissembed/similarity/pca.py:transform:57": {
+    "hash": "ff93756012c1a959d5313bcd34c55f24cead04ede7caea3e1855a7c42648879b",
+    "text_hash": "38f97ba2996fe3d246f5c04f637b8d2748242aa99cd49697134f32e9a16fd505"
+  },
+  "pykissembed/similarity/pca.py:transform_embeddings_with_pca:262": {
+    "hash": "6fe1ba45e66f9c9d20d3d4aa075ec4bf1cac5167b20b28e857e3b4d6dc93dc9e",
+    "text_hash": "9283c32fd2a8badcf5a0de2bc5497ff862b1ff251b35cbe840713ca7cbd8d7bd"
+  },
+  "pykissembed/similarity/populate_embeddings.py:_FunctionHashEntry:53": {
+    "hash": "c1fbe7505b49870193f39b54d0d6e91982cb7d00954e5296e14d6ca1f514db17",
+    "text_hash": "d261d6a9f41a0775b689805fd4a7c545d7585746815f531fad3a58fdd0b10cf8"
+  },
+  "pykissembed/similarity/populate_embeddings.py:_JinaCfg:126": {
+    "hash": "c8b766f856ae6044cbd552e48914b1dba1a101211a6c1796128abcc72b6bb024",
+    "text_hash": "b727d49636f94e9ed0d72897900ab34fc4ff73216bd6d6d4230513ac606855ee"
+  },
+  "pykissembed/similarity/populate_embeddings.py:_ProviderCfg:114": {
+    "hash": "abe09312aa767c29cb3225d491cbad2183cb2ceec5544bc14f6c3d7e3376c05f",
+    "text_hash": "3a5c68ce1ca81b350b1295a5a0052ac85568eedff6d6bdb8ba117d2c16e25653"
+  },
+  "pykissembed/similarity/populate_embeddings.py:_find_uncached:150": {
+    "hash": "f5d70f478fbece66fc58ca247b91a12050c7e89e253da5cd32fd6d1f39f3925d",
+    "text_hash": "8fe18aba566bec5fc8edb4fe18802c68658f5ccc8a0f4dd169edeca78f558fbe"
+  },
+  "pykissembed/similarity/populate_embeddings.py:_get_embedding_cache:60": {
+    "hash": "f8c1ca954b7a28bb7d33bec629383d7cd5289106a152c1b66385f741554c7809",
+    "text_hash": "b76f983629276ebf5e1492f0633e19aae0a075f22c61d17b97e107d416be73ce"
+  },
+  "pykissembed/similarity/populate_embeddings.py:_get_function_hashes:89": {
+    "hash": "6d0f609861070eb71005c4f5bf2df629670fe50dca2df1c71b23fd84054a4215",
+    "text_hash": "e7eaecae02f08e504604550d07f7db5ae7b24e40c191e1a44274fb804017e0d3"
+  },
+  "pykissembed/similarity/populate_embeddings.py:_jina_texts:246": {
+    "hash": "6ed0c12c7e387818f8a37e4d49e640a648718472d5de281cdefc3564dc47fead",
+    "text_hash": "9ce7d58dd5e933d967756f740fd5daa68266308e2b2ca9f68211afc868735e34"
+  },
+  "pykissembed/similarity/populate_embeddings.py:_populate_combined:432": {
+    "hash": "8a99139538fd98f4252b027d35f07fbe0e449b0a5895dec5835072af9d7ed8da",
+    "text_hash": "bb7f1bc0cfac9f41e1a10c277fc842c6af4ba9cbfbb3297a1820868400a71442"
+  },
+  "pykissembed/similarity/populate_embeddings.py:_populate_jina:267": {
+    "hash": "99b59c92d9d4104e9fedc074f421b6fef4bfb7e4b5470a9f685d6109be812ac3",
+    "text_hash": "8abdc15801d02c31a1dbbb2d0a66487bf75620e6c7cc2cc81012d5cea58d6149"
+  },
+  "pykissembed/similarity/populate_embeddings.py:_populate_provider:170": {
+    "hash": "19819fd981010d668e8f6f58bf681c9215deec263adfa3558cf8897d0efbf446",
+    "text_hash": "7b153b921f4ab011aec42ccc1fb88aadbb13ddb0e9e743f28116d82add823a5c"
+  },
+  "pykissembed/similarity/populate_embeddings.py:_update_function_hashes:463": {
+    "hash": "2eac0c76e6489fc2736ee644d53eb75e237b9230015efd3aa5c08bf2bb9d5566",
+    "text_hash": "abd2114eda314153c3a171888f6e9fd21c3cdcd183ff4f28ceba2b5d3c415e55"
+  },
+  "pykissembed/similarity/populate_embeddings.py:get_provider_populator:490": {
+    "hash": "3e83ee89a473b2a4de0da300879919f33f66b31fb345e68ca0fdde52e1bc661f",
+    "text_hash": "b140fac09ff94dcd6ddabf4a9a3aeb65697febdd206c59559349d1b3f38b8d59"
+  },
+  "pykissembed/similarity/populate_embeddings.py:main:551": {
+    "hash": "f7380a1294d22186c278e26465bc223d8b48b1ad6880becc5e5551772aee2d5f",
+    "text_hash": "c125d2c190608aa0f4711d0ff432321c055af65796842a0844c2c376a85f57b6"
+  },
+  "pykissembed/similarity/populate_embeddings.py:populate_embeddings:518": {
+    "hash": "e22e3df8d03ba43e7de50b0304fb3c80480e1e1472fe9422148b2c3c9b965f67",
+    "text_hash": "1387e981e8bdbd5a34e1b5cd2cb5aa9ba8baf8751e1a1d1e9c912fec3cbe8386"
+  },
+  "pykissembed/similarity/refactor_index.py:_RefactorConfig:32": {
+    "hash": "887615befb40c7ba2b20e076f0c68f31aa3eff0a8bed4143a94a4c0d6af35850",
+    "text_hash": "fb7a50e084c862de31affda8ea6fae7e863fa2cea35ddfc475f855b0b48f3128"
+  },
+  "pykissembed/similarity/refactor_index.py:_as_str_object_mapping:40": {
+    "hash": "7a258b705265492958bc9edfe345049aa2803cdd4f096d741a583c106989ad9d",
+    "text_hash": "a1646c227edfbeeecaa96d5a9cf0c31b4ccb7691636551f39d8fb79c796a2354"
+  },
+  "pykissembed/similarity/refactor_index.py:_parse_cached_embeddings:108": {
+    "hash": "37e4611752ac56beb04ce53277cb09c8c1611abe160b3d103c110421008f3cfb",
+    "text_hash": "2f66e4bdf723c17fe4b05cb62d7ab727bd869d60b70405ad57e456fa1b07b52d"
+  },
+  "pykissembed/similarity/refactor_index.py:_parse_refactor_config:65": {
+    "hash": "b6e0e7787d9e9b9328dee13dec77f91b780603076acbfe07400a8ac4c8fed643",
+    "text_hash": "d1b8afc9a7f9b220578259469752cee13f46a6ab42c78101d1649afc2c97d5a0"
+  },
+  "pykissembed/similarity/refactor_index.py:_zero_excluded_similarities:208": {
+    "hash": "e48fcba14c83c86712338f889bf423fa32aa422cda99cbccd22e778afcef1255",
+    "text_hash": "5bedd5806ca2de435837fb9d523434adbd4edd990116437e2af1b42ed740924d"
+  },
+  "pykissembed/similarity/refactor_index.py:compute_max_similarities:168": {
+    "hash": "0e36942db8feb0a62a46ea22816d73cfd12293b308727a93bbbd96113789f664",
+    "text_hash": "2199507db0f25569fa34566e64702e1ab0966500df6f4049c6f66232ffa1a40e"
+  },
+  "pykissembed/similarity/refactor_index.py:compute_refactor_indices:194": {
+    "hash": "480fba45486f05c4121900ec75ffbd617899621c0be75da53b30c343e5d92080",
+    "text_hash": "b308cdb2ffcd35a7a2d6f00e072d9e1fa5eaa140bbc3d2ab1823b922f0f42a14"
+  },
+  "pykissembed/similarity/refactor_index.py:compute_similarity_indices:178": {
+    "hash": "31f4d5deb79153afbc2f2aa35ff072574d22dfbcae4999ce8513b953bd3ea3d9",
+    "text_hash": "1cca4b260932811fb23c1d6137631ba08126e058a41295ca2b185aa2433622d7"
+  },
+  "pykissembed/similarity/refactor_index.py:compute_similarity_matrix:135": {
+    "hash": "b3e84e59ef87c390fba8a1f698ab17b03aa4736f30e85086f4b95bc38cf54a9f",
+    "text_hash": "d233e45aff8d995a9a128080b05e237cd879308048c4ba5f215fd1a83013cad9"
+  },
+  "pykissembed/similarity/refactor_index.py:get_refactor_priority_message:236": {
+    "hash": "3109801fe1350fbb773ff9607cc4ba5c170a561181996ac3413b1c4f5e87a8e3",
+    "text_hash": "36a015b94dcf175388ca969d99db3a3ea646454a9ef6340b30895ee287c68c19"
+  },
+  "pykissembed/similarity/refactor_index.py:get_refactor_priority_message_for_complexity:334": {
+    "hash": "78521fb68836e223ca0c3c0d7fc49116565b3cc47c727f8e3887f26ba0064e72",
+    "text_hash": "1e27da3b664751fbf88799d51cd139692549d1e9ba916b4fb8ac8a8c16fc58e1"
+  },
+  "pykissembed/similarity/storage.py:EmbeddingRegistry:331": {
+    "hash": "0941c02e0eadca9b51a92defe825e58b2f897befd44efd7fd1e6f5d8135f5df8",
+    "text_hash": "c12e611cb3ad4c86c74aef638307c0d00944d54e8e5b15f609ed4af4fa1d46a0"
+  },
+  "pykissembed/similarity/storage.py:HashType:189": {
+    "hash": "69eb3edd8c49c5135284797215dd1cc451ae08530608ebabaa5ca5bb4d6a2a01",
+    "text_hash": "d5606e1e1e150c8d53d19bc4f8fa3f1e16af7ba959f6eeb9a6dae3d87eb85d8e"
+  },
+  "pykissembed/similarity/storage.py:ProviderEntry:197": {
+    "hash": "e54ad26385582661c8b2b3b5312358824509793890fdfc38b0485d5547d18ec3",
+    "text_hash": "7449faa7b65bdc930edddf87ad7ba2bbcc486497e329f6f5434051807f1e0e4e"
+  },
+  "pykissembed/similarity/storage.py:_as_embedding_cache:52": {
+    "hash": "45db9de0138a414bfd3bde097a110e1f327f0b8686c05630a491ba8d0febbd2a",
+    "text_hash": "be16c25cd5d6f3673332b1c70db23ca5396a8aaef004b99e79f7af38c7063c00"
+  },
+  "pykissembed/similarity/storage.py:_as_float_list:27": {
+    "hash": "7dccf9537b84ae20caabca0f896a3af40da5faa383c49dbe436bf55f1d6478b4",
+    "text_hash": "6ac164608def7d85a53c09a2eb5e8366bbd76561652493a0118a801bd7f5e8f3"
+  },
+  "pykissembed/similarity/storage.py:_as_str_object_dict:76": {
+    "hash": "129012a87e230864df5f562e05addfd67fadce15b37b606b8e678f2053fc00da",
+    "text_hash": "cf1c0cee25d73384fb0e8d5f0d0afa24faaca3d3ade0743a4b649b0c87aeb53e"
+  },
+  "pykissembed/similarity/storage.py:_atomic_json_write:160": {
+    "hash": "b84df06c5ee53a0206ae82cebf8b6629b5acab30f00504e03f0f6146ceae1173",
+    "text_hash": "2bfaebeccdfb9c4939b27dbd8b78a70c7aac878e9083fa86d96e5ac10f3b2dff"
+  },
+  "pykissembed/similarity/storage.py:_build_combined_row:257": {
+    "hash": "316870ea782598c0d5f13081dbc5a2b420de20e916059407e30b3874c1f65908",
+    "text_hash": "c969f9ece73aadd04bcb1de227e50ca98695154ca13a161bd8504d231dc8f23b"
+  },
+  "pykissembed/similarity/storage.py:_compress_embedding:109": {
+    "hash": "bfdcdac748710e9d0aadae92d145e02fef48233acf5030bf85c1ff5fa1331668",
+    "text_hash": "ebc101d7b97f10e87017adc41c72966011214098205e2c042abc76e84a7f5e13"
+  },
+  "pykissembed/similarity/storage.py:_decompress_embedding:125": {
+    "hash": "b1f3c735d6b5d5a18c6ffdb48fdd93fab2d58baa34516e49bcc8d8d9251b2d7d",
+    "text_hash": "594e6997fbb62fe660953ded07534d0d976528952a717ffc05469a9d7a84f902"
+  },
+  "pykissembed/similarity/storage.py:_get_cache:99": {
+    "hash": "9152b617953ef95999a907979f9f2b4715df31b9b574bc1617fc36c68f86b1ce",
+    "text_hash": "9e95024e6ddb5dead703136eb04e59a355e965f86481fcf8248ac6abe8144316"
+  },
+  "pykissembed/similarity/storage.py:_load_compressed_embeddings:135": {
+    "hash": "41a397ef2bc8d4cbfdbe9995140b354aaff903f9de208836f91bd6e1e30150f8",
+    "text_hash": "b9d2550395779f17aa19316f49a3caa2a1ce76f19b86e15f5362dcaa53eefb0d"
+  },
+  "pykissembed/similarity/storage.py:_provider_cache_sets:401": {
+    "hash": "3aad12ec2000bc5c5f7f57916bf90d7736e993b4fe66d8fa5933a27fa602a8ff",
+    "text_hash": "17685ecffdb9c2122e3679cee648196decafcdbb1de578c2168eb99889de94fd"
+  },
+  "pykissembed/similarity/storage.py:_save_baselines_unlocked:819": {
+    "hash": "9ecfb0aec7aaa5e9ac18ad6113c9fd3fde817863c2e1e7c02e3a0fe2abfda68e",
+    "text_hash": "016effbf50b89191a05a50d79f8e4f63d37e0e36737a6b0ddbfcd401f4932660"
+  },
+  "pykissembed/similarity/storage.py:_save_compressed_embeddings:149": {
+    "hash": "e9638161c05970223a42fd3105c2c55270812e3e875627ba534d98706744fc77",
+    "text_hash": "d2d864f8e25171920d5bb1890a442651ca41c22d20d451230bc7b54c99796dce"
+  },
+  "pykissembed/similarity/storage.py:audit:428": {
+    "hash": "aa7c28592570e6214dae24aa5a02734b8a4cc00667259faf56c2edbe0c49b219",
+    "text_hash": "af0f3e7c4911a1a2c07ab78903ed457709f245458b1688c1b0d23370e2ec1501"
+  },
+  "pykissembed/similarity/storage.py:base_providers:357": {
+    "hash": "0bfc3105afb42eec69dc6f3821fd18f1e6789debc1b00a53f07a8ddd10f92767",
+    "text_hash": "6039d5e362131c54634a6633f81dd684a0f7ba69a1a696c008408aa0f727a4c2"
+  },
+  "pykissembed/similarity/storage.py:by_cache_key:390": {
+    "hash": "d7988f9efca269f76673e3e14b2b005d4d0970cedd33ce7ea9cabfe8c68df30b",
+    "text_hash": "f671bedf231dda371cc0d69267b5abfe0f5923c9d18a0e7ac6c9f44131b428e6"
+  },
+  "pykissembed/similarity/storage.py:combined:371": {
+    "hash": "a7d6ced8b0d9c0ab9643989e34c23d794c3f5c64729a9e42795d2171611816de",
+    "text_hash": "8e4f307fd53c5ab61580a88dd1c2d5b2faee2f712426d9a569c580e0f13c4ff4"
+  },
+  "pykissembed/similarity/storage.py:combined_dependencies:376": {
+    "hash": "761ce6e33367840c012242bd5610787b4fe541eabb26aeba2e0596bfe206750b",
+    "text_hash": "cf0bf55f1a2afe9d79727c5198491058087c0a4fdf1d94e8b3badca0291763f3"
+  },
+  "pykissembed/similarity/storage.py:files:386": {
+    "hash": "fa3be375bb91a26ea63241179783fdb3564c71c9538f3199b7eb5e281763d620",
+    "text_hash": "2980e1faabcf1fb4021378cfc0255305b4072fcc37d7752c24f06b76d83c0d0a"
+  },
+  "pykissembed/similarity/storage.py:get_valid_hashes:676": {
+    "hash": "ea2b065f1168e6b1f92b0a87bf5a7c4d102cf53523e98bfd7c4abcdf3ebb2907",
+    "text_hash": "32f1c257fbef76bb4f6266f2a141a87b8368d55ad1e057548f60868276234c68"
+  },
+  "pykissembed/similarity/storage.py:hash_field:237": {
+    "hash": "d9f3b46a5b663a1f659d665c5310ff8f5c155a93506fde6ae7c9b328da7517fe",
+    "text_hash": "7e23346e89ad240cc909a47d0c7a92130771bec6a03068a6d22a7e2e2903c689"
+  },
+  "pykissembed/similarity/storage.py:load_baselines:788": {
+    "hash": "f9dfa0a2ae066972a6a83dd85677e7b5f22b9019685e88f8c4cabffe266e99d7",
+    "text_hash": "ab784d64f26dd4a04328f15c5524ac074d5fc76bdc4d73f5389b51bea9319913"
+  },
+  "pykissembed/similarity/storage.py:load_minimal_baselines:727": {
+    "hash": "ad5992d4fc0db7be6b323bdd1d44ff462b6ddcd7551b1e9f5722a537e2a9ad18",
+    "text_hash": "90493b75371faa86bd47850b3e705b481e9d44f273c5bbcc7677088637f3d9c2"
+  },
+  "pykissembed/similarity/storage.py:load_provider_embeddings:754": {
+    "hash": "84b8efefc20c9b50047505d5268925ba13c70140c15511e619c20e063cf8ddbc",
+    "text_hash": "1c2b9d23b726c09df2ce3d1318f5a21d7b3cf0a240043cb002922e9b58753dca"
+  },
+  "pykissembed/similarity/storage.py:pca_variance_key:252": {
+    "hash": "658492fa166cdd4bf34b39d21b71dcc349204060e724f4d244c20bc697d13cb0",
+    "text_hash": "039c9e61ffff93dd4a0a62fea6d1ffafd7509808ea18f23e023d5c504f36a038"
+  },
+  "pykissembed/similarity/storage.py:providers:352": {
+    "hash": "cd2a70b0039942c1a1b8c167479fdd7cff93f4aacd2014c17e583dbac7b5ff6f",
+    "text_hash": "49653a0372b6c3b59587cac1036cf77a4da3039fec7b7ba35b6573ae6f9625b9"
+  },
+  "pykissembed/similarity/storage.py:rebuild_combined:478": {
+    "hash": "e64b41be13c7c9d85342e6f8c285376c03f393d3ff04a1596f19dba5f6bf7296",
+    "text_hash": "16b1814aab04c56c5f92a1eaa31cdb5ca58329ac12ff6903cbff7285bf31aea2"
+  },
+  "pykissembed/similarity/storage.py:remove_orphans:455": {
+    "hash": "cf959da453d1b7b7270b0723b4b431805b6c5fe497026845d878b3d51b825686",
+    "text_hash": "244a67fcb08f8683f7685507d7cc2b9b5ce24c1f141b9f48f9358dcfcc233604"
+  },
+  "pykissembed/similarity/storage.py:save_baselines:813": {
+    "hash": "33b84fee7e59d168461289701fa3916a2088067d87b94156f5cf972527501522",
+    "text_hash": "25d08a324017e31b7400bda628f34d9f07f24f8d5a96c8f2afa4c7ed475263ad"
+  },
+  "pykissembed/similarity/storage.py:standalone_dependencies:381": {
+    "hash": "984744ce8766a9b856e3ba0e2caddd8096c4cee76c5a5e2e2d58e43d5ed734f3",
+    "text_hash": "f2dd9064032acc4f63cc2a4b13a80d7e60c3fa9dfadc6b0ab819372e0ad507c9"
+  },
+  "pykissembed/similarity/storage.py:standalone_providers:366": {
+    "hash": "77b61b6ea8a25a28f89ef2a1c8714e51db7cf5da10b153ba08f38d3f886901db",
+    "text_hash": "65cf5be17783a2c2fbafbeec562650f5f98f75ea123b2f50aa777ad569ad785d"
+  },
+  "pykissembed/similarity/storage.py:threshold_neighbor_key:247": {
+    "hash": "6622369556da6dbfc88e9f39ef5b30128279aa16360a11ffa233a83af550075a",
+    "text_hash": "1ebc43b4d7b86bfdd68268bfb445316b99aa70122d1e300960f00a5c74dae01c"
+  },
+  "pykissembed/similarity/storage.py:threshold_pair_key:242": {
+    "hash": "75bd9649da0996473efdf6dec4113f53f64c184a0dfe1152d9635c005013396b",
+    "text_hash": "aab7e9bafa2c5034aed1fde8e2045adf6aef6412258e467c037ec555bff9cf7e"
+  },
+  "pykissembed/similarity/types.py:FunctionInfo:22": {
+    "hash": "b6d6e975811510ab3fb0886c07dcea1abff20f04d8ce9dc011c0da9d830cf62f",
+    "text_hash": "81cd9a7c8381ea5b650fc2b43dbc5375599e778df1dfc8011fd3c0a7addda350"
+  },
+  "pykissembed/similarity/types.py:PCAModel:13": {
+    "hash": "c14cb003abc387ff86c01193ace56893c744699deecae3dddc421d50d5a5c906",
+    "text_hash": "0cf0b71eea9836e29967753d8524688ec6914975e055083e366706ed16cfcbec"
+  },
+  "pykissembed/similarity/types.py:transform:16": {
+    "hash": "7a12a1e9e2a78b5e2cc965b37da74a4b9450c546290d8c6da7bf6ee24300ec05",
+    "text_hash": "f930965b5c74191207a86821405c794a6a08a1098201c2214d2bb54b0697f783"
+  },
+  "pykissembed/wrapper_analysis.py:WrapperCandidate:37": {
+    "hash": "0fad6a1d741dba4161e29ecb14fffe3fe9599c209d032844a13fb7a70032e6c9",
+    "text_hash": "d780e0fa9313fbf77bb42347338685a7b32090e8dbbad723ee349dd2eb6225c9"
+  },
+  "pykissembed/wrapper_analysis.py:_call_counts:292": {
+    "hash": "964a1d386bd389e6d401895b04114a60709c73a15aa701c86d3c6d49e3b785cb",
+    "text_hash": "fba79403bc66282fecd4204f99846f421fb83afe6ad478ba5304251259f47ccb"
+  },
+  "pykissembed/wrapper_analysis.py:_call_terminal_name:312": {
+    "hash": "9af2ddf8ff60854c487755179536a852f61495009ca93c9579bba5c1e9225c22",
+    "text_hash": "f52316f29ee5fb7121f564bcb2d658a9c8942944fe5c38d6c370ae581e638e2d"
+  },
+  "pykissembed/wrapper_analysis.py:_decorator_name:433": {
+    "hash": "d26cadc3f0f3238c2137fd0cff2dcd9486c3c620780946e10e37ca7b48b7ab84",
+    "text_hash": "d183cf8ce6d09cdc95f1608d5ecff7ee4d31f27f9550a8eee607babf6bf781e2"
+  },
+  "pykissembed/wrapper_analysis.py:_executable_body:174": {
+    "hash": "a71c18b67d273a8865d437f17ce009adb806d147844ddb25d7b91be3fe035947",
+    "text_hash": "6a604ef7c20aac5634ac2b1c42f98764643d4a5caae56f316817c2ffce823411"
+  },
+  "pykissembed/wrapper_analysis.py:_forwarding_call:151": {
+    "hash": "cf3ae7b15b16179d52d5f2d5f8b7e8bfc67459ec0f42e37342a7818e2ac94e3f",
+    "text_hash": "b235645462962493273263b8a53bcaeef96625e26eb4723e4c214d12396442cc"
+  },
+  "pykissembed/wrapper_analysis.py:_has_exempt_decorator:407": {
+    "hash": "bcdf7d7c37e035e0c07a57b71e98c9d61535a2f401a32dedf9c832da7cf59d1d",
+    "text_hash": "59ba05040b3a2c6c06d1d099fb1942cac8b6b72f78f427502620974da30b697a"
+  },
+  "pykissembed/wrapper_analysis.py:_is_exempt_wrapper:385": {
+    "hash": "7d145ff653da2c51fd3b2341ec0d407452d30cf71ad21175dab2b63c55094e8b",
+    "text_hash": "04d4fcdaffd21866d2f1dc030fa39aa8335e3ad262e4846ac60e8eab9f1937f5"
+  },
+  "pykissembed/wrapper_analysis.py:_is_parameter_name:281": {
+    "hash": "8304e4c86569cc6b4179fb933ff78c00967787991cd177f8eba7e1a17078cc87",
+    "text_hash": "1ca673cc9ad64322dac00a3c3508712ce06536b23c419bf25a86518a5a2b3fc7"
+  },
+  "pykissembed/wrapper_analysis.py:_is_unchanged_forwarding:185": {
+    "hash": "6ecc2873c73345be4c59f1b6852151ada200d621dcdd261d8278772d6ddf1c59",
+    "text_hash": "9e882bd652e75d5b2ec89f9581ff4fdbf4002fb46b24d408bf7a6c49710eba4c"
+  },
+  "pykissembed/wrapper_analysis.py:_matches_any:453": {
+    "hash": "e320e783ac29fbf0581fce4b968d50d2ab2db95c8671e4c5b18adafcb92ba0a2",
+    "text_hash": "39e4bd35636247bfb7277d2de337c7211f81cb29abfbad887ec78d8e25a85aa6"
+  },
+  "pykissembed/wrapper_analysis.py:_matches_keyword_arguments:251": {
+    "hash": "f3fd043f843d1d7a336f36bf9793d0e31b8f13d98473cd84e36716da32b70cc9",
+    "text_hash": "71878b4bf304e5e416cea4226ea65d258c02cae62b2d75daa13430a6a8a9525a"
+  },
+  "pykissembed/wrapper_analysis.py:_matches_positional_arguments:221": {
+    "hash": "a8efbb0304d1a2e187268e5523ed341f4b10f4d24386d60febf5ffaf9ecf2093",
+    "text_hash": "04e6c9f80ffa79f189e1029a4c57710aef93f5109c59f375040319ac1b2eaf6c"
+  },
+  "pykissembed/wrapper_analysis.py:_parent_map:327": {
+    "hash": "a8a4f94440ae5ae58904486f0d57963ace3a6da42bc28d686ab893aec910e856",
+    "text_hash": "db8671d838169301b262a9a69ae140802788fd0649a31fdaff3450057cd361da"
+  },
+  "pykissembed/wrapper_analysis.py:_qualified_name:365": {
+    "hash": "3a853f740e490a73cea6489f1097f4616331739381961e193ee77c7606ab77ef",
+    "text_hash": "8c8dc084c2e30e3362e0a5df6da527680dbabd19ad4b0884a4a4dc71cd2c5115"
+  },
+  "pykissembed/wrapper_analysis.py:_receiver_name:208": {
+    "hash": "2b754748f5bdb1dadbb23d53f03107a608636797c55c6d7e31ac7f38192d6143",
+    "text_hash": "1e5f9ec7d6f971e83615927466e26b5029d1950a8fd557f5fa95d305c96891f4"
+  },
+  "pykissembed/wrapper_analysis.py:_wrapper_candidate:114": {
+    "hash": "b47bce3141b87182dd9821844ab5bcef75d8ce48225ec9738ae5bcae2f2c9b49",
+    "text_hash": "bac865d01b5e2ba793123124432e417451535ef3c394bc8add0e3072b09c5860"
+  },
+  "pykissembed/wrapper_analysis.py:_wrapper_identifier:344": {
+    "hash": "d83053902e13364173a18980b55c487b1769c361b8ec97404bc2539fde17efe2",
+    "text_hash": "ed7e911f70032f17e63a803d922ffcc390a6746d622680583af474ff54ba6f74"
+  },
+  "pykissembed/wrapper_analysis.py:find_wrapper_candidates:77": {
+    "hash": "2775c39ec96f9f6a32b800da2096291314b62b32c4ddf303fae641db518fee6b",
+    "text_hash": "27f7ce3e92d43e2bffb85cb6a341b85f134071eb54a22deaf26d7e34be32f439"
+  },
+  "pykissembed/wrapper_analysis.py:parse_source_files:46": {
+    "hash": "30c8fe266ebfa1858c5c309978b24be99a1e0bbab52b09dcd6d7158db995edcb",
+    "text_hash": "0efcbfaf0ba7765a7b513c99490a2e58f008dd62977a728e99ac2d42a0feb48d"
+  }
+}

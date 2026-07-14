@@ -4,6 +4,6 @@ from __future__ import annotations
 
 from pykissembed_local.provider import LocalProvider
 
-__version__ = "0.1.19"
+__version__ = "0.1.20"
 
 __all__ = ["LocalProvider", "__version__"]

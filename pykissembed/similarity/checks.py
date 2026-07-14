@@ -7,15 +7,15 @@ adaptation is that imports use ``pykissembed.similarity.*`` instead of
 
 from __future__ import annotations
 
-from pathlib import Path
 from typing import TYPE_CHECKING, cast
 
 import pytest
 
-from pykissembed.config import get_config
 from pykissembed.similarity.constants import (
     DEFAULT_REFACTOR_INDEX_THRESHOLD,
     DEFAULT_REFACTOR_INDEX_TOP_N,
+    JINA_AST_QUERY_EMBEDDINGS_FILE,
+    JINA_TEXT_QUERY_EMBEDDINGS_FILE,
 )
 from pykissembed.similarity.embeddings import (
     compute_cosine_similarity,
@@ -23,11 +23,14 @@ from pykissembed.similarity.embeddings import (
     is_embedding_cache,
     is_str_object_dict,
 )
+from pykissembed.similarity.exclusions import is_excluded_pair
+from pykissembed.similarity.jina_similarity import Float32Array, build_symmetrized_matrix
 from pykissembed.similarity.pca import fit_pca, transform_embeddings_with_pca
 from pykissembed.similarity.populate_embeddings import get_provider_populator
 from pykissembed.similarity.refactor_index import get_refactor_priority_message
 from pykissembed.similarity.storage import (
     REGISTRY,
+    HashType,
     ProviderEntry,
     load_provider_embeddings,
     save_baselines,
@@ -43,7 +46,6 @@ type NeighborEntry = tuple[str, str, int, float]
 type PcaCache = dict[str, tuple[PCAModel | None, int, bool]]
 
 _MAX_SHOWN_UNCACHED = 10
-_EXCLUSION_PAIR_SIZE = 2
 _MIN_NEIGHBORS_FOR_VIOLATION = 2
 _MIN_FUNCTIONS_TO_COMPARE = 2
 
@@ -59,6 +61,32 @@ GEMINI_AST_PROVIDER = REGISTRY.by_cache_key("gemini_ast_embeddings")
 QWEN_TEXT_PROVIDER = REGISTRY.by_cache_key("qwen_text_embeddings")
 QWEN_AST_PROVIDER = REGISTRY.by_cache_key("qwen_ast_embeddings")
 COMBINED_PROVIDER = REGISTRY.by_cache_key("combined_embeddings")
+
+# Jina providers are standalone (not in REGISTRY's cosine flow): each drives the
+# symmetrized query/passage path via ``run_jina_similarity_checks``, reading its
+# own ``{name}_query_embeddings`` / ``{name}_passage_embeddings`` raw caches.
+# ``cache_key`` is a logical id (no single on-disk cache); ``file_path`` is unused
+# here — the raw caches carry the real files (registered in storage.REGISTRY).
+JINA_TEXT_PROVIDER = ProviderEntry(
+    name="jina_text",
+    label="Jina-Text",
+    cache_key="jina_text",
+    file_path=JINA_TEXT_QUERY_EMBEDDINGS_FILE,
+    hash_type=HashType.TEXT,
+    default_threshold_pair=0.90,
+    default_threshold_neighbor=0.85,
+    standalone=True,
+)
+JINA_AST_PROVIDER = ProviderEntry(
+    name="jina_ast",
+    label="Jina-AST",
+    cache_key="jina_ast",
+    file_path=JINA_AST_QUERY_EMBEDDINGS_FILE,
+    hash_type=HashType.AST,
+    default_threshold_pair=0.90,
+    default_threshold_neighbor=0.85,
+    standalone=True,
+)
 
 
 def _load_cached_embeddings(
@@ -130,69 +158,6 @@ def _format_neighbor_violation(func_a: FunctionInfo, similar_neighbors: list[Nei
     )
 
 
-def _is_excluded_pair(
-    func_a: FunctionInfo,
-    func_b: FunctionInfo,
-    excluded_file_pairs: list[list[str]],
-    excluded_function_pairs: list[list[str]],
-    class_function_proximity: int = 0,
-) -> bool:
-    """Check whether a pair is configured or structurally excluded.
-
-    Returns
-    -------
-    bool
-        True if the pair is excluded, False otherwise.
-    """
-    # Check file-level exclusions
-    for pair in excluded_file_pairs:
-        if len(pair) != _EXCLUSION_PAIR_SIZE:
-            continue
-        pattern_a, pattern_b = pair
-        if (pattern_a in func_a.file and pattern_b in func_b.file) or (
-            pattern_b in func_a.file and pattern_a in func_b.file
-        ):
-            return True
-
-    # Check function-level exclusions
-    func_a_key = f"{func_a.file}:{func_a.name}"
-    func_b_key = f"{func_b.file}:{func_b.name}"
-    for pair in excluded_function_pairs:
-        if len(pair) != _EXCLUSION_PAIR_SIZE:
-            continue
-        pattern_a, pattern_b = pair
-        if (pattern_a in func_a_key and pattern_b in func_b_key) or (
-            pattern_b in func_a_key and pattern_a in func_b_key
-        ):
-            return True
-
-    # A class naturally contains its methods' source. Comparing the class
-    # block with one of those methods produces a structural false positive;
-    # nearby class/function pairs have the same property in small test files.
-    is_class_a = func_a.text.lstrip().startswith(("class ", "class\t"))
-    is_class_b = func_b.text.lstrip().startswith(("class ", "class\t"))
-    if func_a.file != func_b.file or is_class_a == is_class_b:
-        return False
-
-    first, second = sorted((func_a, func_b), key=lambda func: func.start_line)
-    if first.end_line >= second.start_line:
-        return class_function_proximity >= 0
-
-    source_file = Path(first.file)
-    if not source_file.is_absolute():
-        source_file = get_config().root / source_file
-    try:
-        source_lines = source_file.read_text(encoding="utf-8").splitlines()
-    except (OSError, UnicodeDecodeError):
-        return False
-
-    code_lines_between = sum(
-        bool(stripped := line.strip()) and not stripped.startswith("#")
-        for line in source_lines[first.end_line : second.start_line - 1]
-    )
-    return code_lines_between <= class_function_proximity
-
-
 def _check_against_others(
     func_a: FunctionInfo,
     func_a_idx: int,
@@ -226,7 +191,7 @@ def _check_against_others(
         if func_a_idx >= j or func_b.embedding is None:
             continue
 
-        if _is_excluded_pair(func_a, func_b, efp, efnp, class_function_proximity):
+        if is_excluded_pair(func_a, func_b, efp, efnp, class_function_proximity):
             continue
 
         similarity = compute_cosine_similarity(embedding_a, func_b.embedding)
@@ -286,10 +251,19 @@ def _report_violations(
     threshold_neighbor: float,
     functions: list[FunctionInfo],
     load_complexity_maps_fn: Callable[[], tuple[dict[str, int], dict[str, int]]],
+    excluded_file_pairs: list[list[str]] | None = None,
+    excluded_function_pairs: list[list[str]] | None = None,
+    class_function_proximity: int = 0,
+    *,
     refactor_index_threshold: float,
     refactor_index_top_n: int,
 ) -> None:
-    """Report violations and fail test if any found."""
+    """Report violations and fail test if any found.
+
+    The exclusion arguments mirror those used for pair/neighbor detection so
+    the refactor-priority recommendation does not surface a method merely
+    because its similarity is inflated by the class that contains it.
+    """
     all_violations: list[str] = []
     if pair_violations:
         all_violations.append(
@@ -310,6 +284,9 @@ def _report_violations(
             cog_map,
             threshold=refactor_index_threshold,
             top_n=refactor_index_top_n,
+            excluded_file_pairs=excluded_file_pairs,
+            excluded_function_pairs=excluded_function_pairs,
+            class_function_proximity=class_function_proximity,
         )
         if refactor_msg:
             error_msg += refactor_msg
@@ -421,6 +398,181 @@ def run_provider_similarity_checks(
         threshold_neighbor,
         functions,
         load_complexity_maps_fn,
+        excluded_file_pairs,
+        excluded_function_pairs,
+        class_function_proximity,
+        refactor_index_threshold=refactor_index_threshold,
+        refactor_index_top_n=refactor_index_top_n,
+    )
+
+
+def _jina_uncached(
+    functions: list[FunctionInfo],
+    provider: ProviderEntry,
+    query_cache: dict[str, list[float]],
+    passage_cache: dict[str, list[float]],
+) -> list[FunctionInfo]:
+    """Return functions missing either a query or a passage Jina embedding.
+
+    Returns
+    -------
+    list[FunctionInfo]
+        Functions for which at least one of the two raw caches has no entry.
+    """
+    hash_field = provider.hash_field
+    return [
+        func
+        for func in functions
+        if query_cache.get(getattr(func, hash_field)) is None
+        or passage_cache.get(getattr(func, hash_field)) is None
+    ]
+
+
+def _find_matrix_violations(
+    functions: list[FunctionInfo],
+    similarity: Float32Array,
+    threshold_pair: float,
+    threshold_neighbor: float,
+    excluded_file_pairs: list[list[str]] | None = None,
+    excluded_function_pairs: list[list[str]] | None = None,
+    class_function_proximity: int = 0,
+) -> tuple[list[str], list[str]]:
+    """Find pair/neighbor violations from a precomputed similarity matrix.
+
+    Mirrors :func:`_find_violations` but reads scores from *similarity* (the
+    symmetrized Jina matrix) instead of computing per-pair cosine, so the same
+    upper-triangle pairing, exclusions, and message formatting apply.
+
+    Returns
+    -------
+    tuple[list[str], list[str]]
+        Tuple of (pair violation messages, neighbor violation messages).
+    """
+    pair_violations: list[str] = []
+    neighbor_violations: list[str] = []
+    efp = excluded_file_pairs or []
+    efnp = excluded_function_pairs or []
+
+    for i, func_a in enumerate(functions):
+        neighbor_entries: list[NeighborEntry] = []
+        for j in range(i + 1, len(functions)):
+            func_b = functions[j]
+            if is_excluded_pair(func_a, func_b, efp, efnp, class_function_proximity):
+                continue
+            score = float(similarity[i, j])
+            if score >= threshold_pair:
+                pair_violations.append(_format_pair_violation(func_a, func_b, score))
+            if score >= threshold_neighbor:
+                neighbor_entries.append((func_b.file, func_b.name, func_b.start_line, score))
+        if len(neighbor_entries) >= _MIN_NEIGHBORS_FOR_VIOLATION:
+            neighbor_violations.append(_format_neighbor_violation(func_a, neighbor_entries))
+
+    return pair_violations, neighbor_violations
+
+
+def run_jina_similarity_checks(
+    *,
+    baselines: Baselines,
+    functions: list[FunctionInfo],
+    update_baselines: bool,  # noqa: ARG001 — accepted for call-site symmetry with
+    # run_provider_similarity_checks; embeddings are auto-populated when not cached_only.
+    cached_only: bool,
+    provider: ProviderEntry,
+    threshold_pair: float,
+    threshold_neighbor: float,
+    load_complexity_maps_fn: Callable[[], tuple[dict[str, int], dict[str, int]]],
+    pca_cache: PcaCache | None = None,  # noqa: ARG001 — Jina bypasses PCA (the
+    # asymmetric cross-score is not a single-vector cosine); accepted for symmetry.
+    class_function_proximity: int = 0,
+) -> None:
+    """Similarity workflow for a Jina provider (symmetrized query/passage path).
+
+    Loads the provider's two raw caches, auto-populates missing embeddings (unless
+    *cached_only*), builds the symmetrized matrix, and reports pair/neighbor
+    violations. Unlike :func:`run_provider_similarity_checks`, there is no single
+    per-function vector and no PCA — similarity is ``(cos(Qi,Pj)+cos(Qj,Pi))/2``.
+
+    Parameters
+    ----------
+    baselines : dict
+        Baselines dict with function_hashes, config, and embeddings.
+    functions : list[FunctionInfo]
+        Functions to check.
+    update_baselines : bool
+        Accepted for symmetry; embeddings are auto-populated when not cached_only.
+    cached_only : bool
+        If True, skip the test when embeddings are missing.
+    provider : ProviderEntry
+        Standalone Jina provider descriptor (``jina_text`` / ``jina_ast``).
+    threshold_pair : float
+        Pair violation threshold.
+    threshold_neighbor : float
+        Neighbor violation threshold.
+    load_complexity_maps_fn : Callable
+        Returns ``(cc_map, cog_map)`` for the refactor-index message.
+    pca_cache : dict | None
+        Accepted for symmetry; unused (Jina bypasses PCA).
+    class_function_proximity : int
+        Max source lines allowed between a class and a nearby function pair.
+    """
+    if len(functions) < _MIN_FUNCTIONS_TO_COMPARE:
+        pytest.skip("Not enough functions to compare")
+
+    query_key = f"{provider.name}_query_embeddings"
+    passage_key = f"{provider.name}_passage_embeddings"
+    load_provider_embeddings(baselines, query_key)
+    load_provider_embeddings(baselines, passage_key)
+    query_cache = _extract_embedding_cache(baselines, query_key)
+    passage_cache = _extract_embedding_cache(baselines, passage_key)
+
+    uncached = _jina_uncached(functions, provider, query_cache, passage_cache)
+    if uncached:
+        if cached_only:
+            _skip_missing_embeddings(uncached, provider)
+        else:
+            populate_fn = get_provider_populator(provider.label.lower())
+            if populate_fn is None:
+                pytest.skip(f"Unknown provider: {provider.label}")
+                return
+            if populate_fn(baselines, functions) > 0:
+                save_baselines(baselines)
+            query_cache = _extract_embedding_cache(baselines, query_key)
+            passage_cache = _extract_embedding_cache(baselines, passage_key)
+            uncached = _jina_uncached(functions, provider, query_cache, passage_cache)
+            if uncached:
+                _skip_missing_embeddings(uncached, provider)
+
+    config = _extract_config(baselines)
+    refactor_index_threshold = _extract_refactor_index_threshold(config)
+    refactor_index_top_n = _extract_refactor_index_top_n(config)
+    excluded_file_pairs = _extract_excluded_pairs(config, "excluded_file_pairs")
+    excluded_function_pairs = _extract_excluded_pairs(config, "excluded_function_pairs")
+
+    similarity = build_symmetrized_matrix(
+        functions,
+        query_cache,
+        passage_cache,
+        provider.hash_field,
+    )
+    pair_violations, neighbor_violations = _find_matrix_violations(
+        functions,
+        similarity,
+        threshold_pair,
+        threshold_neighbor,
+        excluded_file_pairs,
+        excluded_function_pairs,
+        class_function_proximity,
+    )
+    _report_violations(
+        pair_violations,
+        neighbor_violations,
+        threshold_pair,
+        threshold_neighbor,
+        functions,
+        load_complexity_maps_fn,
+        excluded_file_pairs,
+        excluded_function_pairs,
+        class_function_proximity,
         refactor_index_threshold=refactor_index_threshold,
         refactor_index_top_n=refactor_index_top_n,
     )

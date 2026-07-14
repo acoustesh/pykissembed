@@ -1,13 +1,14 @@
 # pykissembed-cloud — cloud embedding providers for pykissembed
 #
-# All three providers (openai, gemini, qwen) are routed through OpenRouter
-# using the OpenAI-compatible API surface. A single `OPENROUTER_API_KEY`
-# is therefore enough to enable any of them.
+# openai, gemini, and qwen are routed through OpenRouter using the
+# OpenAI-compatible API surface, so a single `OPENROUTER_API_KEY` enables all
+# three. jina targets the native Jina API with its own `JINA_API_KEY`.
 #
 # Install alongside the core package:
 #
 #     pip install pykissembed-cloud
 #     export OPENROUTER_API_KEY=sk-or-...
+#     export JINA_API_KEY=jina_...
 #     pykissembed.providers list
 #     pykissembed populate-embeddings --provider gemini
 
@@ -17,13 +18,13 @@ build-backend = "hatchling.build"
 
 [project]
 name = "pykissembed-cloud"
-version = "0.1.19"
-description = "Cloud embedding providers for pykissembed (OpenRouter-routed: openai, gemini, qwen)."
+version = "0.1.20"
+description = "Cloud embedding providers for pykissembed (openai, gemini, qwen via OpenRouter; jina native)."
 readme = "README.md"
 license = "MIT"
 license-files = ["LICENSE"]
 requires-python = ">=3.14"
-keywords = ["pykissembed", "openrouter", "openai", "gemini", "qwen", "embeddings"]
+keywords = ["pykissembed", "openrouter", "openai", "gemini", "qwen", "jina", "embeddings"]
 authors = [{ name = "Alvaro" }]
 classifiers = [
     "Development Status :: 4 - Beta",
@@ -45,6 +46,7 @@ dependencies = [
 openai = "pykissembed_cloud.providers.openai:OpenAIProvider"
 gemini = "pykissembed_cloud.providers.gemini:GeminiProvider"
 qwen = "pykissembed_cloud.providers.qwen:QwenProvider"
+jina = "pykissembed_cloud.providers.jina:JinaProvider"
 
 [tool.hatch.build.targets.wheel]
 packages = ["pykissembed_cloud"]

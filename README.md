@@ -171,7 +171,7 @@ four with their defaults if they're not already set.
 ## Similarity tests
 
 The similarity gate (`pytest -m similarity`) detects near-duplicate functions
-using embedding providers. It supports 11 providers:
+using embedding providers. It supports 13 providers:
 
 | Provider | Model | Hash type | Default pair threshold |
 | --- | --- | --- | --- |
@@ -185,7 +185,16 @@ using embedding providers. It supports 11 providers:
 | Gemini-AST | gemini-embedding-001 | ast_hash | 0.90 |
 | Qwen-Text | qwen3-embedding-8b | text_hash | 0.90 |
 | Qwen-AST | qwen3-embedding-8b | ast_hash | 0.90 |
-| Combined | 10-way concatenation | text_hash | 0.88 |
+| Jina-Text | jina-code-embeddings-1.5b (nl2code) | text_hash | 0.90 |
+| Jina-AST | jina-code-embeddings-1.5b (code2code) | ast_hash | 0.90 |
+| Combined | 14-way concatenation | text_hash | 0.88 |
+
+The two Jina providers use **asymmetric retrieval**: each function is embedded once
+as a *query* and once as a *passage*, and the score is symmetrized as
+`(cos(Qi,Pj) + cos(Qj,Pi)) / 2` rather than a single-vector cosine. Jina-AST
+(`code2code`) measures code-vs-code equivalence; Jina-Text (`nl2code`) measures
+whether an implementation satisfies its documented intent (docstring→query,
+code→passage). Set `JINA_API_KEY` in the environment or `.env`.
 
 Each provider detects:
 - **Pairwise similarity** — finds copy-paste code (similarity ≥ pair threshold)
@@ -299,7 +308,7 @@ split). Embedding providers are opt-in via extras:
 | --- | --- | --- |
 | *(none)* | `uv add pykissembed` | Lint, type, complexity, docstring, density, similarity (skips without providers) |
 | `local` | `uv add "pykissembed[local]"` | Adds the `local` sentence-transformers provider |
-| `cloud` | `uv add "pykissembed[cloud]"` | Adds `openai`, `gemini`, `qwen` providers via OpenRouter |
+| `cloud` | `uv add "pykissembed[cloud]"` | Adds `openai`, `gemini`, `qwen` (OpenRouter) and `jina` (native) providers |
 | `all` | `uv add "pykissembed[all]"` | Both `local` and `cloud` at once |
 
 ### Installing from TestPyPI (current release channel)
@@ -339,12 +348,14 @@ After installing, populate the cache and run the suite:
 pykissembed populate-embeddings --provider local
 pytest -m similarity
 
-# Cloud — one key enables all three providers
+# Cloud — one OpenRouter key enables openai/gemini/qwen; jina uses its own key
 export OPENROUTER_API_KEY=sk-or-...
-# ... or drop the key into a .env file at the project root
+export JINA_API_KEY=jina_...
+# ... or drop the keys into a .env file at the project root
 pykissembed populate-embeddings --provider openai
 pykissembed populate-embeddings --provider gemini
 pykissembed populate-embeddings --provider qwen
+pykissembed populate-embeddings --provider jina
 pytest -m similarity
 ```
 

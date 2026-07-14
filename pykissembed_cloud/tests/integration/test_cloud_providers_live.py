@@ -21,6 +21,7 @@ import pytest
 
 from pykissembed_cloud.dotenv import ensure_loaded
 from pykissembed_cloud.providers.gemini import GeminiProvider
+from pykissembed_cloud.providers.jina import JinaProvider
 from pykissembed_cloud.providers.openai import OpenAIProvider
 from pykissembed_cloud.providers.qwen import QwenProvider
 
@@ -28,8 +29,8 @@ if TYPE_CHECKING:
     from pykissembed_cloud.providers._openai_compat import OpenAICompatProvider
 
 
-def _has_openrouter_key() -> bool:
-    """Return True iff ``$OPENROUTER_API_KEY`` is set after a .env lookup.
+def _has_key(env_var: str) -> bool:
+    """Return True iff *env_var* is set after a .env lookup.
 
     Returns
     -------
@@ -40,31 +41,48 @@ def _has_openrouter_key() -> bool:
     import os
 
     ensure_loaded()
-    return "OPENROUTER_API_KEY" in os.environ
+    return env_var in os.environ
 
 
-pytestmark = [
-    pytest.mark.live,
-    pytest.mark.skipif(
-        not _has_openrouter_key(),
-        reason="OPENROUTER_API_KEY not set (env or .env)",
-    ),
-]
+# Providers use different keys (OpenRouter vs native Jina), so the skip gates are
+# per-test rather than module-wide.
+pytestmark = pytest.mark.live
 
 
 @pytest.mark.smoke
+@pytest.mark.skipif(
+    not _has_key("OPENROUTER_API_KEY"),
+    reason="OPENROUTER_API_KEY not set (env or .env)",
+)
 @pytest.mark.parametrize(
     "provider",
     [OpenAIProvider(), GeminiProvider(), QwenProvider()],
 )
 def test_embed_returns_one_vector_per_input(provider: OpenAICompatProvider) -> None:
-    """Each provider returns one vector per input text.
+    """Each OpenRouter-routed provider returns one vector per input text.
 
     Tagged ``smoke`` (and ``live`` via the module-level ``pytestmark``)
     so CI can run a fast subset with ``pytest -m "live and smoke"``.
     """
     assert provider.is_configured()
     vectors = provider.embed(["hello world", "goodbye world"])
+    assert len(vectors) == 2
+    for vec in vectors:
+        assert isinstance(vec, list)
+        assert len(vec) > 0
+        assert all(isinstance(x, float) for x in vec)
+
+
+@pytest.mark.smoke
+@pytest.mark.skipif(
+    not _has_key("JINA_API_KEY"),
+    reason="JINA_API_KEY not set (env or .env)",
+)
+def test_jina_embed_returns_one_vector_per_input() -> None:
+    """Jina returns one vector per input text against its native endpoint."""
+    provider = JinaProvider()
+    assert provider.is_configured()
+    vectors = provider.embed(["def f():\n    return 1", "print(f())"])
     assert len(vectors) == 2
     for vec in vectors:
         assert isinstance(vec, list)

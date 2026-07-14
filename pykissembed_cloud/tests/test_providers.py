@@ -16,12 +16,15 @@ from pykissembed.providers import Provider
 from pykissembed_cloud import dotenv as _dotenv
 from pykissembed_cloud.dotenv import find_dotenv as _real_find_dotenv
 from pykissembed_cloud.providers.gemini import GeminiProvider
+from pykissembed_cloud.providers.jina import JinaProvider
 from pykissembed_cloud.providers.openai import OpenAIProvider
 from pykissembed_cloud.providers.qwen import QwenProvider
 
 if TYPE_CHECKING:
     from collections.abc import Sequence
     from pathlib import Path
+
+    from pykissembed_cloud.providers._openai_compat import OpenAICompatProvider
 
 
 @pytest.fixture(autouse=True)
@@ -40,8 +43,8 @@ def _isolate_dotenv(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setattr(_dotenv, "find_dotenv", lambda start=None: None)
 
 
-ALL_PROVIDERS = (OpenAIProvider, GeminiProvider, QwenProvider)
-ALL_PROVIDER_INSTANCES = (OpenAIProvider(), GeminiProvider(), QwenProvider())
+ALL_PROVIDERS = (OpenAIProvider, GeminiProvider, QwenProvider, JinaProvider)
+ALL_PROVIDER_INSTANCES = (OpenAIProvider(), GeminiProvider(), QwenProvider(), JinaProvider())
 
 
 class TestAttributes:
@@ -54,6 +57,7 @@ class TestAttributes:
             (OpenAIProvider, "openai", "openai/text-embedding-3-large"),
             (GeminiProvider, "gemini", "google/gemini-embedding-001"),
             (QwenProvider, "qwen", "qwen/qwen3-embedding-8b"),
+            (JinaProvider, "jina", "jina-code-embeddings-1.5b"),
         ],
     )
     def test_identity_attributes(
@@ -77,7 +81,7 @@ class TestAttributes:
 
 
 class TestIsConfigured:
-    """Tests for ``is_configured`` based on ``OPENROUTER_API_KEY``."""
+    """Tests for ``is_configured`` based on each provider's own API-key env var."""
 
     @staticmethod
     @pytest.mark.parametrize("provider", ALL_PROVIDER_INSTANCES)
@@ -85,18 +89,19 @@ class TestIsConfigured:
         provider: Provider,
         monkeypatch: pytest.MonkeyPatch,
     ) -> None:
-        """is_configured() returns False when the env var is unset."""
+        """is_configured() returns False when no provider key is set."""
         monkeypatch.delenv("OPENROUTER_API_KEY", raising=False)
+        monkeypatch.delenv("JINA_API_KEY", raising=False)
         assert provider.is_configured() is False
 
     @staticmethod
     @pytest.mark.parametrize("provider", ALL_PROVIDER_INSTANCES)
     def test_configured_when_key_present(
-        provider: Provider,
+        provider: OpenAICompatProvider,
         monkeypatch: pytest.MonkeyPatch,
     ) -> None:
-        """is_configured() returns True when the env var is set."""
-        monkeypatch.setenv("OPENROUTER_API_KEY", "sk-or-fake")
+        """is_configured() returns True when the provider's own key is set."""
+        monkeypatch.setenv(provider.api_key_env, "sk-fake")
         assert provider.is_configured() is True
 
 
@@ -141,6 +146,42 @@ class TestEmbed:
         assert captured["input"] == ["alpha", "beta"]
         assert captured["base_url"] == "https://openrouter.ai/api/v1/"
         assert captured["api_key"] == "sk-or-fake"
+
+    @staticmethod
+    def test_jina_uses_native_endpoint_and_extra_body(monkeypatch: pytest.MonkeyPatch) -> None:
+        """Jina embeds against api.jina.ai with JINA_API_KEY and its extra_body."""
+        monkeypatch.setenv("JINA_API_KEY", "jina-fake")
+
+        captured: dict[str, Any] = {}
+
+        class _FakeEmbeddings:
+            @staticmethod
+            def create(
+                *,
+                input: Sequence[str],  # noqa: A002
+                model: str,
+                extra_body: dict[str, Any],
+            ) -> Any:
+                captured["model"] = model
+                captured["extra_body"] = extra_body
+                return _FakeResponse([[0.5, 0.5] for _ in input])
+
+        class _FakeClient:
+            def __init__(self, *, base_url: str, api_key: str) -> None:
+                captured["base_url"] = base_url
+                captured["api_key"] = api_key
+                self.embeddings = _FakeEmbeddings()
+
+        import openai as openai_module
+
+        monkeypatch.setattr(openai_module, "OpenAI", _FakeClient)
+
+        vectors = JinaProvider().embed(["def f(): ..."])
+        assert len(vectors) == 1
+        assert captured["base_url"] == "https://api.jina.ai/v1/"
+        assert captured["api_key"] == "jina-fake"
+        assert captured["model"] == "jina-code-embeddings-1.5b"
+        assert captured["extra_body"] == {"task": "code2code.passage", "truncate": False}
 
     @staticmethod
     def test_batches_inputs_larger_than_batch_size(
@@ -220,14 +261,15 @@ class TestEntryPoints:
     """Verify the providers are discoverable via the entry-point group."""
 
     @staticmethod
-    def test_entry_points_register_three_providers() -> None:
-        """The entry-point group declares exactly the three cloud providers."""
+    def test_entry_points_register_cloud_providers() -> None:
+        """The entry-point group declares each cloud provider."""
         from importlib import metadata
 
         eps = {ep.name: ep.value for ep in metadata.entry_points(group="pykissembed.providers")}
         assert eps.get("openai") == "pykissembed_cloud.providers.openai:OpenAIProvider"
         assert eps.get("gemini") == "pykissembed_cloud.providers.gemini:GeminiProvider"
         assert eps.get("qwen") == "pykissembed_cloud.providers.qwen:QwenProvider"
+        assert eps.get("jina") == "pykissembed_cloud.providers.jina:JinaProvider"
         # The core local stub is also in the group
         assert "local" in eps
 

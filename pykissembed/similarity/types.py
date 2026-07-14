@@ -34,6 +34,7 @@ class FunctionInfo:
         text_for_embedding: Signature + docstring + comment lines (for text embeddings)
         text_hash: Hash of text_for_embedding (used for text embeddings)
         ast_text: AST unparsed code via ast.unparse() (for AST embeddings)
+        docstring: Function/class docstring, "" when absent (Jina nl2code.query text)
         embedding: Current embedding vector (set during similarity checks)
     """
 
@@ -47,4 +48,5 @@ class FunctionInfo:
     text_for_embedding: str = ""  # Signature + docstring + comments
     text_hash: str = ""  # Hash of text_for_embedding
     ast_text: str = ""  # ast.unparse() output
+    docstring: str = ""  # Docstring text (natural-language intent for Jina nl2code)
     embedding: list[float] | None = field(default=None, repr=False)
