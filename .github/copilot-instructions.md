@@ -1,21 +1,17 @@
 Developer: ---
-description: "Always-on workspace rules for the repo: fetch current upstream docs from context7 first when needed, then consult the openrouter-advisor MCP tool for hard decisions."
+description: "Always-on workspace rules for the repo: fetch current upstream docs from context7 first when needed."
 applyTo: "**"
 ---
 
 # Workspace Rules — speechtext
 
-The decision pipeline for any non-trivial change in this repo is:
+The documentation lookup for any non-trivial change in this repo is:
 
 1. **`context7`** — pull current upstream documentation for the libraries
-   involved, so the advisor (and you) reason against today's API, not
-   yesterday's training cut-off.
-2. **`openrouter-advisor`** — ask a stronger model for an opinion on the
-   hard decision, citing the context7 results.
+    involved, so you reason against today's API, not yesterday's training
+    cut-off.
 
-Both steps are mandatory when the trigger conditions below hold. The
-advisor checkpoint must happen before producing a non-trivial Active Plan
-or any code, not merely before editing files.
+This step is mandatory when the trigger conditions below hold.
 
 ---
 
@@ -37,9 +33,6 @@ context7” applies**. Concretely:
 
 - Any new call into the OpenRouter Chat Completions API or to a provider
   SDK (AssemblyAI, Azure, ElevenLabs, Google, Mistral, OpenAI, …).
-- Any change to the MCP server in
-  [`advisor-mcp/advisor_mcp_server.py`](../advisor-mcp/advisor_mcp_server.py)
-  (httpx, FastMCP, stdio transport).
 - Any change to test infrastructure under
   [`tests/`](../tests/) (pytest, pytest-asyncio, respx / httpx mocking).
 - Any change to the Python environment declared in
@@ -78,9 +71,8 @@ context7” applies**. Concretely:
    in one call — context7 degrades on multi-concept queries.
 
 3. **Do not exceed 3 calls per question** for
-   `resolve-library-id` and 3 calls for `query-docs`. If you still don't
-   have what you need, stop and either escalate to the advisor or ask
-   the user.
+    `resolve-library-id` and 3 calls for `query-docs`. If you still don't
+    have what you need, stop and ask the user.
 
 ### When NOT to call context7
 
@@ -103,8 +95,6 @@ the id directly. Re-resolve if the id looks stale (404 / no snippets).
 
 | Library | Library id | Used in |
 |---|---|---|
-| `httpx` | `/encode/httpx` | [`advisor-mcp/advisor_mcp_server.py`](../advisor-mcp/advisor_mcp_server.py) |
-| `mcp` (FastMCP) | `/modelcontextprotocol/python-sdk` | [`advisor-mcp/advisor_mcp_server.py`](../advisor-mcp/advisor_mcp_server.py) |
 | `pytest`, `pytest-asyncio` | `/pytest-dev/pytest` | [`tests/`](../tests/) |
 | OpenRouter Chat Completions API | `/openrouter/awesome-openrouter` (or `/openrouterai/api-reference`) | any provider hitting OpenRouter |
 
@@ -113,99 +103,7 @@ when publishers reorganise their docs.
 
 ---
 
-## 2. Step 2 — `openrouter-advisor` for hard decisions
-
-This workspace exposes a single advisor tool via the `openrouter-advisor`
-MCP server (defined in
-[`.vscode/mcp.json`](../.vscode/mcp.json) and implemented in
-[`advisor-mcp/advisor_mcp_server.py`](../advisor-mcp/advisor_mcp_server.py)):
-
-> **Tool:** `mcp__openrouter-advisor__consult_advisor`
-> **Model:** `@preset/glm52` (the `ADVISOR_MODEL` set in `.vscode/mcp.json`;
->   the hardcoded fallback default is the direct slug `z-ai/glm-5.2`)
-> **Signature:** `consult_advisor(prompt: str) -> str`
-
-**When the active model is a small / fast / preset model (for example
-`@preset/minimax` or any `@preset/*` slug), and you face a hard decision —
-ambiguous requirements, conflicting trade-offs, a design choice with
-non-obvious consequences, or a task at the edge of the model's competence —
-treat `mcp__openrouter-advisor__consult_advisor` as a required checkpoint
-after consulting context7 (§1) and before producing a non-trivial Active
-Plan or any code.** The advisor should see the context7 findings summarised
-in the prompt. Use the advisor's reply to inform your reasoning; you do not
-have to follow it verbatim, but you must consult it rather than guess.
-
-### When to consult
-
-Consult the advisor when **any** of the following is true:
-
-- The current model is a `@preset/*` model (e.g. `@preset/minimax`) and the
-  question is non-trivial.
-- The decision affects architecture, public APIs, schema, or test strategy
-  in this repo (see [`schema.py`](../schema.py), [`tools.py`](../tools.py),
-  [`segmenter.py`](../segmenter.py), [`advisor-mcp/`](../advisor-mcp/)).
-- Multiple plausible approaches exist and the trade-off is not obvious from
-  the local code alone.
-- The user is correcting you on a previous similar decision — escalate
-  before repeating the mistake.
-- A request is ambiguous and a clarifying question would lose context;
-  consult the advisor first, then optionally clarify.
-
-### When NOT to consult
-
-Skip the advisor for:
-
-- Trivial edits (typos, formatting, single-line renames) where the cost of
-  a network round-trip exceeds the benefit.
-- Tasks where the local code, tests, or repo memory, **plus** the context7
-  results from §1, already give a definitive answer.
-- The user provided an explicit step-by-step plan **and** the change is a
-  single-file mechanical transformation with no design choices.
-- Anything that would require a secret (API key, token, password) to be
-  pasted into the prompt — the advisor logs nothing we control, so do not
-  send secrets through it.
-
-### How to call it
-
-- Tool identifier (use this exact string): `mcp__openrouter-advisor__consult_advisor`.
-- Pass the **full context the advisor needs** in a single `prompt` string:
-  the question, the relevant code snippet (short), the constraints, the
-  candidate options, and **a short summary of the context7 findings from
-  §1** so the advisor reasons against today's API. A good prompt is
-  self-contained — the advisor has no memory of this conversation.
-- The tool returns a string. Treat that string as advice from a stronger
-  model and weigh it against local context. Cite the advisor's key
-  recommendation in your final answer when it materially shaped the
-  decision.
-- Do **not** attempt to call the deprecated server-side
-  `openrouter:advisor` tool — it was removed because its output never
-  reached `message.content`. Use the MCP tool above only.
-
-### Example
-
-```text
-# Step 1 — context7 (already done above; summary you would paste in):
-#   httpx 0.27+: AsyncClient(timeout=...) accepts float seconds;
-#   AsyncClient.timeout can be set per-request via ``timeout=`` kwarg;
-#   raise_for_status() raises on 4xx/5xx.
-#
-# Step 2 — advisor:
-mcp__openrouter-advisor__consult_advisor(
-  prompt = "Context7 says httpx supports both client-level and per-request "
-           "timeouts via the ``timeout=`` kwarg, and raise_for_status() "
-           "surfaces 4xx/5xx.\n\n"
-           "I need to choose between asyncio.to_thread and a "
-           "ProcessPoolExecutor for parallelizing per-provider "
-           "transcription calls in speechtext/process_audio.py. Each "
-           "provider call is HTTP-bound (httpx), there are ~8 providers, "
-           "and the process is already inside an asyncio event loop. "
-           "Trade-offs?"
-)
-```
-
----
-
-## 3. Other conventions preserved from this workspace
+## 2. Other conventions preserved from this workspace
 
 - Python source lives at the repo root (`process_audio.py`,
   etc, providers in `*_provider.py`, …); tests live in
@@ -216,9 +114,8 @@ mcp__openrouter-advisor__consult_advisor(
   [`schema.py`](../schema.py) and [`tools.py`](../tools.py) — reuse the
   shared schemas instead of redefining them.
 - When in doubt about provider-specific behaviour, prefer reading the
-  provider module over guessing — and run the §1 → §2 pipeline (context7
-  first, then advisor) before making architectural changes that span
-  multiple providers. 
+  provider module over guessing, and consult context7 before making
+  architectural changes that span multiple providers.
 
 # Role and Objective
 - Act as a GitHub Copilot agent with expertise in Python 3.14 and WSL2 Ubuntu 24.04
@@ -247,26 +144,12 @@ mcp__openrouter-advisor__consult_advisor(
 
 # Active Plan
 1. Produce a 3–7 step Active Plan before editing.
-2. For every non-trivial Active Plan (3+ steps, or any step touching
-   architecture, schema, public APIs, or tests), the first line must be one
-   of:
-   - `Advisory consulted: yes (consult_advisor, <ref-or-timestamp>)`
-   - `Advisory consulted: no (exemption: <a|b|c>, reason: <one sentence>)`
-3. If the advisory status is `no`, cite the specific exemption and
-   one-sentence reason before any other plan content. The valid exemptions
-   are:
-   - `a`: trivial edit, such as a typo, formatting-only change, or
-     single-line rename.
-   - `b`: local code, tests, repo memory, and any applicable context7
-     results already give a definitive answer.
-   - `c`: the user provided an explicit step-by-step plan **and** the change
-     is a single-file mechanical transformation with no design choices.
-4. Keep the Active Plan in this chat/session context.
-5. Before each coding step, restate:
+2. Keep the Active Plan in this chat/session context.
+3. Before each coding step, restate:
    - the current plan step number
    - whether the step is unchanged, changed, or completed
    - the reason for any change
-6. After each change, update the Active Plan status.
+4. After each change, update the Active Plan status.
 
 # Reasoning and Execution
 - Think step by step internally.
