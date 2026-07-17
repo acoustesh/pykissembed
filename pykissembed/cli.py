@@ -19,11 +19,10 @@ import shutil
 import subprocess
 import sys
 import tomllib
-from pathlib import Path  # noqa: TC003 — Typer resolves annotations at runtime via reflection
-from typing import TYPE_CHECKING, Any, cast
-
-if TYPE_CHECKING:
-    from collections.abc import Callable
+from pathlib import (
+    Path,  # ruff:ignore[typing-only-standard-library-import] — Typer resolves annotations at runtime via reflection
+)
+from typing import Any
 
 import typer
 from rich.console import Console
@@ -52,7 +51,7 @@ def _main_callback(
     # parameter itself is keyword-only so Typer's own keyword-based
     # invocation (never positional) is unaffected.
     version: bool = typer.Option(
-        False,  # noqa: FBT003
+        False,  # ruff:ignore[boolean-positional-value-in-call]
         "--version",
         help="Show pykissembed version and exit.",
     ),
@@ -77,7 +76,7 @@ def _main_callback(
 def check(
     # B008: Typer requires the `Argument(...)`/`Option(...)` call in the
     # default itself — that's how it discovers CLI parameter metadata.
-    pytest_args: list[str] | None = typer.Argument(  # noqa: B008
+    pytest_args: list[str] | None = typer.Argument(  # ruff:ignore[function-call-in-default-argument]
         None, help="Extra args forwarded to pytest."
     ),
 ) -> None:
@@ -106,12 +105,12 @@ def check(
     # S603: fixed argv list (sys.executable + literal flags + the CLI's own
     # forwarded args); this command's entire purpose is to forward args to
     # pytest, so there is no narrower "trusted" input to require.
-    raise typer.Exit(subprocess.call(cmd))  # noqa: S603
+    raise typer.Exit(subprocess.call(cmd))  # ruff:ignore[subprocess-without-shell-equals-true]
 
 
 @app.command(name="ratchet")
 def ratchet_cmd(
-    baseline_dir: Path | None = typer.Option(  # noqa: B008 — Typer requires the call in the default
+    baseline_dir: Path | None = typer.Option(  # ruff:ignore[function-call-in-default-argument] — Typer requires the call in the default
         None,
         "--baseline-dir",
         help="Override the configured baseline directory.",
@@ -145,7 +144,7 @@ def ratchet_cmd(
         except NotImplementedError:
             typer.echo(f"  skip {path.name}: no current-diagnostics computer implemented")
             continue
-        except Exception as exc:  # noqa: BLE001 — per-file resilience: one bad baseline shouldn't abort the whole ratchet run
+        except Exception as exc:  # ruff:ignore[blind-except] — per-file resilience: one bad baseline shouldn't abort the whole ratchet run
             typer.echo(f"  skip {path.name}: {exc}")
             continue
         with path.open(encoding="utf-8") as f:
@@ -182,7 +181,7 @@ def _compute_current_for(baseline_name: str) -> dict[str, Any]:
     if baseline_name == "lint_typecheck.json":
         # Lazy: avoids importing the checks module (and its pytest/ruff/
         # pyright invocation helpers) for CLI invocations that never ratchet.
-        from pykissembed.checks.lint_typecheck import (  # noqa: PLC0415
+        from pykissembed.checks.lint_typecheck import (  # ruff:ignore[import-outside-top-level]
             _build_report,
             _run_pyright,
             _run_ruff,
@@ -216,14 +215,13 @@ def providers_list() -> None:
     typer.Exit
         If no providers are installed.
     """
-    # Lazy: discovery imports entry-point providers, which may pull in heavy
-    # optional deps (torch via pykissembed-local) — avoid that cost for
-    # every CLI invocation, not just `providers list`.
-    from pykissembed.providers.registry import discover_all  # noqa: PLC0415
+    # Lazy: discovery imports entry-point providers and their optional cloud
+    # clients. Avoid that cost for every CLI invocation.
+    from pykissembed.providers.registry import discover_all  # ruff:ignore[import-outside-top-level]
 
     registry = discover_all()
     if not registry.all():
-        typer.echo("No providers installed. Try: pip install pykissembed-local")
+        typer.echo("No providers installed. Try: pip install 'pykissembed[cloud]'")
         raise typer.Exit(0)
     table = Table(title=f"pykissembed.providers (pykissembed {__version__})")
     table.add_column("Name", style="bold")
@@ -234,7 +232,7 @@ def providers_list() -> None:
     for provider in registry.all():
         try:
             configured = provider.is_configured()
-        except Exception:  # noqa: BLE001 — is_configured() implementations are third-party; any failure means "not configured"
+        except Exception:  # ruff:ignore[blind-except] — is_configured() implementations are third-party; any failure means "not configured"
             configured = False
         table.add_row(
             provider.name,
@@ -257,59 +255,44 @@ app.add_typer(providers_app, name="providers")
 @app.command()
 def populate_embeddings(
     provider_name: str = typer.Option(
-        ..., "--provider", help="Provider name (e.g. local, openai)."
+        ...,
+        "--provider",
+        help="Canonical provider variant (for example, openai-text or openai-ast).",
     ),
-    paths: list[Path] | None = typer.Option(  # noqa: B008 — Typer requires the call in the default
-        None, "--path", help="Directories to scan (default: [tool.pykissembed].paths)."
+    paths: list[Path] | None = typer.Option(  # ruff:ignore[function-call-in-default-argument] — Typer requires the call in the default
+        None, "--path", help="Directories to scan (default: configured source paths)."
     ),
     *,
     cached_only: bool = typer.Option(
-        False,  # noqa: FBT003 — Typer's Option(default, *param_decls) requires this positional
+        False,  # ruff:ignore[boolean-positional-value-in-call] — Typer's Option(default, *param_decls) requires this positional
         "--cached-only",
         help="Skip API calls; only read cache.",
     ),
 ) -> None:
-    """Populate the embedding cache for *provider_name*.
+    """Populate or inspect compressed per-function embedding caches.
 
     Raises
     ------
     typer.Exit
-        If the provider is unknown, unconfigured, or its optional package is
-        unavailable.
+        If the provider name is invalid or the requested cloud provider cannot
+        populate its missing cache entries.
     """
-    # Lazy: same rationale as providers_list — avoid eager provider discovery.
-    from pykissembed.providers.registry import get as get_provider  # noqa: PLC0415
+    # Lazy: cache population imports the numerical similarity subsystem and
+    # optional cloud clients, which unrelated CLI commands do not need.
+    from pykissembed.similarity.populate_embeddings import (  # ruff:ignore[import-outside-top-level]
+        _populate_embeddings,
+        _PopulationError,
+    )
 
-    provider = get_provider(provider_name)
-    if provider is None:
-        typer.echo(f"Unknown provider: {provider_name!r}. Run `pykissembed.providers list`.")
-        raise typer.Exit(1)
-    if cached_only:
-        typer.echo("--cached-only: no embeddings will be computed.")
-        return
-    if not provider.is_configured():
-        typer.echo(
-            f"Provider {provider_name!r} is not configured. Check API keys / install extras."
-        )
-        raise typer.Exit(1)
     try:
-        # Lazy: the optional pykissembed-local subpackage (torch/
-        # sentence-transformers); importing it eagerly would force those
-        # heavy deps onto every pykissembed CLI invocation.
-        import pykissembed_local.runner as _local_runner  # type: ignore[import-not-found]  # noqa: PLC0415
-    except ImportError:
-        typer.echo(
-            "populate-embeddings requires pykissembed-local for now.\n  pip install pykissembed-local",
+        _populate_embeddings(
+            provider_name,
+            paths=paths,
+            cached_only=cached_only,
         )
+    except _PopulationError as exc:
+        typer.echo(str(exc))
         raise typer.Exit(1) from None
-    local_populate = cast("Callable[..., object]", getattr(_local_runner, "populate", None))
-    if local_populate is None:
-        typer.echo("pykissembed-local is installed but does not expose 'populate'.")
-        raise typer.Exit(1)
-    config = get_config()
-    target_paths = paths or config.resolved_paths()
-    typer.echo(f"Populating embeddings with {provider_name} on {target_paths}…")
-    local_populate(provider=provider, paths=target_paths, cache_dir=config.cache_path)
 
 
 # ---------------------------------------------------------------------------
@@ -319,7 +302,7 @@ def populate_embeddings(
 
 @app.command()
 def type_review(
-    report: Path = typer.Option(  # noqa: B008 — Typer requires the call in the default
+    report: Path = typer.Option(  # ruff:ignore[function-call-in-default-argument] — Typer requires the call in the default
         ..., "--json", help="Path to a lint_typecheck_report.json produced by the lint gate."
     ),
 ) -> None:
@@ -347,7 +330,7 @@ def type_review(
         typer.echo(f"\n=== {fp} ===")
         # S603: fixed 2-element argv (resolved pyright binary + a file path
         # already validated against the loaded report); no shell involved.
-        subprocess.call([pyright, fp])  # noqa: S603
+        subprocess.call([pyright, fp])  # ruff:ignore[subprocess-without-shell-equals-true]
 
 
 # ---------------------------------------------------------------------------
@@ -359,7 +342,7 @@ def type_review(
 def init(
     *,
     force: bool = typer.Option(
-        False,  # noqa: FBT003 — Typer's Option(default, *param_decls) requires this positional
+        False,  # ruff:ignore[boolean-positional-value-in-call] — Typer's Option(default, *param_decls) requires this positional
         "--force",
         help=(
             "Overwrite an existing [tool.pykissembed] block and any "
@@ -395,17 +378,20 @@ def init(
         detected_paths = _auto_detect_paths(config.root, text)
         paths_str = ", ".join(f'"{p}"' for p in detected_paths)
         existing_config = _toml_value(_parse_pyproject(text), "tool", "pykissembed")
-        preserve_cached_only = (
-            isinstance(existing_config, dict) and existing_config.get("cached_only") is True
+        cached_only_value = (
+            existing_config.get("cached_only") if isinstance(existing_config, dict) else None
         )
-        cached_only_line = "cached_only = true\n" if preserve_cached_only else ""
+        cached_only_line = (
+            f"cached_only = {str(cached_only_value).lower()}\n"
+            if isinstance(cached_only_value, bool)
+            else ""
+        )
 
         block = (
             "\n[tool.pykissembed]\n"
             f"paths = [{paths_str}]\n"
             'mode = "ratchet"\n'
             'baseline_dir = "tests/baselines"\n'
-            'cache_dir = "tests/.pykissembed_cache"\n'
             f"{cached_only_line}"
         )
         if "[tool.pykissembed]" in text:

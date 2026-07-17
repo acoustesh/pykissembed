@@ -11,7 +11,7 @@ requires-python = ">=3.12"
 paths = ["src"]
 mode = "ratchet"
 baseline_dir = "tests/baselines"
-cache_dir = "tests/.pykissembed_cache"
+cached_only = true
 
 [tool.pytest.ini_options]
 python_files = ["test_*.py", "code_*.py", "comment_*.py", "docstring_*.py", "lint_*.py"]

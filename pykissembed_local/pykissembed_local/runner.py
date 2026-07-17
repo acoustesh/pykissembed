@@ -1,30 +1,24 @@
-"""Embedding-cache population driver.
-
-The core ``pykissembed`` CLI delegates ``populate-embeddings`` here via:
-
-    from pykissembed_local.runner import populate
-
-This module is the only piece of ``pykissembed-local`` that walks the
-filesystem and writes a cache; the rest of the package is just the
-``Provider`` implementation.
-"""
+"""Compatibility helpers for the retired whole-file local cache runner."""
 
 from __future__ import annotations
 
-import functools
 import hashlib
-import json
-from pathlib import Path
 from typing import TYPE_CHECKING, Protocol
 
 if TYPE_CHECKING:
     from collections.abc import Iterable, Sequence
+    from pathlib import Path
+    from typing import Never as Encoding
 
-    from tiktoken import Encoding
+_CLOUD_ONLY_MESSAGE = (
+    "Local embeddings were removed from pykissembed. Install 'pykissembed[cloud]' and use "
+    "`pykissembed populate-embeddings --provider openai-text` "
+    "(or gemini-text, voyage-text, codestral-text, qwen-text, or jina-text)."
+)
 
 
 class ProviderLike(Protocol):
-    """Minimal protocol — duck-types ``pykissembed.providers.Provider``."""
+    """Minimal protocol retained for callers importing the old runner type."""
 
     name: str
     model_id: str
@@ -37,40 +31,24 @@ class ProviderLike(Protocol):
         ...
 
 
-@functools.cache
 def _get_encoding() -> Encoding:
-    """Lazy-load the ``cl100k_base`` tiktoken encoding (cached on first use).
-
-    Deferring the import keeps this module importable without ``tiktoken``
-    (e.g. in tests that never call the token-aware paths).
-
-    Returns
-    -------
-    Encoding
-        The ``cl100k_base`` tiktoken encoding.
+    """Reject the former token-encoding operation.
 
     Raises
     ------
     RuntimeError
-        If ``tiktoken`` is not installed.
+        Always, because local tokenization has been retired.
     """
-    try:
-        import tiktoken
-    except ImportError as exc:
-        msg = "pykissembed-local requires tiktoken for token-aware truncation"
-        raise RuntimeError(msg) from exc
-    return tiktoken.get_encoding("cl100k_base")
+    raise RuntimeError(_CLOUD_ONLY_MESSAGE)
 
 
 def iter_py_files(base_dir: Path) -> Iterable[Path]:
-    """Yield every ``.py`` file under *base_dir* (recursive).
-
-    Skips ``__init__.py``-style dunders and ``__pycache__`` directories.
+    """Yield every non-dunder ``.py`` file under *base_dir* recursively.
 
     Yields
     ------
     Path
-        Each Python file under *base_dir*, sorted for determinism.
+        Each Python file, sorted for deterministic results.
     """
     for py_file in sorted(base_dir.rglob("*.py")):
         if py_file.name.startswith("__") or "__pycache__" in py_file.parts:
@@ -79,48 +57,35 @@ def iter_py_files(base_dir: Path) -> Iterable[Path]:
 
 
 def truncate_to_tokens(text: str, *, max_tokens: int) -> str:
-    """Truncate *text* to *max_tokens* tokens using ``cl100k_base``.
+    """Reject the retired local token-truncation operation.
 
-    Parameters
-    ----------
-    text
-        Input text. May be empty.
-    max_tokens
-        Maximum token count after truncation.
-
-    Returns
-    -------
-    str
-        The original text if it fits in *max_tokens*; otherwise a
-        prefix decoded from the first ``max_tokens`` tokens.
+    Raises
+    ------
+    RuntimeError
+        Always, because local cache population has been retired.
     """
-    enc = _get_encoding()
-    token_ids = enc.encode(text, disallowed_special=())
-    if len(token_ids) <= max_tokens:
-        return text
-    return enc.decode(token_ids[:max_tokens])
+    del text, max_tokens
+    raise RuntimeError(_CLOUD_ONLY_MESSAGE)
 
 
 def content_hash(text: str) -> str:
-    """Stable SHA-256 of *text* — used as part of the cache key.
+    """Return the stable SHA-256 hex digest of *text*.
 
     Returns
     -------
     str
-        Hex digest of the SHA-256 hash of *text*.
+        Hexadecimal SHA-256 digest.
     """
     return hashlib.sha256(text.encode("utf-8")).hexdigest()
 
 
 def _collect_inputs(paths: Sequence[Path], *, project_root: Path) -> list[dict[str, str]]:
-    """Collect (rel_path, content) records for every .py file under *paths*.
+    """Collect path and content records without generating embeddings.
 
     Returns
     -------
     list[dict[str, str]]
-        Each record has ``"path"`` (relative to *project_root* when
-        possible) and ``"content"`` (UTF-8 text, with replacement on
-        decode errors).
+        Records with ``path`` and ``content`` string fields.
     """
     records: list[dict[str, str]] = []
     for base in paths:
@@ -141,12 +106,12 @@ def _collect_inputs(paths: Sequence[Path], *, project_root: Path) -> list[dict[s
 
 
 def cache_key(provider: ProviderLike, text: str) -> str:
-    """Compose the (provider, content) cache key — matches pykissembed's format.
+    """Compose the historical provider/content cache key.
 
     Returns
     -------
     str
-        ``f"{provider.name}|{provider.model_id}|{provider.schema_version}|{sha256(text)}"``
+        Legacy cache identity string.
     """
     return f"{provider.name}|{provider.model_id}|{provider.schema_version}|{content_hash(text)}"
 
@@ -158,85 +123,15 @@ def populate(
     *,
     project_root: Path | None = None,
 ) -> int:
-    """Compute and persist embeddings for every .py file under *paths*.
-
-    Skips files whose cache entry already exists. The cache is a single
-    JSONL file at ``<cache_dir>/<provider.name>-<model_id>.jsonl`` where
-    each line is ``{"key": ..., "path": ..., "vector": [...]}``.
-
-    Parameters
-    ----------
-    provider
-        Any object that satisfies the Provider protocol.
-    paths
-        Source directories to scan (relative to the project root).
-    cache_dir
-        Directory in which to write the cache file.
-    project_root
-        Root used to compute relative paths in the cache. Defaults to
-        ``Path.cwd()``. Tests should pass an explicit value to keep
-        behaviour deterministic.
-
-    Returns
-    -------
-    int
-        Number of *new* cache entries written.
+    """Reject the retired whole-file JSONL population operation.
 
     Raises
     ------
     RuntimeError
-        If the provider returns the wrong number of vectors for the
-        given inputs, or if ``tiktoken`` is not installed.
+        Always, before invoking a provider or modifying the filesystem.
     """
-    root = (project_root or Path.cwd()).resolve()
-    cache_dir.mkdir(parents=True, exist_ok=True)
-    safe_model = provider.model_id.replace("/", "_")
-    cache_file = cache_dir / f"{provider.name}-{safe_model}.jsonl"
-
-    existing: set[str] = set()
-    if cache_file.is_file():
-        with cache_file.open(encoding="utf-8") as f:
-            for line in f:
-                try:
-                    rec = json.loads(line)
-                except json.JSONDecodeError:
-                    continue
-                if isinstance(rec, dict):
-                    key = rec.get("key")
-                    if isinstance(key, str):
-                        existing.add(key)
-
-    inputs = _collect_inputs(paths, project_root=root)
-    if not inputs:
-        return 0
-
-    pending: list[dict[str, str]] = []
-    pending_keys: list[str] = []
-    for rec in inputs:
-        key = cache_key(provider, rec["content"])
-        if key in existing:
-            continue
-        pending.append(rec)
-        pending_keys.append(key)
-
-    if not pending:
-        return 0
-
-    truncated = [
-        truncate_to_tokens(rec["content"], max_tokens=provider.max_tokens) for rec in pending
-    ]
-    vectors = provider.embed(truncated)
-    if len(vectors) != len(pending):
-        msg = (
-            f"Provider {provider.name!r} returned {len(vectors)} vectors for {len(pending)} inputs"
-        )
-        raise RuntimeError(msg)
-
-    with cache_file.open("a", encoding="utf-8") as f:
-        for rec, key, vec in zip(pending, pending_keys, vectors, strict=True):
-            json.dump({"key": key, "path": rec["path"], "vector": vec}, f)
-            f.write("\n")
-    return len(pending)
+    del provider, paths, cache_dir, project_root
+    raise RuntimeError(_CLOUD_ONLY_MESSAGE)
 
 
 __all__ = [

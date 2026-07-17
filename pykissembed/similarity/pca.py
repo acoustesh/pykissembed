@@ -315,7 +315,7 @@ def _make_kmeans(
     random_state: int,
     n_init: object,
     max_iter: int,
-) -> Any:  # noqa: ANN401 — cls is a dynamically-loaded, type-erased sklearn class
+) -> Any:  # ruff:ignore[any-type] — cls is a dynamically-loaded, type-erased sklearn class
     """Construct a KMeans instance with validated int ``n_init``.
 
     Returns

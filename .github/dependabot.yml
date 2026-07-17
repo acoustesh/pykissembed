@@ -1,8 +1,8 @@
 version: 2
 
 updates:
-  # The root uv workspace includes the pykissembed_local and pykissembed_cloud
-  # members, so this covers all three pyproject.toml and uv.lock files.
+  # The root uv workspace includes the cloud package and the final lightweight
+  # local tombstone, so this covers all three manifests and locks.
   - package-ecosystem: "uv"
     directory: "/"
     schedule:

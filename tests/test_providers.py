@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-import sys
 from typing import cast
 
 import pytest
@@ -32,18 +31,15 @@ class TestLocalProviderStub:
         assert isinstance(LocalProvider(), Provider)
 
     @staticmethod
-    def test_stub_embed_raises_when_local_missing(monkeypatch: pytest.MonkeyPatch) -> None:
-        """embed() must raise a clear RuntimeError when pykissembed-local is missing."""
-        # Hide pykissembed_local from the import system
-        monkeypatch.setitem(sys.modules, "pykissembed_local", None)
+    def test_stub_embed_raises_cloud_migration_error() -> None:
+        """embed() raises a clear cloud-only migration error."""
         p = LocalProvider()
-        with pytest.raises(RuntimeError, match="pykissembed-local"):
+        with pytest.raises(RuntimeError, match=r"pykissembed\[cloud\]"):
             p.embed(["hello"])
 
     @staticmethod
-    def test_is_configured_false_when_missing(monkeypatch: pytest.MonkeyPatch) -> None:
-        """is_configured() returns False when pykissembed_local isn't installed."""
-        monkeypatch.setitem(sys.modules, "pykissembed_local", None)
+    def test_is_configured_is_always_false() -> None:
+        """The retired local provider is never configured."""
         assert LocalProvider().is_configured() is False
 
 
@@ -77,10 +73,10 @@ class TestRegistry:
         assert cast("LocalProvider", REGISTRY.get("local")).schema_version == "2"
 
     @staticmethod
-    def test_discover_builtin_finds_local() -> None:
-        """discover_all() registers the built-in local stub."""
+    def test_discover_builtin_registers_no_local_provider() -> None:
+        """Core discovery does not register the retired local provider."""
         registry = discover_all()
-        assert "local" in registry
+        assert "local" not in registry
 
     @staticmethod
     def test_discover_handles_broken_entry_point(
@@ -101,12 +97,43 @@ class TestRegistry:
         monkeypatch.setattr(
             reg_mod.metadata,
             "entry_points",
-            lambda group=None: eps,  # noqa: ARG005 — must accept `group=` to match the real entry_points(group=...) call
+            lambda group=None: eps,  # ruff:ignore[unused-lambda-argument] — must accept `group=` to match the real entry_points(group=...) call
         )
-        registry = reg_mod.discover_all()
-        # Built-in still registers despite the broken entry point
-        assert "local" in registry
+        with pytest.warns(RuntimeWarning, match="failed to load provider"):
+            registry = reg_mod.discover_all()
+        assert len(registry) == 0
         assert "broken" not in registry
+
+    @staticmethod
+    def test_discover_isolates_provider_constructor_failure(
+        monkeypatch: pytest.MonkeyPatch,
+    ) -> None:
+        """A provider constructor failure does not hide healthy extensions."""
+
+        class _BrokenProvider:
+            def __init__(self) -> None:
+                msg = "constructor boom"
+                raise RuntimeError(msg)
+
+        class _EP:
+            def __init__(self, name: str, value: object) -> None:
+                self.name = name
+                self.value = value
+
+            def load(self) -> object:
+                return self.value
+
+        healthy = LocalProvider()
+        monkeypatch.setattr(
+            reg_mod.metadata,
+            "entry_points",
+            lambda group=None: [_EP("broken", _BrokenProvider), _EP("healthy", healthy)],  # ruff:ignore[unused-lambda-argument]
+        )
+
+        with pytest.warns(RuntimeWarning, match="constructor boom"):
+            registry = reg_mod.discover_all()
+
+        assert registry.get("local") is healthy
 
     @staticmethod
     def test_discover_lets_first_entry_point_override(
@@ -114,9 +141,9 @@ class TestRegistry:
     ) -> None:
         """When two entry points share a name, the first-listed one wins.
 
-        This matches the user-override semantics: ``pykissembed-local`` should
-        override the core stub because its entry point is listed first
-        in the metadata. ``discover()`` iterates entry points in
+        This matches the user-override semantics: a user-installed provider
+        should override an earlier registration when its entry point is listed
+        first in the metadata. ``discover()`` iterates entry points in
         **reverse** so the first one (override) is registered last,
         overwriting the second (stub).
         """
@@ -166,7 +193,7 @@ class TestRegistry:
         monkeypatch.setattr(
             reg_mod.metadata,
             "entry_points",
-            lambda group=None: eps,  # noqa: ARG005 — must accept `group=` to match the real entry_points(group=...) call
+            lambda group=None: eps,  # ruff:ignore[unused-lambda-argument] — must accept `group=` to match the real entry_points(group=...) call
         )
         reg_mod.discover_all()
         winner = REGISTRY.get("local")

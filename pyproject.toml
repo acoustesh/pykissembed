@@ -2,8 +2,8 @@
 #
 # Distribution model:
 #   pykissembed              — slim core (lint + type + complexity + docstring + comment density)
-#   pykissembed-local        — adds sentence-transformers (recommended default for similarity)
-#   pykissembed-cloud        — adds OpenRouter-routed openai / gemini / qwen providers
+#   pykissembed-local        — lightweight v0.1 compatibility tombstone
+#   pykissembed-cloud        — adds cloud embedding providers
 #
 # Default mode is "baseline-and-ratchet" — see README.md.
 
@@ -46,25 +46,25 @@ dependencies = [
     "radon>=6.0",
     "complexipy>=0.5",
     "numpy>=1.26",
-    "pandas>=3.0",
     "scikit-learn>=1.5",
     "tiktoken>=0.7",
 ]
 
 [project.optional-dependencies]
-# Local embedding provider (sentence-transformers). Recommended default for similarity.
+# Transitional compatibility extra: installs cloud support plus the lightweight
+# pykissembed-local tombstone. No local model or heavy ML runtime is installed.
 local = [
+    "pykissembed-cloud",
     "pykissembed-local",
 ]
 # Cloud embedding providers (openai / gemini / qwen via OpenRouter) — separate subpackage.
 cloud = [
     "pykissembed-cloud",
 ]
-# Convenience: install both extras in one go.
+# Compatibility alias now that cloud is the only supported embedding backend.
 #     uv add "pykissembed[all]"
 all = [
-    "pykissembed[local]",
-    "pykissembed[cloud]",
+    "pykissembed-cloud",
 ]
 
 [project.scripts]
@@ -73,11 +73,6 @@ pykissembed = "pykissembed.cli:app"
 [project.entry-points.pytest11]
 pykissembed = "pykissembed.plugin"
 
-# Built-in provider entry point: local sentence-transformers.
-# Cloud providers are registered by the pykissembed-cloud subpackage.
-[project.entry-points."pykissembed.providers"]
-local = "pykissembed.providers.local:LocalProvider"
-
 # Dev-only tooling. Install with: `uv sync --group dev`.
 [dependency-groups]
 dev = [
@@ -85,8 +80,6 @@ dev = [
     "pytest-xdist>=3.6",
     "ruff>=0.15.20",
     "twine>=6.0",
-    "google-genai>=1.0",    # optional gemini provider in similarity/embeddings.py (ty resolution)
-    "voyageai>=0.3",        # optional voyage provider in similarity/embeddings.py (ty resolution)
 ]
 
 [tool.hatch.version]
@@ -113,13 +106,13 @@ members = ["pykissembed_local", "pykissembed_cloud"]
 [tool.pytest.ini_options]
 minversion = "8.0"
 testpaths = ["tests"]
-# Live = real network calls (cloud providers) or model downloads (local).
+# Live = real network calls to cloud providers.
 # Default to skipping them; opt in with `pytest -m live`.
 addopts = [
     "-ra",
     "--strict-markers",
     "--strict-config",
-    "-m", "not live",
+    "-m", "not live and not slow",
     "-n", "auto",
 ]
 markers = [
@@ -129,7 +122,7 @@ markers = [
     "docstring_format: NumPy docstring format (ruff D rules)",
     "similarity: embedding-based near-duplicate detection (requires cached embeddings)",
     "experimental: unstable APIs — refactor_index, file_split",
-    "live: live network / model-load tests (skipped by default; opt in with -m live)",
+    "live: live network tests (skipped by default; opt in with -m live)",
         "smoke: fast subset of live tests suitable for CI (e.g. -m live-and-smoke)",
         "slow: heavyweight tests (uv sync, wheel builds); opt in with -m slow",
 ]
@@ -164,28 +157,28 @@ target-version = "py314"
 select = ["ALL"]
 ignore = [
     # --- Formatter conflicts / documentation style ---
-    "E501",    # line-too-long — enforcing line length is the formatter's job, not the linter's
-    "CPY001",  # missing-copyright-notice — files don't carry per-file copyright headers in this project
-    "COM812",  # missing-trailing-comma — owned by the ruff formatter; the lint rule fights it
-    "S404",    # subprocess imports use fixed argv lists without a shell
-    "S403",    # controlled pickle use is limited to the provider round-trip test
-    "PLC2701", # private imports are intentional for pytest internals and project tests
-    "PLR6301", # provider protocol methods and pytest hooks need instance signatures
-    "PLW0717", # broad try boundaries preserve failure isolation at tool/API boundaries
-    "D203",    # incorrect-blank-line-before-class — wants a blank line before class docstrings; mutually exclusive with D211 (no blank line), which this project follows
-    "D213",    # multi-line-summary-second-line — wants the summary to start on line 2; mutually exclusive with D212 (summary on line 1, the NumPy-docstring style used here)
-    "D401",    # non-imperative-mood — first docstring word need not be imperative ("Returns…" is fine in NumPy style)
-    "D102", "D103", "D105", "D107",  # undocumented public method / public function / magic method / __init__ — docstrings optional on test helpers and dunders
+    "line-too-long",    # line-too-long — enforcing line length is the formatter's job, not the linter's
+    "missing-copyright-notice",  # missing-copyright-notice — files don't carry per-file copyright headers in this project
+    "missing-trailing-comma",  # missing-trailing-comma — owned by the ruff formatter; the lint rule fights it
+    "suspicious-subprocess-import",    # subprocess imports use fixed argv lists without a shell
+    "suspicious-pickle-import",    # controlled pickle use is limited to the provider round-trip test
+    "import-private-name", # private imports are intentional for pytest internals and project tests
+    "no-self-use", # provider protocol methods and pytest hooks need instance signatures
+    "too-many-statements-in-try-clause", # broad try boundaries preserve failure isolation at tool/API boundaries
+    "incorrect-blank-line-before-class",    # incorrect-blank-line-before-class — wants a blank line before class docstrings; mutually exclusive with D211 (no blank line), which this project follows
+    "multi-line-summary-second-line",    # multi-line-summary-second-line — wants the summary to start on line 2; mutually exclusive with D212 (summary on line 1, the NumPy-docstring style used here)
+    "non-imperative-mood",    # non-imperative-mood — first docstring word need not be imperative ("Returns…" is fine in NumPy style)
+    "undocumented-public-method", "undocumented-public-function", "undocumented-magic-method", "undocumented-public-init",  # undocumented public method / public function / magic method / __init__ — docstrings optional on test helpers and dunders
     # --- Size / complexity thresholds (complexity is governed by pykissembed's own gate) ---
-    "PLR1702", # too-many-nested-blocks
-    "PLR0911", # too-many-return-statements
-    "PLR0912", # too-many-branches
-    "PLR0913", # too-many-arguments
-    "PLR0914", # too-many-locals
-    "PLR0915", # too-many-statements
-    "PLR0916", # too-many-boolean-expressions
-    "PLR0917", # too-many-positional-arguments
-    "C901",    # complex-structure — McCabe complexity; tracked by pykissembed's complexity check instead
+    "too-many-nested-blocks", # too-many-nested-blocks
+    "too-many-return-statements", # too-many-return-statements
+    "too-many-branches", # too-many-branches
+    "too-many-arguments", # too-many-arguments
+    "too-many-locals", # too-many-locals
+    "too-many-statements", # too-many-statements
+    "too-many-boolean-expressions", # too-many-boolean-expressions
+    "too-many-positional-arguments", # too-many-positional-arguments
+    "complex-structure",    # complex-structure — McCabe complexity; tracked by pykissembed's complexity check instead
    
 ]
 
@@ -202,13 +195,15 @@ convention = "numpy"
 # regression is documented in tests/test_similarity_parity.py). Verified by
 # testing the __init__.py addition directly: it broke `from
 # _similarity_backend import ...`'s bare-name resolution — see git history.
-"tests/**" = ["ANN001", "ANN201", "ANN202", "S101", "PLR2004", "S404", "INP001", "PLC2701", "PLR6301"]
+"tests/**" = ["missing-type-function-argument", "missing-return-type-undocumented-public-function", "missing-return-type-private-function", "assert", "magic-value-comparison", "suspicious-subprocess-import", "implicit-namespace-package", "import-private-name", "no-self-use"]
 "pykissembed/tests/fixtures/**" = ["ALL"]
 
 [tool.pyright]
-include = ["pykissembed", "src/pykissembed", "tests"]
+include = ["pykissembed", "tests"]
+exclude = ["tests/fixtures/sample_repo"]
 pythonVersion = "3.14"
-extraPaths = ["src"]
+venvPath = "."
+venv = ".venv"
 
 # ty (editor type checker). The extra path resolves cuml from the RAPIDS pixi
 # env (machine-specific; harmlessly absent elsewhere — cuml just won't resolve).

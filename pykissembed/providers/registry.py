@@ -1,8 +1,8 @@
 """Provider registry — discovers installed providers via ``importlib.metadata``.
 
-Built-in providers are registered statically on import. Third-party
-providers register via the ``pykissembed.providers`` entry-point group
-declared in their own ``pyproject.toml``.
+Provider packages register through the ``pykissembed.providers`` entry-point
+group declared in their own ``pyproject.toml``. Core intentionally bundles no
+embedding provider so installing pykissembed alone remains network-neutral.
 """
 
 from __future__ import annotations
@@ -11,7 +11,6 @@ import warnings
 from importlib import metadata
 
 from pykissembed.providers.base import Provider
-from pykissembed.providers.local import LocalProvider
 
 _BUILTIN_GROUP = "pykissembed.providers"
 
@@ -36,8 +35,8 @@ class ProviderRegistry:
         """Discover third-party providers via entry points and register them.
 
         Entry points are iterated in **reverse** order so that the
-        first-listed entry point (typically a user-installed override
-        like ``pykissembed-local``) wins over later ones. Built-in providers
+        first-listed entry point (typically a user-installed override)
+        wins over later ones. Built-in providers
         (registered via :func:`discover_builtin`) are still loaded first
         and are then overridden by whichever entry point appears first
         in the metadata listing.
@@ -46,7 +45,13 @@ class ProviderRegistry:
         for ep in reversed(eps):
             try:
                 loaded = ep.load()
-            except Exception as exc:  # noqa: BLE001
+                # An entry point may resolve to either a Provider *class*
+                # (needs instantiating) or an already-built singleton
+                # *instance*. Constructor failures receive the same isolation
+                # as import failures so one broken extension cannot abort all
+                # provider discovery.
+                instance = loaded() if isinstance(loaded, type) else loaded
+            except Exception as exc:  # ruff:ignore[blind-except]
                 # A broken third-party entry point (bad install, incompatible
                 # version) must not crash discovery for every other provider.
                 warnings.warn(  # pragma: no cover — defensive
@@ -55,11 +60,6 @@ class ProviderRegistry:
                     stacklevel=2,
                 )
                 continue
-            # An entry point may resolve to either a Provider *class* (needs
-            # instantiating) or an already-built singleton *instance* —
-            # both are accepted so third-party provider packages aren't
-            # forced into one particular authoring style.
-            instance = loaded() if isinstance(loaded, type) else loaded
             if isinstance(instance, Provider):
                 self.register(instance)
 
@@ -101,12 +101,15 @@ REGISTRY = ProviderRegistry()
 
 
 def discover_builtin() -> None:
-    """Register the providers bundled with pykissembed itself."""
-    REGISTRY.register(LocalProvider())
+    """Register providers bundled with core.
+
+    Core currently bundles no embedding provider. The public hook remains for
+    compatibility with callers that explicitly invoke discovery in two steps.
+    """
 
 
 def discover_all() -> ProviderRegistry:
-    """Discover built-in + entry-point providers and return the registry.
+    """Discover built-in and entry-point providers and return the registry.
 
     Returns
     -------

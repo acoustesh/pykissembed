@@ -1,7 +1,8 @@
-# Publish pykissembed-local to TestPyPI via API token.
+# Publish the final lightweight pykissembed-local tombstone to TestPyPI.
 #
-# Sibling workflow to publish-testpypi.yml — publishes the local
-# subpackage. Each project gets its own dedicated workflow so the
+# Sibling workflow to publish-testpypi.yml — publishes the compatibility
+# tombstone. It intentionally contains no local model runtime. Each project
+# gets its own dedicated workflow so the
 # artifact name, package path, and trigger file stay unambiguous.
 #
 # Required GitHub secret: ``TESTPYPI_TOKEN`` (shared across all

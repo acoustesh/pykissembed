@@ -30,15 +30,15 @@ class PyqtestConfig:
         Directory for committed baselines (relative to ``root``). Defaults
         to ``tests/baselines``.
     cache_dir
-        Directory for embedding caches (relative to ``root``, should be
-        gitignored). Defaults to ``tests/.pykissembed_cache``.
+        Deprecated compatibility setting retained for parsing only. Cloud
+        similarity caches use the committed baseline directory instead.
     include_notebooks
         Whether to apply ruff and similarity checks to ``.ipynb`` files.
         Defaults to ``False`` — notebooks are typically exploratory.
     cached_only
         Whether similarity checks should use only cached embeddings. Defaults
-        to ``False`` — missing embeddings are populated through configured
-        providers.
+        to ``True`` so source-derived representations are never sent to cloud
+        providers without an explicit opt-in.
     wrapper_max_call_sites
         Maximum project-wide static call-site count allowed for an exact
         pass-through wrapper. Defaults to ``1``.
@@ -56,7 +56,7 @@ class PyqtestConfig:
     baseline_dir: str = "tests/baselines"
     cache_dir: str = "tests/.pykissembed_cache"
     include_notebooks: bool = False
-    cached_only: bool = False
+    cached_only: bool = True
     wrapper_max_call_sites: int = 1
     wrapper_exclude: list[str] = field(default_factory=list)
     wrapper_exempt_decorators: list[str] = field(default_factory=list)
@@ -69,7 +69,11 @@ class PyqtestConfig:
 
     @property
     def cache_path(self) -> Path:
-        """Absolute path to the (gitignored) cache directory."""
+        """Deprecated compatibility cache path.
+
+        The path is no longer used by the cloud similarity pipeline, but the
+        property remains available for consumers written against v0.1.
+        """
         return self.root / self.cache_dir
 
     def resolved_paths(self) -> list[Path]:
@@ -162,6 +166,25 @@ def _require_nonnegative_int(value: object, *, key: str) -> int:
     return value
 
 
+def _require_bool(value: object, *, key: str) -> bool:
+    """Validate an explicit TOML boolean.
+
+    Returns
+    -------
+    bool
+        The validated boolean.
+
+    Raises
+    ------
+    TypeError
+        If *value* is not a boolean.
+    """
+    if not isinstance(value, bool):
+        msg = f"[tool.pykissembed] {key!r} must be a boolean"
+        raise TypeError(msg)
+    return value
+
+
 def load_config(start: Path | None = None) -> PyqtestConfig:
     """Resolve pykissembed configuration.
 
@@ -226,8 +249,7 @@ def load_config(start: Path | None = None) -> PyqtestConfig:
     cache_dir = str(section.get("cache_dir", "tests/.pykissembed_cache"))
     include_notebooks_raw = section.get("include_notebooks", False)
     include_notebooks = bool(include_notebooks_raw)
-    cached_only_raw = section.get("cached_only", False)
-    cached_only = bool(cached_only_raw)
+    cached_only = _require_bool(section.get("cached_only", True), key="cached_only")
     wrapper_max_call_sites = _require_nonnegative_int(
         section.get("wrapper_max_call_sites", 1),
         key="wrapper_max_call_sites",
@@ -278,7 +300,7 @@ def _auto_detect(root: Path) -> PyqtestConfig:
         baseline_dir="tests/baselines",
         cache_dir="tests/.pykissembed_cache",
         include_notebooks=False,
-        cached_only=False,
+        cached_only=True,
         root=root,
     )
 

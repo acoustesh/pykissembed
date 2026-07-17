@@ -7,6 +7,7 @@ check workflow.
 
 from __future__ import annotations
 
+import importlib
 from pathlib import Path
 from textwrap import dedent
 
@@ -18,7 +19,9 @@ from pykissembed.plugin import (
     _checks_dir,
 )
 from pykissembed.similarity import checks as similarity_checks
+from pykissembed.similarity import complexity as similarity_complexity
 from pykissembed.similarity.ast_helpers import (
+    _extract_function_infos_from_directories,
     compute_content_hash,
     extract_function_infos_from_file,
 )
@@ -35,9 +38,17 @@ from pykissembed.similarity.exclusions import is_excluded_pair
 from pykissembed.similarity.jina_similarity import build_symmetrized_matrix
 from pykissembed.similarity.populate_embeddings import (
     _JINA_TEXT_CFG,
+    _PROVIDER_MAP,
     _get_embedding_cache,
     _jina_texts,
+    _populate_all,
     _populate_combined,
+    _populate_combined_scoped,
+    _populate_embeddings,
+    _PopulationError,
+    _resolve_scan_directories,
+    _scoped_text_hashes,
+    _synchronize_scanned_function_hashes,
     cli_provider_name,
 )
 from pykissembed.similarity.refactor_index import (
@@ -170,7 +181,7 @@ class TestSimilarityProximityExclusions:
         )
         test_class.embedding = [1.0, 0.0]
         test_method.embedding = [1.0, 0.0]
-        assert similarity_checks._find_violations(  # noqa: SLF001
+        assert similarity_checks._find_violations(  # ruff:ignore[private-member-access]
             [test_class, test_method],
             threshold_pair=0.9,
             threshold_neighbor=0.8,
@@ -363,6 +374,54 @@ class TestExtractFunctionInfosFromFile:
         assert func.ast_text  # non-empty
         assert func.embedding is None
 
+    @staticmethod
+    def test_explicit_directories_can_be_outside_project(
+        tmp_path: Path,
+        monkeypatch: pytest.MonkeyPatch,
+    ) -> None:
+        """Explicit population paths replace configured paths and may be external."""
+        project = tmp_path / "project"
+        external = tmp_path / "external"
+        project.mkdir()
+        external.mkdir()
+        (project / "pyproject.toml").write_text(
+            '[tool.pykissembed]\npaths = ["src"]\n',
+            encoding="utf-8",
+        )
+        (project / "src").mkdir()
+        (external / "module.py").write_text("def external():\n    return 1\n", encoding="utf-8")
+        monkeypatch.chdir(project)
+
+        functions = _extract_function_infos_from_directories([external], min_loc=1)
+
+        assert [function.name for function in functions] == ["external"]
+        assert functions[0].file == f"{external}/module.py"
+
+    @staticmethod
+    def test_explicit_parent_and_child_use_one_project_relative_identity(
+        tmp_path: Path,
+        monkeypatch: pytest.MonkeyPatch,
+    ) -> None:
+        """Scan-root choice cannot change cache identity or duplicate egress."""
+        package = tmp_path / "pkg"
+        package.mkdir()
+        (tmp_path / "pyproject.toml").write_text(
+            '[tool.pykissembed]\npaths = ["pkg"]\n',
+            encoding="utf-8",
+        )
+        (package / "module.py").write_text("def target():\n    return 1\n", encoding="utf-8")
+        monkeypatch.chdir(tmp_path)
+
+        from_child = _extract_function_infos_from_directories([package], min_loc=1)
+        from_parent = _extract_function_infos_from_directories([tmp_path], min_loc=1)
+        overlapping = _extract_function_infos_from_directories([tmp_path, package], min_loc=1)
+
+        assert [function.file for function in from_child] == ["pkg/module.py"]
+        assert [function.file for function in from_parent] == ["pkg/module.py"]
+        assert [(function.file, function.hash) for function in overlapping] == [
+            ("pkg/module.py", from_child[0].hash),
+        ]
+
 
 class TestComputeCosineSimilarity:
     """Tests for compute_cosine_similarity."""
@@ -545,6 +604,53 @@ class TestEmbeddingRegistry:
         assert all(key not in REGISTRY.combined_dependencies for key in expected)
         assert REGISTRY.by_cache_key("jina_text_query_embeddings").hash_type is HashType.TEXT
         assert REGISTRY.by_cache_key("jina_ast_query_embeddings").hash_type is HashType.AST
+
+
+class TestComplexityMapScopes:
+    """Single-directory and aggregate complexity loading remain distinct."""
+
+    @staticmethod
+    def test_explicit_directory_does_not_resolve_configured_paths(
+        tmp_path: Path,
+        monkeypatch: pytest.MonkeyPatch,
+    ) -> None:
+        """An explicit directory performs exactly one shallow scan."""
+        calls: list[tuple[Path, str, bool]] = []
+        expected = ({"function": 1}, {"function": 2})
+        monkeypatch.setattr(
+            similarity_complexity,
+            "resolve_paths",
+            lambda: pytest.fail("explicit scan resolved configured paths"),
+        )
+        monkeypatch.setattr(
+            similarity_complexity,
+            "_scan_complexity_directory",
+            lambda directory, prefix="", recursive=False: (
+                calls.append((directory, prefix, recursive)) or expected
+            ),
+        )
+
+        assert similarity_complexity.load_complexity_maps(tmp_path) == expected
+        assert calls == [(tmp_path, "", False)]
+
+    @staticmethod
+    def test_default_directory_uses_only_first_configured_path(
+        tmp_path: Path,
+        monkeypatch: pytest.MonkeyPatch,
+    ) -> None:
+        """The compatibility loader never aggregates later configured roots."""
+        first = tmp_path / "first"
+        second = tmp_path / "second"
+        calls: list[Path] = []
+        monkeypatch.setattr(similarity_complexity, "resolve_paths", lambda: [first, second])
+        monkeypatch.setattr(
+            similarity_complexity,
+            "_scan_complexity_directory",
+            lambda directory, **_kwargs: (calls.append(directory) or ({}, {})),
+        )
+
+        assert similarity_complexity.load_complexity_maps() == ({}, {})
+        assert calls == [first]
 
 
 class TestSaveBaselines:
@@ -760,6 +866,293 @@ class TestPopulateCombined:
             "f.py:f:1": {"hash": "ast1", "text_hash": "text1"},
         }
 
+    @staticmethod
+    def test_requires_member_coverage_for_every_scanned_function() -> None:
+        """A nonempty but incomplete member cache blocks Combined rebuild."""
+        baselines = _complete_member_baselines("text1", "ast1")
+        functions = [
+            _combined_member_func("text1", "ast1"),
+            _combined_member_func("text2", "ast2"),
+        ]
+
+        with pytest.raises(pytest.skip.Exception, match="every member cache"):
+            _populate_combined(baselines, functions)
+
+    @staticmethod
+    def test_partial_rebuild_preserves_unrelated_combined_vectors() -> None:
+        """A scoped rebuild must not discard a vector belonging to another path."""
+        baselines = _complete_member_baselines("text1", "ast1")
+        baselines["function_hashes"] = {
+            "other.py:other:1": {"hash": "ast-old", "text_hash": "text-old"},
+        }
+        baselines[REGISTRY.combined.cache_key] = {"text-old": [0.0, 1.0]}
+
+        built = _populate_combined_scoped(
+            baselines,
+            [_combined_member_func("text1", "ast1")],
+            replace_text_hashes={"text1"},
+        )
+
+        combined = baselines[REGISTRY.combined.cache_key]
+        assert isinstance(combined, dict)
+        assert set(combined) == {"text-old", "text1"}
+        assert combined["text-old"] == [0.0, 1.0]
+        assert built == 2
+
+    @staticmethod
+    def test_partial_rebuild_removes_replaced_stale_combined_vector() -> None:
+        """A stale vector inside the selected scope is not preserved."""
+        baselines = _complete_member_baselines("text1", "ast1")
+        baselines["function_hashes"] = {
+            "selected.py:deleted:1": {"hash": "ast-old", "text_hash": "text-old"},
+        }
+        baselines[REGISTRY.combined.cache_key] = {"text-old": [0.0, 1.0]}
+
+        _populate_combined_scoped(
+            baselines,
+            [_combined_member_func("text1", "ast1")],
+            replace_text_hashes={"text-old", "text1"},
+        )
+
+        combined = baselines[REGISTRY.combined.cache_key]
+        assert isinstance(combined, dict)
+        assert set(combined) == {"text1"}
+
+
+class TestPopulateEmbeddingsCommand:
+    """Tests for the canonical per-function population orchestrator."""
+
+    @staticmethod
+    def test_cached_only_inspects_without_mutation_or_write(
+        monkeypatch: pytest.MonkeyPatch,
+        capsys: pytest.CaptureFixture[str],
+    ) -> None:
+        """Inspection reads coverage but never updates hashes or saves caches."""
+        function = _combined_member_func("text1", "ast1")
+        function_hashes: dict[str, object] = {
+            "old.py:f:1": {"hash": "old-a", "text_hash": "old-t"},
+        }
+        baselines: dict[str, object] = {
+            "function_hashes": function_hashes,
+            "openai_text_embeddings": {},
+        }
+        original_hashes = dict(function_hashes)
+        monkeypatch.setattr(
+            "pykissembed.similarity.populate_embeddings.load_baselines",
+            lambda: baselines,
+        )
+        monkeypatch.setattr(
+            "pykissembed.similarity.populate_embeddings.extract_all_function_infos",
+            lambda **_kwargs: [function],
+        )
+
+        def fail_save(_baselines: dict[str, object]) -> None:
+            pytest.fail("cached-only inspection must not write")
+
+        monkeypatch.setattr(
+            "pykissembed.similarity.populate_embeddings.save_baselines",
+            fail_save,
+        )
+        monkeypatch.setitem(
+            _PROVIDER_MAP,
+            "openai-text",
+            lambda *_args: pytest.fail("cached-only inspection reached a provider"),
+        )
+
+        _populate_embeddings("openai-text", cached_only=True)
+
+        assert baselines["function_hashes"] == original_hashes
+        assert "1 of 1 scanned functions missing" in capsys.readouterr().out
+
+    @staticmethod
+    def test_selected_unconfigured_provider_fails_without_write(
+        monkeypatch: pytest.MonkeyPatch,
+    ) -> None:
+        """A missing provider credential is an actionable command failure."""
+        function = _combined_member_func("text1", "ast1")
+        monkeypatch.setattr(
+            "pykissembed.similarity.populate_embeddings.load_baselines",
+            lambda: {"function_hashes": {}, "openai_text_embeddings": {}},
+        )
+        monkeypatch.setattr(
+            "pykissembed.similarity.populate_embeddings.extract_all_function_infos",
+            lambda **_kwargs: [function],
+        )
+        monkeypatch.setattr(
+            "pykissembed.similarity.populate_embeddings.load_api_key_from_env",
+            lambda *_args, **_kwargs: None,
+        )
+        monkeypatch.setattr(
+            "pykissembed.similarity.populate_embeddings.save_baselines",
+            lambda _baselines: pytest.fail("failed population must not write"),
+        )
+
+        with pytest.raises(_PopulationError, match="OPENAI_API_KEY"):
+            _populate_embeddings("openai-text")
+
+    @staticmethod
+    def test_scan_path_validation_and_overlap_collapse(tmp_path: Path) -> None:
+        """Missing roots fail and selected parent roots subsume their children."""
+        parent = tmp_path / "src"
+        child = parent / "pkg"
+        other = tmp_path / "other"
+        child.mkdir(parents=True)
+        other.mkdir()
+
+        with pytest.raises(_PopulationError, match="existing directories"):
+            _resolve_scan_directories([tmp_path / "missing"])
+
+        source_file = parent / "module.py"
+        source_file.write_text("def f():\n    return 1\n", encoding="utf-8")
+        with pytest.raises(_PopulationError, match=r"module\.py"):
+            _resolve_scan_directories([parent, source_file])
+        with pytest.raises(_PopulationError, match="missing-child"):
+            _resolve_scan_directories([parent, parent / "missing-child"])
+
+        assert _resolve_scan_directories([child, parent, other, child]) == [parent, other]
+
+    @staticmethod
+    def test_hash_sync_prunes_only_selected_scope(
+        tmp_path: Path,
+        monkeypatch: pytest.MonkeyPatch,
+    ) -> None:
+        """Partial population removes stale in-scope identities, never unrelated ones."""
+        source = tmp_path / "src"
+        other = tmp_path / "other"
+        source.mkdir()
+        other.mkdir()
+        (tmp_path / "pyproject.toml").write_text(
+            '[tool.pykissembed]\npaths = ["src"]\n',
+            encoding="utf-8",
+        )
+        (source / "module.py").write_text("def current():\n    return 1\n", encoding="utf-8")
+        monkeypatch.chdir(tmp_path)
+        functions = _extract_function_infos_from_directories([source], min_loc=1)
+        current_key = "src/module.py:current:1"
+        baselines: dict[str, object] = {
+            "function_hashes": {
+                current_key: {"hash": "old", "text_hash": "old"},
+                "src/module.py:deleted:20": {"hash": "stale", "text_hash": "stale"},
+                "./src/module.py:legacy:30": {"hash": "legacy", "text_hash": "legacy"},
+                "other/keep.py:keep:1": {"hash": "keep", "text_hash": "keep"},
+            },
+        }
+
+        _synchronize_scanned_function_hashes(baselines, functions, [source])
+
+        hashes = baselines["function_hashes"]
+        assert isinstance(hashes, dict)
+        assert set(hashes) == {current_key, "other/keep.py:keep:1"}
+        assert hashes[current_key] == {
+            "hash": functions[0].hash,
+            "text_hash": functions[0].text_hash,
+        }
+
+    @staticmethod
+    def test_scoped_combined_replacement_retains_hash_used_outside_scope(
+        tmp_path: Path,
+        monkeypatch: pytest.MonkeyPatch,
+    ) -> None:
+        """A duplicate text hash remains protected while an unscanned function uses it."""
+        source = tmp_path / "src"
+        source.mkdir()
+        (tmp_path / "pyproject.toml").write_text(
+            '[tool.pykissembed]\npaths = ["src"]\n',
+            encoding="utf-8",
+        )
+        monkeypatch.chdir(tmp_path)
+        baselines: dict[str, object] = {
+            "function_hashes": {
+                "src/deleted.py:old:1": {"hash": "a-old", "text_hash": "shared"},
+                "other/still_used.py:dup:1": {"hash": "a-other", "text_hash": "shared"},
+                "src/only.py:old:1": {"hash": "a-only", "text_hash": "selected-only"},
+            },
+        }
+
+        assert _scoped_text_hashes(baselines, [source]) == {"selected-only"}
+
+    @staticmethod
+    def test_all_fails_when_every_incomplete_route_is_unavailable(
+        monkeypatch: pytest.MonkeyPatch,
+    ) -> None:
+        """`all` cannot report success when no incomplete cache can advance."""
+        module = importlib.import_module("pykissembed.similarity.populate_embeddings")
+        monkeypatch.setattr(
+            module,
+            "_attempt_network_provider",
+            lambda provider, _baselines, _functions: (0, f"{provider}: credential unavailable"),
+        )
+        monkeypatch.setattr(module, "_combined_member_gaps", lambda *_args: {"openai-text": 1})
+        monkeypatch.setattr(module, "_missing_for_provider", lambda *_args: 1)
+
+        with pytest.raises(_PopulationError, match="No requested cache work"):
+            _populate_all({}, [_combined_member_func("text", "ast")])
+
+    @staticmethod
+    def test_all_keeps_successful_provider_work_when_other_routes_fail(
+        monkeypatch: pytest.MonkeyPatch,
+    ) -> None:
+        """A successful route is retained while unavailable routes are reported."""
+        module = importlib.import_module("pykissembed.similarity.populate_embeddings")
+        calls = 0
+
+        def attempt(
+            provider: str,
+            _baselines: dict[str, object],
+            _functions: list[FunctionInfo],
+        ) -> tuple[int, str | None]:
+            nonlocal calls
+            calls += 1
+            if calls == 1:
+                return 1, None
+            return 0, f"{provider}: unavailable"
+
+        monkeypatch.setattr(module, "_attempt_network_provider", attempt)
+        monkeypatch.setattr(module, "_combined_member_gaps", lambda *_args: {"openai-text": 1})
+        monkeypatch.setattr(module, "_missing_for_provider", lambda *_args: 1)
+
+        total, performed = _populate_all({}, [_combined_member_func("text", "ast")])
+
+        assert (total, performed) == (1, True)
+
+    @staticmethod
+    def test_all_canonical_variants_retain_expected_transport_families(
+        monkeypatch: pytest.MonkeyPatch,
+    ) -> None:
+        """Every text/AST CLI variant delegates to its locked provider family."""
+        module = importlib.import_module("pykissembed.similarity.populate_embeddings")
+        captured: list[str] = []
+
+        def capture_provider(_baselines, _functions, cfg) -> int:  # type: ignore[no-untyped-def]
+            captured.append(cfg.provider)
+            return 0
+
+        def capture_jina(_baselines, _functions, _cfg) -> int:  # type: ignore[no-untyped-def]
+            captured.append("jina")
+            return 0
+
+        monkeypatch.setattr(module, "_populate_provider", capture_provider)
+        monkeypatch.setattr(module, "_populate_jina", capture_jina)
+        expected = {
+            "openai-text": "openai",
+            "openai-ast": "openai",
+            "codestral-text": "codestral",
+            "codestral-ast": "codestral",
+            "voyage-text": "voyage",
+            "voyage-ast": "voyage",
+            "gemini-text": "gemini",
+            "gemini-ast": "gemini",
+            "qwen-text": "qwen",
+            "qwen-ast": "qwen",
+            "jina-text": "jina",
+            "jina-ast": "jina",
+        }
+
+        for name, family in expected.items():
+            captured.clear()
+            _PROVIDER_MAP[name]({}, [])
+            assert captured == [family]
+
 
 class TestCliProviderName:
     """Tests for the cache-key to CLI provider-name mapping."""
@@ -791,7 +1184,7 @@ class TestSkipMissingEmbeddings:
             The pytest.skip message raised by the helper.
         """
         with pytest.raises(pytest.skip.Exception) as excinfo:
-            similarity_checks._skip_missing_embeddings(  # noqa: SLF001
+            similarity_checks._skip_missing_embeddings(  # ruff:ignore[private-member-access]
                 baselines,
                 uncached,
                 provider,
@@ -1051,7 +1444,7 @@ class TestSimilarityConfiguration:
 
         monkeypatch.setattr(similarity_checks.pytest, "fail", fake_fail)
 
-        similarity_checks._report_violations(  # noqa: SLF001
+        similarity_checks._report_violations(  # ruff:ignore[private-member-access]
             ["module.py:1 duplicated() vs other.py:1 copy() - similarity: 100.0%"],
             [],
             threshold_pair=0.98,
@@ -1145,7 +1538,7 @@ class TestSimilarityConfiguration:
             OPENAI_TEXT_PROVIDER.pca_variance_key: 0.9,
         }
 
-        assert similarity_checks._extract_pca_variance(  # noqa: SLF001
+        assert similarity_checks._extract_pca_variance(  # ruff:ignore[private-member-access]
             config,
             OPENAI_TEXT_PROVIDER,
         ) == pytest.approx(0.9)

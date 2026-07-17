@@ -368,11 +368,19 @@ class TestSubprocessCollection:
     @pytest.mark.parametrize(
         ("cached_only_setting", "pytest_args", "expected"),
         [
-            ("", [], "False"),
+            ("", [], "True"),
             ("cached_only = true\n", [], "True"),
+            ("cached_only = false\n", [], "False"),
             ("", ["--cached-only"], "True"),
+            ("", ["--allow-cloud-embeddings"], "False"),
         ],
-        ids=["default-populates", "toml-cache-only", "cli-cache-only"],
+        ids=[
+            "default-cache-only",
+            "toml-cache-only",
+            "toml-allows-cloud",
+            "cli-cache-only",
+            "cli-allows-cloud",
+        ],
     )
     def test_cached_only_fixture_uses_toml_or_cli_flag(
         tmp_path: Path,
@@ -380,7 +388,7 @@ class TestSubprocessCollection:
         pytest_args: list[str],
         expected: str,
     ) -> None:
-        """A consumer defaults to population unless TOML or CLI opts out."""
+        """The fixture applies default, TOML, and explicit CLI network policy."""
         consumer = tmp_path / "consumer"
         (consumer / "tests").mkdir(parents=True)
         (consumer / "pyproject.toml").write_text(
@@ -396,7 +404,7 @@ class TestSubprocessCollection:
         env = {**os.environ, "PYTHONPATH": str(repo)}
         # S603: test-only argv uses sys.executable, pytest literals, and the
         # literal parameterized flags above; no shell is involved.
-        result = subprocess.run(  # noqa: S603
+        result = subprocess.run(  # ruff:ignore[subprocess-without-shell-equals-true]
             [
                 sys.executable,
                 "-m",
@@ -415,6 +423,36 @@ class TestSubprocessCollection:
         assert result.returncode == 0, (
             f"consumer cache-mode test failed:\nstdout:\n{result.stdout}\nstderr:\n{result.stderr}"
         )
+
+    @staticmethod
+    def test_conflicting_cloud_policy_flags_fail_before_collection(tmp_path: Path) -> None:
+        """Cache-only and cloud opt-in cannot be supplied together."""
+        consumer = tmp_path / "consumer"
+        consumer.mkdir()
+        (consumer / "pyproject.toml").write_text(
+            '[tool.pykissembed]\npaths = ["."]\n',
+            encoding="utf-8",
+        )
+        (consumer / "test_sample.py").write_text("def test_ok():\n    pass\n", encoding="utf-8")
+        repo = Path(__file__).resolve().parents[1]
+        result = subprocess.run(
+            [
+                sys.executable,
+                "-m",
+                "pytest",
+                "test_sample.py",
+                "--cached-only",
+                "--allow-cloud-embeddings",
+            ],
+            cwd=consumer,
+            env={**os.environ, "PYTHONPATH": str(repo)},
+            capture_output=True,
+            text=True,
+            check=False,
+        )
+
+        assert result.returncode == pytest.ExitCode.USAGE_ERROR
+        assert "mutually exclusive" in result.stderr
 
     @staticmethod
     def test_specific_nodeid_only_collects_that_test(
@@ -638,7 +676,7 @@ class TestSubprocessCollection:
         target = checks_dir / "docstring_format.py"
 
         # S603: fixed argv (sys.executable + literal flags + a path built above).
-        result = subprocess.run(  # noqa: S603
+        result = subprocess.run(  # ruff:ignore[subprocess-without-shell-equals-true]
             [
                 sys.executable,
                 "-m",

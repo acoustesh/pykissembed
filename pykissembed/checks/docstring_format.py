@@ -62,7 +62,7 @@ def _run_ruff_docstring_check(target_dir: Path, *, root: Path) -> list[Docstring
     cmd.extend([str(target_dir), "--select=D", "--output-format=json"])
     # S603: fixed argv (resolved ruff binary + literal flags + a configured
     # directory path); no shell involved.
-    result = subprocess.run(cmd, capture_output=True, text=True, check=False)  # noqa: S603
+    result = subprocess.run(cmd, capture_output=True, text=True, check=False)  # ruff:ignore[subprocess-without-shell-equals-true]
     if not result.stdout.strip():
         return []
     try:

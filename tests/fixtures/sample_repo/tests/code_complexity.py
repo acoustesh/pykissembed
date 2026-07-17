@@ -152,12 +152,14 @@ def _get_cog(file_path: Path) -> list[tuple[str, int, int]]:
         # Lazy: complexipy is a compiled (Rust) analyzer; deferring the
         # import avoids its cost for test runs that never touch cognitive
         # complexity (e.g. -m complexity without the COG check selected).
-        from complexipy import file_complexity  # type: ignore[import-untyped]  # noqa: PLC0415
+        from complexipy import (  # ruff:ignore[import-outside-top-level]
+            file_complexity,  # type: ignore[import-untyped]
+        )
     except ImportError:
         return []
     try:
         result = file_complexity(str(file_path))
-    except Exception:  # noqa: BLE001 — pragma: no cover — third-party analyzer; any failure on arbitrary user source degrades to "no cognitive-complexity data" rather than crashing the whole check
+    except Exception:  # ruff:ignore[blind-except] — pragma: no cover — third-party analyzer; any failure on arbitrary user source degrades to "no cognitive-complexity data" rather than crashing the whole check
         return []
     if not hasattr(result, "functions"):
         return []
@@ -180,7 +182,7 @@ def _get_mi(file_path: Path) -> float:
     source = file_path.read_text(encoding="utf-8")
     try:
         score = mi_visit_fn(source, multi=False)
-    except Exception:  # noqa: BLE001 — third-party analyzer; any failure on arbitrary user source degrades to "no MI data" rather than crashing the whole check
+    except Exception:  # ruff:ignore[blind-except] — third-party analyzer; any failure on arbitrary user source degrades to "no MI data" rather than crashing the whole check
         return 0.0
     if isinstance(score, (int, float)):
         return float(score)

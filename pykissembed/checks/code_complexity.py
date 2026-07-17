@@ -22,7 +22,11 @@ from pykissembed.baselines_engine import BaselineEnvelope, locked_envelope, save
 from pykissembed.config import get_config
 from pykissembed.paths import iter_py_files as _iter_py_files
 from pykissembed.paths import warn_non_utf8
-from pykissembed.wrapper_analysis import find_wrapper_candidates, parse_source_files
+from pykissembed.wrapper_analysis import (
+    _decorator_name,
+    find_wrapper_candidates,
+    parse_source_files,
+)
 
 
 class _BaselineConfig(TypedDict, total=False):
@@ -126,18 +130,17 @@ def _is_overload_stub(node: ast.FunctionDef | ast.AsyncFunctionDef) -> bool:
 
 
 def _decorator_tail(decorator: ast.expr) -> str | None:
-    """Return the terminal name of a name or attribute decorator.
+    """Return the terminal static name of a non-call decorator.
 
     Returns
     -------
     str | None
-        The terminal name, or ``None`` for another decorator expression.
+        The terminal name, or ``None`` for calls and dynamic expressions.
     """
-    if isinstance(decorator, ast.Name):
-        return decorator.id
-    if isinstance(decorator, ast.Attribute):
-        return decorator.attr
-    return None
+    if not isinstance(decorator, ast.Name | ast.Attribute):
+        return None
+    name = _decorator_name(decorator)
+    return None if name is None else name.rsplit(".", maxsplit=1)[-1]
 
 
 def _get_line_count(file_path: Path) -> int:
@@ -196,14 +199,14 @@ def _get_cog(file_path: Path) -> list[tuple[str, int, int]]:
         # Lazy: complexipy is a compiled (Rust) analyzer; deferring the
         # import avoids its cost for test runs that never touch cognitive
         # complexity (e.g. -m complexity without the COG check selected).
-        from complexipy import (  # noqa: PLC0415
+        from complexipy import (  # ruff:ignore[import-outside-top-level]
             file_complexity as _fc,  # type: ignore[import-untyped]
         )
     except ImportError:
         return []
     try:
         result = _fc(str(file_path))
-    except Exception:  # noqa: BLE001 — pragma: no cover — third-party analyzer; any failure on arbitrary user source degrades to "no cognitive-complexity data" rather than crashing the whole check
+    except Exception:  # ruff:ignore[blind-except] — pragma: no cover — third-party analyzer; any failure on arbitrary user source degrades to "no cognitive-complexity data" rather than crashing the whole check
         return []
     if not hasattr(result, "functions"):
         return []
@@ -238,7 +241,7 @@ def _get_mi(file_path: Path) -> float:
         return 0.0
     try:
         score = mi_visit_fn(source, multi=False)
-    except Exception:  # noqa: BLE001 — third-party analyzer; any failure on arbitrary user source degrades to "no MI data" rather than crashing the whole check
+    except Exception:  # ruff:ignore[blind-except] — third-party analyzer; any failure on arbitrary user source degrades to "no MI data" rather than crashing the whole check
         return 0.0
     if isinstance(score, (int, float)):
         return float(score)

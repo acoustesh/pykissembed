@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import ast
 from pathlib import Path
 from textwrap import dedent
 
@@ -15,6 +16,25 @@ from pykissembed.wrapper_analysis import (
     find_wrapper_candidates,
     parse_source_files,
 )
+
+
+@pytest.mark.parametrize(
+    ("expression", "expected"),
+    [
+        ("overload", "overload"),
+        ("typing.overload", "overload"),
+        ("overload()", None),
+        ("decorators[name]", None),
+    ],
+)
+def test_overload_decorator_tail_preserves_supported_expression_shapes(
+    expression: str,
+    expected: str | None,
+) -> None:
+    """Only bare and dotted non-call decorators expose a static tail."""
+    decorator = ast.parse(f"@{expression}\ndef function():\n    pass").body[0]
+    assert isinstance(decorator, ast.FunctionDef)
+    assert code_complexity._decorator_tail(decorator.decorator_list[0]) == expected  # ruff:ignore[private-member-access]
 
 
 def _write_module(root: Path, name: str, source: str) -> Path:

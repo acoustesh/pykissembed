@@ -57,6 +57,12 @@ def pytest_addoption(parser: pytest.Parser) -> None:
         help="Use only cached embeddings; skip any API calls.",
     )
     parser.addoption(
+        "--allow-cloud-embeddings",
+        action="store_true",
+        default=False,
+        help="Allow similarity checks to populate missing embeddings through cloud APIs.",
+    )
+    parser.addoption(
         "--pykissembed-all",
         action="store_true",
         default=False,
@@ -89,9 +95,12 @@ def cached_only(request: pytest.FixtureRequest) -> bool:
     Returns
     -------
     bool
-        ``True`` when ``--cached-only`` was passed on the command line or
-        ``[tool.pykissembed] cached_only`` is enabled in ``pyproject.toml``.
+        ``True`` when ``--cached-only`` was passed or when configuration keeps
+        the default cache-only policy. ``--allow-cloud-embeddings`` overrides
+        configuration and returns ``False``.
     """
+    if request.config.getoption("--allow-cloud-embeddings"):
+        return False
     return bool(request.config.getoption("--cached-only") or get_config().cached_only)
 
 
@@ -123,16 +132,18 @@ def shared_baselines() -> dict[str, object]:
         The loaded baselines dictionary.
     """
     # Lazy: plugin.py loads unconditionally in every consumer's pytest
-    # session; avoid the numpy/pandas-backed storage module's import cost
+    # session; avoid the NumPy-backed storage module's import cost
     # for sessions that never touch similarity checks.
-    from pykissembed.similarity.storage import load_minimal_baselines  # noqa: PLC0415
+    from pykissembed.similarity.storage import (  # ruff:ignore[import-outside-top-level]
+        load_minimal_baselines,
+    )
 
     return load_minimal_baselines()
 
 
 @pytest.fixture(scope="session")
 def shared_functions(
-    shared_baselines: dict[str, object],  # noqa: ARG001 — fixture name is an external contract; requested only to sequence loading, not to read its value
+    shared_baselines: dict[str, object],  # ruff:ignore[unused-function-argument] — fixture name is an external contract; requested only to sequence loading, not to read its value
 ) -> list:
     """Session-scoped list of FunctionInfo objects extracted from workspace.
 
@@ -142,7 +153,9 @@ def shared_functions(
         The extracted function info objects.
     """
     # Lazy: same rationale as shared_baselines above.
-    from pykissembed.similarity.ast_helpers import extract_all_function_infos  # noqa: PLC0415
+    from pykissembed.similarity.ast_helpers import (  # ruff:ignore[import-outside-top-level]
+        extract_all_function_infos,
+    )
 
     return extract_all_function_infos(min_loc=1)
 
@@ -169,7 +182,16 @@ def pytest_configure(config: pytest.Config) -> None:
     default, so :func:`pytest_collect_file` would never be called for
     those files. We append the checks directory to ``config.args`` here
     so pytest discovers and collects the check modules automatically.
+
+    Raises
+    ------
+    pytest.UsageError
+        If both cache-only and cloud-population flags are supplied.
     """
+    if config.getoption("--cached-only") and config.getoption("--allow-cloud-embeddings"):
+        msg = "--cached-only and --allow-cloud-embeddings are mutually exclusive"
+        raise pytest.UsageError(msg)
+
     config.addinivalue_line(
         "markers",
         "lint: lint + type-check gate (ruff, pyright)",
@@ -435,7 +457,7 @@ def _checks_dir() -> Path | None:
         # plugin.py loads unconditionally for every consumer's pytest
         # session, so a broken checks subpackage must degrade to "no
         # auto-collection" rather than crash the whole plugin.
-        import pykissembed.checks as checks_pkg  # noqa: PLC0415
+        import pykissembed.checks as checks_pkg  # ruff:ignore[import-outside-top-level]
     except ImportError:  # pragma: no cover — defensive
         return None
     # checks_pkg.__file__ is .../pykissembed/checks/__init__.py

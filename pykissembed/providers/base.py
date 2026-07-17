@@ -24,11 +24,10 @@ class Provider(Protocol):
     Attributes
     ----------
     name
-        Stable identifier (e.g. ``"local"``, ``"openai"``). Lower-case,
+        Stable identifier (e.g. ``"openai"``, ``"my_embedder"``). Lower-case,
         no spaces.
     model_id
-        Model identifier (e.g. ``"sentence-transformers/all-MiniLM-L6-v2"``,
-        ``"text-embedding-3-large"``).
+        Model identifier (e.g. ``"text-embedding-3-large"``).
     schema_version
         Bumped whenever the vector shape or semantics change. Used as
         part of the embedding cache key to prevent silent corruption.
@@ -59,7 +58,7 @@ class Provider(Protocol):
     def is_configured(self) -> bool:
         """Return True iff the provider can be used right now.
 
-        For local providers this is always True. For cloud providers this
-        typically checks for the relevant API key in the environment.
+        Cloud providers typically check for the relevant API key in the
+        environment. Other implementations may use their own readiness check.
         """
         ...

@@ -374,7 +374,7 @@ def run_provider_similarity_checks(
     *,
     baselines: Baselines,
     functions: list[FunctionInfo],
-    update_baselines: bool,  # noqa: ARG001 — accepted for call-site symmetry with
+    update_baselines: bool,  # ruff:ignore[unused-function-argument] — accepted for call-site symmetry with
     # cached_only; currently unused (embeddings are always auto-populated when not
     # cached_only, regardless of this flag).
     cached_only: bool,
@@ -391,7 +391,7 @@ def run_provider_similarity_checks(
     Combined providers with the same flow: load cached → populate if
     needed → apply PCA → find violations.
 
-    When cached_only=False (default), missing embeddings are auto-populated via API.
+    When cached_only=False, missing embeddings are auto-populated via API.
     When cached_only=True, the test is skipped if embeddings are missing.
 
     Parameters
@@ -551,14 +551,14 @@ def run_jina_similarity_checks(
     *,
     baselines: Baselines,
     functions: list[FunctionInfo],
-    update_baselines: bool,  # noqa: ARG001 — accepted for call-site symmetry with
+    update_baselines: bool,  # ruff:ignore[unused-function-argument] — accepted for call-site symmetry with
     # run_provider_similarity_checks; embeddings are auto-populated when not cached_only.
     cached_only: bool,
     provider: ProviderEntry,
     threshold_pair: float,
     threshold_neighbor: float,
     load_complexity_maps_fn: Callable[[], tuple[dict[str, int], dict[str, int]]],
-    pca_cache: PcaCache | None = None,  # noqa: ARG001 — Jina bypasses PCA (the
+    pca_cache: PcaCache | None = None,  # ruff:ignore[unused-function-argument] — Jina bypasses PCA (the
     # asymmetric cross-score is not a single-vector cosine); accepted for symmetry.
     class_function_proximity: int = 0,
 ) -> None:

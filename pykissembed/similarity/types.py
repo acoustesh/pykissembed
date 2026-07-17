@@ -13,7 +13,7 @@ if TYPE_CHECKING:
 class PCAModel(Protocol):
     """Structural type for a fitted PCA model (sklearn or cuML)."""
 
-    def transform(self, X: NDArray[np.floating]) -> NDArray[np.floating]:  # noqa: N803
+    def transform(self, X: NDArray[np.floating]) -> NDArray[np.floating]:  # ruff:ignore[invalid-argument-name]
         """Transform data using the fitted PCA model."""
         ...
 

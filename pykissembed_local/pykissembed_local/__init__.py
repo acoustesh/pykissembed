@@ -1,4 +1,4 @@
-"""pykissembed-local — local sentence-transformers embedding provider for pykissembed."""
+"""Compatibility tombstone for the retired pykissembed local provider."""
 
 from __future__ import annotations
 

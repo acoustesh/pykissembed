@@ -6,13 +6,12 @@ cached values. Run this before running tests if you need to populate
 missing embeddings.
 
 Usage:
-    python -m pykissembed.similarity.populate_embeddings [--provider PROVIDER]
+    python -m pykissembed.similarity.populate_embeddings --provider PROVIDER
 
 Options:
     --provider  One of: openai-text, openai-ast, codestral-text, codestral-ast,
                 voyage-text, voyage-ast, gemini-text, gemini-ast, qwen-text,
                 qwen-ast, jina-text, jina-ast, combined, all
-                (default: all)
 """
 
 from __future__ import annotations
@@ -21,11 +20,18 @@ import argparse
 import sys
 import time
 from dataclasses import dataclass
+from pathlib import Path as _Path
 from typing import TYPE_CHECKING, TypedDict
 
 import pytest
 
-from pykissembed.similarity.ast_helpers import extract_all_function_infos
+from pykissembed.config import get_config as _get_config
+from pykissembed.paths import resolve_paths as _resolve_paths
+from pykissembed.similarity.ast_helpers import (
+    _collapse_scan_directories,
+    _extract_function_infos_from_directories,
+    extract_all_function_infos,
+)
 from pykissembed.similarity.constants import (
     JINA_CODE2CODE_PASSAGE,
     JINA_CODE2CODE_QUERY,
@@ -53,6 +59,10 @@ if TYPE_CHECKING:
 
 type Baselines = dict[str, object]
 type PopulateFn = Callable[[Baselines, list[FunctionInfo]], int]
+
+
+class _PopulationError(RuntimeError):
+    """Raised when an explicit cache-population request cannot be completed."""
 
 
 class _FunctionHashEntry(TypedDict):
@@ -198,16 +208,16 @@ def _populate_provider(
         min_length=20,
     )
     if not api_key:
-        print(f"{cfg.env_var} not set or invalid, skipping {cfg.label}")  # noqa: T201
+        print(f"{cfg.env_var} not set or invalid, skipping {cfg.label}")  # ruff:ignore[print]
         return 0
 
     hash_attr = "text_hash" if cfg.use_text else "hash"
     uncached = _find_uncached(baselines, functions, cfg.cache_key, hash_attr)
     if not uncached:
-        print(f"{cfg.label}: all functions already cached")  # noqa: T201
+        print(f"{cfg.label}: all functions already cached")  # ruff:ignore[print]
         return 0
 
-    print(f"{cfg.label}: fetching embeddings for {len(uncached)} functions...")  # noqa: T201
+    print(f"{cfg.label}: fetching embeddings for {len(uncached)} functions...")  # ruff:ignore[print]
     try:
         text_attr = "text_for_embedding" if cfg.use_text else "ast_text"
         texts = [getattr(f, text_attr) for f in uncached]
@@ -230,21 +240,17 @@ def _populate_provider(
             getattr(func, hash_attr): emb for func, emb in zip(uncached, embeddings, strict=True)
         }
         merge_embedding_caches(baselines, {cfg.cache_key: new_embeddings})
-        print(f"{cfg.label}: cached {len(uncached)} new embeddings")  # noqa: T201
+        print(f"{cfg.label}: cached {len(uncached)} new embeddings")  # ruff:ignore[print]
         return len(uncached)
     except ModuleNotFoundError as e:
-        # The provider's SDK is an optional dependency not bundled with any
-        # pykissembed extra (see pyproject.toml dev-group comments) — spell
-        # that out instead of the generic "failed to fetch" message, which
-        # reads like an API failure rather than a missing package.
-        print(  # noqa: T201
+        print(  # ruff:ignore[print]
             f"{cfg.label}: skipping — '{e.name}' is not installed "
-            f"(pip install {e.name} to enable this provider)",
+            "(install 'pykissembed[cloud]' to enable cloud population)",
         )
         return 0
-    except Exception as e:  # noqa: BLE001 — external API boundary: network/auth/rate-limit
+    except Exception as e:  # ruff:ignore[blind-except] — external API boundary: network/auth/rate-limit
         # failures for one provider must not abort populating the rest.
-        print(f"{cfg.label}: failed to fetch embeddings: {e}")  # noqa: T201
+        print(f"{cfg.label}: failed to fetch embeddings: {e}")  # ruff:ignore[print]
         return 0
 
 
@@ -282,7 +288,7 @@ def _populate_jina(baselines: Baselines, functions: list[FunctionInfo], cfg: _Ji
     """
     api_key = load_api_key_from_env("JINA_API_KEY", invalid_prefixes=("your_",), min_length=20)
     if not api_key:
-        print(f"JINA_API_KEY not set or invalid, skipping {cfg.label}")  # noqa: T201
+        print(f"JINA_API_KEY not set or invalid, skipping {cfg.label}")  # ruff:ignore[print]
         return 0
 
     hash_attr = "text_hash" if cfg.use_text else "hash"
@@ -295,10 +301,10 @@ def _populate_jina(baselines: Baselines, functions: list[FunctionInfo], cfg: _Ji
         or passage_cache.get(getattr(func, hash_attr)) is None
     ]
     if not uncached:
-        print(f"{cfg.label}: all functions already cached")  # noqa: T201
+        print(f"{cfg.label}: all functions already cached")  # ruff:ignore[print]
         return 0
 
-    print(f"{cfg.label}: fetching embeddings for {len(uncached)} functions...")  # noqa: T201
+    print(f"{cfg.label}: fetching embeddings for {len(uncached)} functions...")  # ruff:ignore[print]
     try:
         query_texts, passage_texts = _jina_texts(uncached, cfg)
         query_embs = get_embeddings_batch(query_texts, provider="jina", task=cfg.query_task)
@@ -316,17 +322,17 @@ def _populate_jina(baselines: Baselines, functions: list[FunctionInfo], cfg: _Ji
                 cfg.passage_cache_key: passage_updates,
             },
         )
-        print(f"{cfg.label}: cached {len(uncached)} new embeddings")  # noqa: T201
+        print(f"{cfg.label}: cached {len(uncached)} new embeddings")  # ruff:ignore[print]
         return len(uncached)
     except ModuleNotFoundError as e:
-        print(  # noqa: T201
+        print(  # ruff:ignore[print]
             f"{cfg.label}: skipping — '{e.name}' is not installed "
-            f"(pip install {e.name} to enable this provider)",
+            "(install 'pykissembed[cloud]' to enable cloud population)",
         )
         return 0
-    except Exception as e:  # noqa: BLE001 — external API boundary: network/auth/rate-limit
+    except Exception as e:  # ruff:ignore[blind-except] — external API boundary: network/auth/rate-limit
         # failures for one provider must not abort populating the rest.
-        print(f"{cfg.label}: failed to fetch embeddings: {e}")  # noqa: T201
+        print(f"{cfg.label}: failed to fetch embeddings: {e}")  # ruff:ignore[print]
         return 0
 
 
@@ -464,9 +470,67 @@ def cli_provider_name(cache_key: str) -> str:
     )
 
 
+def _missing_for_cache(
+    baselines: Baselines,
+    functions: list[FunctionInfo],
+    cache_key: str,
+) -> int:
+    """Return how many live functions are absent from one cache.
+
+    Inspection deliberately treats a missing or malformed cache as empty and
+    never creates a replacement mapping in *baselines*.
+
+    Returns
+    -------
+    int
+        Number of functions whose hash is absent from *cache_key*.
+    """
+    raw_cache = baselines.get(cache_key)
+    cache = raw_cache if is_embedding_cache(raw_cache) else {}
+    hash_field = REGISTRY.by_cache_key(cache_key).hash_field
+    return sum(getattr(function, hash_field) not in cache for function in functions)
+
+
+def _combined_member_gaps(
+    baselines: Baselines,
+    functions: list[FunctionInfo],
+) -> dict[str, int]:
+    """Return missing counts for providers required by Combined.
+
+    Returns
+    -------
+    dict[str, int]
+        Canonical CLI provider names mapped to their largest member-cache gap.
+    """
+    gaps: dict[str, int] = {}
+    dependencies = REGISTRY.combined_dependencies + REGISTRY.standalone_dependencies
+    for cache_key in dependencies:
+        missing = _missing_for_cache(baselines, functions, cache_key)
+        if missing:
+            provider = cli_provider_name(cache_key)
+            gaps[provider] = max(gaps.get(provider, 0), missing)
+    return gaps
+
+
 def _populate_combined(
     baselines: Baselines,
     functions: list[FunctionInfo],
+) -> int:
+    """Rebuild all Combined embeddings from the member caches.
+
+    Returns
+    -------
+    int
+        Number of Combined vectors available after rebuilding.
+    """
+    return _populate_combined_scoped(baselines, functions, replace_text_hashes=None)
+
+
+def _populate_combined_scoped(
+    baselines: Baselines,
+    functions: list[FunctionInfo],
+    *,
+    replace_text_hashes: set[str] | None,
 ) -> int:
     """Rebuild Combined embeddings from the 10 cosine base providers + Jina.
 
@@ -475,22 +539,41 @@ def _populate_combined(
     auto-populate flow never does. Record the live *functions* first so combined
     can be built even when ``function_hashes`` starts empty or stale (e.g. a
     consumer that has only ever populated embeddings through the test run).
+    For an explicit partial-path scan, *replace_text_hashes* identifies the
+    selected scope so unrelated Combined vectors survive the global rebuild.
 
     Returns
     -------
     int
         Number of combined embeddings rebuilt.
     """
+    previous_combined = (
+        dict(_get_embedding_cache(baselines, REGISTRY.combined.cache_key))
+        if replace_text_hashes is not None
+        else None
+    )
     _update_function_hashes(baselines, functions)
-    for cache_key in REGISTRY.combined_dependencies + REGISTRY.standalone_dependencies:
-        raw = baselines.get(cache_key)
-        if raw is None or not raw or not is_embedding_cache(raw):
-            pytest.skip(
-                f"Cannot build combined embeddings: {cache_key} is missing or invalid. "
-                f"Run: pykissembed populate-embeddings --provider {cli_provider_name(cache_key)}",
-            )
+    member_gaps = _combined_member_gaps(baselines, functions)
+    if member_gaps:
+        details = ", ".join(f"{provider}: {missing}" for provider, missing in member_gaps.items())
+        pytest.skip(
+            "Cannot build combined embeddings until every member cache covers "
+            f"the scanned functions ({details}). Run: "
+            "pykissembed populate-embeddings --provider <name>",
+        )
 
-    return REGISTRY.rebuild_combined(baselines)
+    REGISTRY.rebuild_combined(baselines)
+    combined = _get_embedding_cache(baselines, REGISTRY.combined.cache_key)
+    if previous_combined is not None:
+        replacement_hashes = replace_text_hashes or set()
+        combined.update(
+            {
+                text_hash: vector
+                for text_hash, vector in previous_combined.items()
+                if text_hash not in replacement_hashes and text_hash not in combined
+            },
+        )
+    return len(combined)
 
 
 def _update_function_hashes(baselines: Baselines, functions: list[FunctionInfo]) -> None:
@@ -500,6 +583,66 @@ def _update_function_hashes(baselines: Baselines, functions: list[FunctionInfo])
     for func in functions:
         key = f"{func.file}:{func.name}:{func.start_line}"
         function_hashes[key] = _FunctionHashEntry(hash=func.hash, text_hash=func.text_hash)
+
+
+def _synchronize_scanned_function_hashes(
+    baselines: Baselines,
+    functions: list[FunctionInfo],
+    directories: list[_Path],
+) -> None:
+    """Replace hash entries only within the directories scanned by the CLI.
+
+    Entries outside the selected roots are preserved. Within a selected root,
+    stale line identities and legacy alternate path spellings are removed
+    before current functions are inserted.
+    """
+    root = _get_config().root.resolve()
+    scopes = _collapse_scan_directories(directories)
+    function_hashes = _get_function_hashes(baselines)
+    current_keys = {f"{func.file}:{func.name}:{func.start_line}" for func in functions}
+    for key in list(function_hashes):
+        if _function_key_is_in_scopes(key, root, scopes) and key not in current_keys:
+            del function_hashes[key]
+    _update_function_hashes(baselines, functions)
+
+
+def _function_key_is_in_scopes(key: str, root: _Path, scopes: list[_Path]) -> bool:
+    """Return whether a stored function identity belongs to selected roots.
+
+    Returns
+    -------
+    bool
+        Whether the function file is under any selected root.
+    """
+    try:
+        file_name, _function_name, _line = key.rsplit(":", 2)
+    except ValueError:
+        return False
+    file_path = _Path(file_name)
+    absolute_path = file_path.resolve() if file_path.is_absolute() else (root / file_path).resolve()
+    return any(absolute_path.is_relative_to(scope) for scope in scopes)
+
+
+def _scoped_text_hashes(baselines: Baselines, directories: list[_Path]) -> set[str]:
+    """Return scoped text hashes that no unscanned identity still references.
+
+    Returns
+    -------
+    set[str]
+        Text hashes exclusive to the selected directories.
+    """
+    root = _get_config().root.resolve()
+    scopes = _collapse_scan_directories(directories)
+    scoped: set[str] = set()
+    unscoped: set[str] = set()
+    for key, entry in _get_function_hashes(baselines).items():
+        if not isinstance(entry, dict):
+            continue
+        text_hash = entry.get("text_hash")
+        if isinstance(text_hash, str) and text_hash:
+            destination = scoped if _function_key_is_in_scopes(key, root, scopes) else unscoped
+            destination.add(text_hash)
+    return scoped - unscoped
 
 
 # Map provider names to functions
@@ -531,7 +674,7 @@ def get_provider_populator(provider: str) -> PopulateFn | None:
     return _PROVIDER_MAP.get(provider)
 
 
-_ALL_PROVIDERS = [
+_NETWORK_PROVIDERS = (
     "openai-text",
     "openai-ast",
     "codestral-text",
@@ -544,41 +687,325 @@ _ALL_PROVIDERS = [
     "qwen-ast",
     "jina-text",
     "jina-ast",
+)
+
+_ALL_PROVIDERS = (
+    *_NETWORK_PROVIDERS,
     "combined",
-]
+)
+
+_PROVIDER_CREDENTIALS = {
+    "openai": ("OPENAI_API_KEY", ("your_", "sk-xxx")),
+    "codestral": ("OPENROUTER_API_KEY", ("your_", "sk-xxx")),
+    "voyage": ("VOYAGE_API_KEY", ("your_", "pa-xxx")),
+    "gemini": ("GOOGLE_API_KEY", ("your_",)),
+    "qwen": ("OPENROUTER_API_KEY", ("your_", "sk-xxx")),
+    "jina": ("JINA_API_KEY", ("your_",)),
+}
 
 
-def populate_embeddings(provider: str = "all") -> None:
+def _require_canonical_provider(provider: str) -> None:
+    """Validate *provider* and raise an actionable error for legacy names.
+
+    Raises
+    ------
+    _PopulationError
+        If *provider* is local, ambiguous, or unknown.
+    """
+    if provider in {*_ALL_PROVIDERS, "all"}:
+        return
+    if provider == "local":
+        msg = (
+            "Local embeddings were removed. Choose a cloud variant such as "
+            "'openai-text', 'openai-ast', 'gemini-text', or 'gemini-ast'. "
+            "Existing local JSONL caches are left untouched."
+        )
+        raise _PopulationError(msg)
+    family = provider.partition("-")[0]
+    if provider == family and family in _PROVIDER_CREDENTIALS:
+        env_var, _ = _PROVIDER_CREDENTIALS[family]
+        text_variant = f"{family}-text"
+        ast_variant = f"{family}-ast"
+        msg = (
+            f"Provider {provider!r} is ambiguous. Choose {text_variant!r} or "
+            f"{ast_variant!r}; both use {env_var}."
+        )
+        raise _PopulationError(msg)
+    choices = ", ".join((*_ALL_PROVIDERS, "all"))
+    msg = f"Unknown provider {provider!r}. Canonical choices: {choices}."
+    raise _PopulationError(msg)
+
+
+def _provider_cache_keys(provider: str) -> tuple[str, ...]:
+    """Return the persisted cache keys inspected for a canonical provider.
+
+    Returns
+    -------
+    tuple[str, ...]
+        One cache key for cosine/Combined providers or the query and passage
+        keys for a Jina variant.
+    """
+    stem = provider.replace("-", "_")
+    if provider.startswith("jina-"):
+        return (f"{stem}_query_embeddings", f"{stem}_passage_embeddings")
+    return (f"{stem}_embeddings",)
+
+
+def _missing_for_provider(
+    baselines: Baselines,
+    functions: list[FunctionInfo],
+    provider: str,
+) -> int:
+    """Return functions missing any cache member required by *provider*.
+
+    Returns
+    -------
+    int
+        Number of incomplete functions.
+    """
+    caches: list[tuple[dict[str, list[float]], str]] = []
+    for cache_key in _provider_cache_keys(provider):
+        raw_cache = baselines.get(cache_key)
+        cache = raw_cache if is_embedding_cache(raw_cache) else {}
+        caches.append((cache, REGISTRY.by_cache_key(cache_key).hash_field))
+    return sum(
+        any(getattr(function, hash_field) not in cache for cache, hash_field in caches)
+        for function in functions
+    )
+
+
+def _configured_credential(provider: str) -> str | None:
+    """Return the environment variable name when *provider* lacks credentials.
+
+    Returns
+    -------
+    str | None
+        Missing/invalid environment-variable name, or ``None`` when configured.
+    """
+    family = provider.partition("-")[0]
+    env_var, invalid_prefixes = _PROVIDER_CREDENTIALS[family]
+    api_key = load_api_key_from_env(
+        env_var,
+        invalid_prefixes=invalid_prefixes,
+        min_length=20,
+    )
+    return None if api_key else env_var
+
+
+def _attempt_network_provider(
+    provider: str,
+    baselines: Baselines,
+    functions: list[FunctionInfo],
+) -> tuple[int, str | None]:
+    """Attempt one cloud provider and report any unresolved cache gap.
+
+    Returns
+    -------
+    tuple[int, str | None]
+        Newly embedded function count and an error message, if incomplete.
+    """
+    missing_before = _missing_for_provider(baselines, functions, provider)
+    if not missing_before:
+        print(f"{provider}: all scanned functions already cached")  # ruff:ignore[print]
+        return 0, None
+    missing_credential = _configured_credential(provider)
+    if missing_credential:
+        return 0, f"{provider}: {missing_credential} is not configured ({missing_before} missing)"
+    handler = _PROVIDER_MAP[provider]
+    new_count = handler(baselines, functions)
+    missing_after = _missing_for_provider(baselines, functions, provider)
+    if missing_after:
+        return new_count, f"{provider}: cache remains incomplete ({missing_after} missing)"
+    return new_count, None
+
+
+def _inspect_caches(
+    provider: str,
+    baselines: Baselines,
+    functions: list[FunctionInfo],
+) -> None:
+    """Print cache gaps without mutating or persisting *baselines*."""
+    selected = _ALL_PROVIDERS if provider == "all" else (provider,)
+    print("--cached-only: inspection only; no API calls or cache writes")  # ruff:ignore[print]
+    for name in selected:
+        missing = _missing_for_provider(baselines, functions, name)
+        print(  # ruff:ignore[print]
+            f"{name}: {missing} of {len(functions)} scanned functions missing",
+        )
+        if name == "combined":
+            for member, count in _combined_member_gaps(baselines, functions).items():
+                print(f"  member {member}: {count} missing")  # ruff:ignore[print]
+
+
+def _populate_all(
+    baselines: Baselines,
+    functions: list[FunctionInfo],
+    *,
+    replace_combined_hashes: set[str] | None = None,
+) -> tuple[int, bool]:
+    """Populate every available cloud provider and rebuild Combined.
+
+    Returns
+    -------
+    tuple[int, bool]
+        Total provider result count and whether any requested work completed.
+
+    Raises
+    ------
+    _PopulationError
+        If caches are incomplete and no requested work could be completed.
+    """
+    total_new = 0
+    performed = False
+    unresolved: list[str] = []
+    for provider in _NETWORK_PROVIDERS:
+        new_count, error = _attempt_network_provider(provider, baselines, functions)
+        total_new += new_count
+        performed = performed or new_count > 0
+        if error:
+            unresolved.append(error)
+            print(f"Skipping {error}")  # ruff:ignore[print]
+
+    member_gaps = _combined_member_gaps(baselines, functions)
+    if member_gaps:
+        details = ", ".join(f"{name}: {count}" for name, count in member_gaps.items())
+        unresolved.append(f"combined: member caches incomplete ({details})")
+    else:
+        total_new += _populate_combined_scoped(
+            baselines,
+            functions,
+            replace_text_hashes=replace_combined_hashes,
+        )
+        performed = True
+
+    any_missing = any(
+        _missing_for_provider(baselines, functions, provider) for provider in _ALL_PROVIDERS
+    )
+    if unresolved and any_missing and not performed:
+        raise _PopulationError(
+            "No requested cache work could be completed. " + "; ".join(unresolved),
+        )
+    return total_new, performed
+
+
+def _resolve_scan_directories(paths: list[_Path] | None) -> list[_Path] | None:
+    """Resolve and validate explicit scan directories.
+
+    Returns
+    -------
+    list[Path] | None
+        Deduplicated absolute directories, or ``None`` to use configuration.
+
+    Raises
+    ------
+    _PopulationError
+        If an explicit path is missing or not a directory.
+    """
+    if paths is None:
+        return None
+    resolved = [path.resolve() for path in paths]
+    invalid = [path for path in resolved if not path.is_dir()]
+    if invalid:
+        raise _PopulationError(
+            "Embedding scan paths must be existing directories: "
+            + ", ".join(str(path) for path in invalid),
+        )
+    return _collapse_scan_directories(resolved)
+
+
+def _populate_embeddings(
+    provider: str = "all",
+    *,
+    paths: list[_Path] | None = None,
+    cached_only: bool = False,
+) -> None:
     """Populate embedding caches for specified provider(s).
 
     Parameters
     ----------
     provider : str
         One of the 13 providers or ``"all"``.
+    paths : list[Path] | None
+        Explicit directories to scan instead of configured source paths.
+    cached_only : bool
+        Inspect cache coverage without API calls or writes.
+
+    Raises
+    ------
+    _PopulationError
+        If the provider or paths are invalid, credentials are unavailable for
+        a selected incomplete provider, or population leaves it incomplete.
     """
-    print("Loading baselines and extracting functions...")  # noqa: T201
+    _require_canonical_provider(provider)
+    directories = _resolve_scan_directories(paths)
+    print("Loading baselines and extracting functions...")  # ruff:ignore[print]
     baselines = load_baselines()
-    functions = extract_all_function_infos(min_loc=1)
-    print(f"Found {len(functions)} functions in codebase")  # noqa: T201
+    functions = (
+        extract_all_function_infos(min_loc=1)
+        if directories is None
+        else _extract_function_infos_from_directories(directories, min_loc=1)
+    )
+    print(f"Found {len(functions)} functions in codebase")  # ruff:ignore[print]
 
-    _update_function_hashes(baselines, functions)
+    if cached_only:
+        _inspect_caches(provider, baselines, functions)
+        return
 
-    total_new = 0
-    for prov in _ALL_PROVIDERS if provider == "all" else [provider]:
-        handler = _PROVIDER_MAP.get(prov)
-        if handler is None:
-            print(f"Unknown provider: {prov}")  # noqa: T201
-            continue
-        total_new += handler(baselines, functions)
-
-    if total_new > 0:
-        print(f"\nSaving {total_new} new embeddings to cache...")  # noqa: T201
+    hashes_before = dict(_get_function_hashes(baselines))
+    # Resolve ownership before synchronizing identities: once stale scoped
+    # entries are removed, shared text hashes cannot be distinguished safely.
+    replace_combined_hashes = (
+        _scoped_text_hashes(baselines, directories) if directories is not None else None
+    )
+    if replace_combined_hashes is not None:
+        replace_combined_hashes.update(function.text_hash for function in functions)
+    _synchronize_scanned_function_hashes(
+        baselines,
+        functions,
+        directories if directories is not None else _resolve_paths(),
+    )
+    hashes_changed = hashes_before != _get_function_hashes(baselines)
+    if provider == "all":
+        total_new, performed = _populate_all(
+            baselines,
+            functions,
+            replace_combined_hashes=replace_combined_hashes,
+        )
+    elif provider == "combined":
+        member_gaps = _combined_member_gaps(baselines, functions)
+        if member_gaps:
+            details = ", ".join(f"{name}: {count}" for name, count in member_gaps.items())
+            msg = f"Cannot rebuild combined; member caches are incomplete: {details}"
+            raise _PopulationError(msg)
+        total_new = _populate_combined_scoped(
+            baselines,
+            functions,
+            replace_text_hashes=replace_combined_hashes,
+        )
+        performed = True
     else:
-        print("\nNo new embeddings to save.")  # noqa: T201
+        total_new, error = _attempt_network_provider(provider, baselines, functions)
+        if error:
+            raise _PopulationError(error)
+        performed = total_new > 0
 
-    save_baselines(baselines)
-    if total_new > 0:
-        print("Done!")  # noqa: T201
+    if total_new > 0 or hashes_changed or performed:
+        print(  # ruff:ignore[print]
+            f"\nSaving cache state ({total_new} provider result(s))...",
+        )
+        save_baselines(baselines)
+        print("Done!")  # ruff:ignore[print]
+    else:
+        print("\nNo cache changes to save.")  # ruff:ignore[print]
+
+
+def populate_embeddings(provider: str = "all") -> None:
+    """Populate embedding caches for one canonical provider or all providers.
+
+    This compatibility wrapper retains the original Python API. Use the public
+    CLI to select explicit scan paths or inspect caches without network calls.
+    """
+    _populate_embeddings(provider)
 
 
 def main() -> None:
@@ -590,14 +1017,27 @@ def main() -> None:
     )
     parser.add_argument(
         "--provider",
-        choices=[*_ALL_PROVIDERS, "all"],
-        default="all",
-        help="Which provider to populate (default: all)",
+        required=True,
+        help="Canonical provider variant to populate, or 'all'",
+    )
+    parser.add_argument(
+        "--path",
+        action="append",
+        type=_Path,
+        dest="paths",
+        help="Directory to scan; repeat for multiple paths",
+    )
+    parser.add_argument(
+        "--cached-only",
+        action="store_true",
+        help="Inspect cache coverage without API calls or writes",
     )
     args = parser.parse_args()
 
     try:
-        populate_embeddings(args.provider)
+        _populate_embeddings(args.provider, paths=args.paths, cached_only=args.cached_only)
+    except _PopulationError as exc:
+        parser.error(str(exc))
     except KeyboardInterrupt:
         sys.exit(1)
 

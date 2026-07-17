@@ -35,7 +35,7 @@ $ grep -A4 tool.pykissembed pyproject.toml
 paths = ["src"]
 mode = "ratchet"
 baseline_dir = "tests/baselines"
-cache_dir = "tests/.pykissembed_cache"
+cached_only = true
 ```
 
 ## Step 3 — Confirm v1 envelopes
@@ -77,8 +77,7 @@ $ /home/alvaro/pykissembed/.venv/bin/pytest tests/
 ======================== 10 passed, 1 skipped in 0.39s =========================
 ```
 
-The 1 skip is the similarity test, which needs `pykissembed-local` and a
-populated embedding cache.
+The 1 skip is the similarity test, which needs cloud embedding caches.
 
 ## Step 7 — `pykissembed ratchet` and `pykissembed check`
 
@@ -107,18 +106,18 @@ direct pytest run.
 ## Notes
 
 - **Similarity is intentionally skipped.** The fixture has no
-  `tests/.pykissembed_cache/` and no `pykissembed-local` installed in the
-  parent venv by default. To enable it:
+  committed cloud embeddings and defaults to cache-only mode. To populate one
+  provider explicitly:
 
   ```text
-  uv pip install -e /home/alvaro/pykissembed/pykissembed_local
-  pykissembed populate-embeddings --provider local
+  uv pip install -e /home/alvaro/pykissembed/pykissembed_cloud
+  export OPENROUTER_API_KEY=sk-or-...
+  pykissembed populate-embeddings --provider qwen-text
   pytest -m similarity
   ```
-- **Cloud providers are not exercised here.** With
-  `pykissembed-cloud` installed and an `OPENROUTER_API_KEY` set, the
-  `test_providers_parallel` test will run all four cloud providers
-  against `src/`.
+  Population transmits code-derived text or normalized AST to the selected
+  service and may incur API charges. A normal pytest run never does this while
+  `cached_only = true`.
 - **`pykissembed ratchet` only computes current diagnostics for
   `lint_typecheck.json`.** The other three baselines (`complexity`,
   `density`, `docstring_format`) would need additional computers in

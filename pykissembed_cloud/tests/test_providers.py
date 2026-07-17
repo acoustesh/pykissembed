@@ -124,7 +124,7 @@ class TestEmbed:
 
         class _FakeEmbeddings:
             @staticmethod
-            def create(*, input: Sequence[str], model: str) -> Any:  # noqa: A002
+            def create(*, input: Sequence[str], model: str) -> Any:  # ruff:ignore[builtin-argument-shadowing]
                 captured["input"] = list(input)
                 captured["model"] = model
                 return _FakeResponse([[0.1, 0.2, 0.3] for _ in input])
@@ -158,7 +158,7 @@ class TestEmbed:
             @staticmethod
             def create(
                 *,
-                input: Sequence[str],  # noqa: A002
+                input: Sequence[str],  # ruff:ignore[builtin-argument-shadowing]
                 model: str,
                 extra_body: dict[str, Any],
             ) -> Any:
@@ -198,7 +198,7 @@ class TestEmbed:
         calls: list[Sequence[str]] = []
 
         class _FakeEmbeddings:
-            def create(self, *, input: Sequence[str], model: str) -> Any:  # noqa: A002
+            def create(self, *, input: Sequence[str], model: str) -> Any:  # ruff:ignore[builtin-argument-shadowing]
                 del model
                 calls.append(list(input))
                 return _FakeResponse([[0.0] for _ in input])
@@ -227,7 +227,7 @@ class TestEmbed:
         called = {"n": 0}
 
         class _FakeEmbeddings:
-            def create(self, *, input: Sequence[str], model: str) -> Any:  # noqa: A002
+            def create(self, *, input: Sequence[str], model: str) -> Any:  # ruff:ignore[builtin-argument-shadowing]
                 del model
                 called["n"] += 1
                 return _FakeResponse([])
@@ -270,8 +270,7 @@ class TestEntryPoints:
         assert eps.get("gemini") == "pykissembed_cloud.providers.gemini:GeminiProvider"
         assert eps.get("qwen") == "pykissembed_cloud.providers.qwen:QwenProvider"
         assert eps.get("jina") == "pykissembed_cloud.providers.jina:JinaProvider"
-        # The core local stub is also in the group
-        assert "local" in eps
+        assert "local" not in eps
 
 
 class TestDotenv:
@@ -438,7 +437,7 @@ class TestDotenv:
         dotenv.write_text("OPENROUTER_API_KEY=initial", encoding="utf-8")
         calls = {"n": 0}
 
-        def _spy(start: Path | None = None) -> Path | None:  # noqa: ARG001
+        def _spy(start: Path | None = None) -> Path | None:  # ruff:ignore[unused-function-argument]
             calls["n"] += 1
             return dotenv
 

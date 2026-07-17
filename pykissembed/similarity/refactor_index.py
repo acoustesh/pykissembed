@@ -342,9 +342,15 @@ def get_refactor_priority_message_for_complexity() -> str:
         # Lazy: this helper is only invoked when a complexity check has
         # already failed, so avoid the ast_helpers/complexity/storage import
         # cost on the (common) happy path where nothing fails.
-        from pykissembed.similarity.ast_helpers import extract_all_function_infos  # noqa: PLC0415
-        from pykissembed.similarity.complexity import load_all_complexity_maps  # noqa: PLC0415
-        from pykissembed.similarity.storage import load_baselines  # noqa: PLC0415
+        from pykissembed.similarity.ast_helpers import (  # ruff:ignore[import-outside-top-level]
+            extract_all_function_infos,
+        )
+        from pykissembed.similarity.complexity import (  # ruff:ignore[import-outside-top-level]
+            load_all_complexity_maps,
+        )
+        from pykissembed.similarity.storage import (  # ruff:ignore[import-outside-top-level]
+            load_baselines,
+        )
 
         baselines = _as_str_object_mapping(load_baselines())
         config = _parse_refactor_config(baselines.get("config"))
@@ -373,7 +379,7 @@ def get_refactor_priority_message_for_complexity() -> str:
             threshold=threshold,
             top_n=top_n,
         )
-    except Exception:  # noqa: BLE001 — best-effort supplementary message; any
+    except Exception:  # ruff:ignore[blind-except] — best-effort supplementary message; any
         # failure here must not mask the underlying complexity-check failure.
         return ""
     else:

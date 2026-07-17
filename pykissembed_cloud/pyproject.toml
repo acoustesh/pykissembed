@@ -1,16 +1,16 @@
 # pykissembed-cloud — cloud embedding providers for pykissembed
 #
-# openai, gemini, and qwen are routed through OpenRouter using the
-# OpenAI-compatible API surface, so a single `OPENROUTER_API_KEY` enables all
-# three. jina targets the native Jina API with its own `JINA_API_KEY`.
+# Public openai, gemini, and qwen entry-point providers retain their OpenRouter
+# routing; jina remains native. The same extra also supplies the SDK/HTTP
+# clients used by the canonical similarity cache providers.
 #
 # Install alongside the core package:
 #
 #     pip install pykissembed-cloud
 #     export OPENROUTER_API_KEY=sk-or-...
 #     export JINA_API_KEY=jina_...
-#     pykissembed.providers list
-#     pykissembed populate-embeddings --provider gemini
+#     pykissembed providers list
+#     pykissembed populate-embeddings --provider qwen-text
 
 [build-system]
 requires = ["hatchling>=1.31.0", "hatch-vcs>=0.4"]
@@ -38,8 +38,9 @@ classifiers = [
     "Typing :: Typed",
 ]
 dependencies = [
+    "google-genai>=1.0",
     "openai>=1.50",
-    "pandas>=3.0",
+    "requests>=2.32",
 ]
 
 [project.entry-points."pykissembed.providers"]
@@ -90,57 +91,57 @@ target-version = "py314"
 select = ["ALL"]
 ignore = [
     # --- Formatter conflicts / documentation style ---
-    "E501",    # line-too-long — enforcing line length is the formatter's job, not the linter's
-    "CPY001",  # missing-copyright-notice — files don't carry per-file copyright headers in this project
-    "COM812",  # missing-trailing-comma — owned by the ruff formatter; the lint rule fights it
-    "D203",    # incorrect-blank-line-before-class — wants a blank line before class docstrings; mutually exclusive with D211 (no blank line), which this project follows
-    "D213",    # multi-line-summary-second-line — wants the summary to start on line 2; mutually exclusive with D212 (summary on line 1, the NumPy-docstring style used here)
-    "D401",    # non-imperative-mood — first docstring word need not be imperative ("Returns…" is fine in NumPy style)
-    "D102", "D103", "D105", "D107",  # undocumented public method / public function / magic method / __init__ — docstrings optional on test helpers and dunders
+    "line-too-long",    # line-too-long — enforcing line length is the formatter's job, not the linter's
+    "missing-copyright-notice",  # missing-copyright-notice — files don't carry per-file copyright headers in this project
+    "missing-trailing-comma",  # missing-trailing-comma — owned by the ruff formatter; the lint rule fights it
+    "incorrect-blank-line-before-class",    # incorrect-blank-line-before-class — wants a blank line before class docstrings; mutually exclusive with D211 (no blank line), which this project follows
+    "multi-line-summary-second-line",    # multi-line-summary-second-line — wants the summary to start on line 2; mutually exclusive with D212 (summary on line 1, the NumPy-docstring style used here)
+    "non-imperative-mood",    # non-imperative-mood — first docstring word need not be imperative ("Returns…" is fine in NumPy style)
+    "undocumented-public-method", "undocumented-public-function", "undocumented-magic-method", "undocumented-public-init",  # undocumented public method / public function / magic method / __init__ — docstrings optional on test helpers and dunders
     # --- Size / complexity thresholds (complexity is governed by pykissembed's own gate) ---
-    "PLR0911", # too-many-return-statements
-    "PLR0912", # too-many-branches
-    "PLR0913", # too-many-arguments
-    "PLR0914", # too-many-locals
-    "PLR0915", # too-many-statements
-    "PLR0916", # too-many-boolean-expressions
-    "PLR0917", # too-many-positional-arguments
-    "C901",    # complex-structure — McCabe complexity; tracked by pykissembed's complexity check instead
+    "too-many-return-statements", # too-many-return-statements
+    "too-many-branches", # too-many-branches
+    "too-many-arguments", # too-many-arguments
+    "too-many-locals", # too-many-locals
+    "too-many-statements", # too-many-statements
+    "too-many-boolean-expressions", # too-many-boolean-expressions
+    "too-many-positional-arguments", # too-many-positional-arguments
+    "complex-structure",    # complex-structure — McCabe complexity; tracked by pykissembed's complexity check instead
     # --- Deliberate idioms in this codebase ---
-    "PLR2004", # magic-value-comparison — bare literals in comparisons are fine in tooling/tests (thresholds, counts, exit codes)
-    "ERA001",  # commented-out-code — commented code kept as inline notes/examples
-    "G004",    # logging-f-string — f-strings in logging calls accepted over lazy %-formatting
-    "S101",    # assert — pytest tests rely on bare `assert`
-    "S603",    # subprocess-without-shell-equals-true — subprocess calls use fixed argv lists, not untrusted input
-    "TRY300",  # try-consider-else — returning from the `try` body instead of an `else` block is accepted style
-    "TRY401",  # verbose-log-message — passing the caught exception object to logging.exception() is tolerated
-    "FBT001",  # boolean-type-hint-positional-argument — bool positional params are idiomatic in Typer/Click apps
-    "FBT003",  # boolean-positional-value-in-call — passing literal True/False positionally is accepted
-    "PLC0415", # import-outside-top-level — lazy in-function imports are deliberate (openai imported only when a provider is used)
-    "TC003",   # typing-only-standard-library-import — stdlib typing-only imports may stay at module level instead of a TYPE_CHECKING block
-    "BLE001",  # blind-except — catching broad Exception is OK at CLI/provider boundaries
-    "INP001",  # implicit-namespace-package — test/fixture dirs intentionally have no __init__.py
-    "B008",    # function-call-in-default-argument — calls in defaults OK for module-level Path constants
-    "ANN201",  # missing-return-type-undocumented-public-function — return annotations optional on helpers
-    "ANN401",  # any-type — typing.Any allowed at dynamic boundaries (kwargs, JSON payloads)
-    "EM102",   # f-string-in-exception — f-string literals directly in `raise X(f"…")` accepted without a msg variable
-    "S112",    # try-except-continue — continuing past per-item errors is deliberate in scan loops
-    "PERF403", # manual-dict-comprehension — explicit dict-building loops kept for readability
-    "PLW0603", # global-statement — `global` used for module-level lazy caches
-    "UP036",   # outdated-version-block — sys.version_info fallback blocks kept for older-Python compatibility shims
-    "SLF001",  # private-member-access — tests reach into private members by design
-    "PLR6301", # no-self-use — Protocol-bound methods don't need self
-    "PYI049",  # unused-private-typed-dict — private TypedDicts kept as structural documentation
-    "F841",    # unused-variable — unused locals tolerated in early-return / defensive paths
-    "ARG002",  # unused-method-argument — unused args kept on monkeypatch fixtures to match required signatures
-    "ARG005",  # unused-lambda-argument — unused lambda params kept to match callback signatures
+    "magic-value-comparison", # magic-value-comparison — bare literals in comparisons are fine in tooling/tests (thresholds, counts, exit codes)
+    "commented-out-code",  # commented-out-code — commented code kept as inline notes/examples
+    "logging-f-string",    # logging-f-string — f-strings in logging calls accepted over lazy %-formatting
+    "assert",    # assert — pytest tests rely on bare `assert`
+    "subprocess-without-shell-equals-true",    # subprocess-without-shell-equals-true — subprocess calls use fixed argv lists, not untrusted input
+    "try-consider-else",  # try-consider-else — returning from the `try` body instead of an `else` block is accepted style
+    "verbose-log-message",  # verbose-log-message — passing the caught exception object to logging.exception() is tolerated
+    "boolean-type-hint-positional-argument",  # boolean-type-hint-positional-argument — bool positional params are idiomatic in Typer/Click apps
+    "boolean-positional-value-in-call",  # boolean-positional-value-in-call — passing literal True/False positionally is accepted
+    "import-outside-top-level", # import-outside-top-level — lazy in-function imports are deliberate (openai imported only when a provider is used)
+    "typing-only-standard-library-import",   # typing-only-standard-library-import — stdlib typing-only imports may stay at module level instead of a TYPE_CHECKING block
+    "blind-except",  # blind-except — catching broad Exception is OK at CLI/provider boundaries
+    "implicit-namespace-package",  # implicit-namespace-package — test/fixture dirs intentionally have no __init__.py
+    "function-call-in-default-argument",    # function-call-in-default-argument — calls in defaults OK for module-level Path constants
+    "missing-return-type-undocumented-public-function",  # missing-return-type-undocumented-public-function — return annotations optional on helpers
+    "any-type",  # any-type — typing.Any allowed at dynamic boundaries (kwargs, JSON payloads)
+    "f-string-in-exception",   # f-string-in-exception — f-string literals directly in `raise X(f"…")` accepted without a msg variable
+    "try-except-continue",    # try-except-continue — continuing past per-item errors is deliberate in scan loops
+    "manual-dict-comprehension", # manual-dict-comprehension — explicit dict-building loops kept for readability
+    "global-statement", # global-statement — `global` used for module-level lazy caches
+    "outdated-version-block",   # outdated-version-block — sys.version_info fallback blocks kept for older-Python compatibility shims
+    "private-member-access",  # private-member-access — tests reach into private members by design
+    "no-self-use", # no-self-use — Protocol-bound methods don't need self
+    "unused-private-typed-dict",  # unused-private-typed-dict — private TypedDicts kept as structural documentation
+    "unused-variable",    # unused-variable — unused locals tolerated in early-return / defensive paths
+    "unused-method-argument",  # unused-method-argument — unused args kept on monkeypatch fixtures to match required signatures
+    "unused-lambda-argument",  # unused-lambda-argument — unused lambda params kept to match callback signatures
 ]
 
 [tool.ruff.lint.pydocstyle]
 convention = "numpy"
 
 [tool.ruff.lint.per-file-ignores]
-"tests/**" = ["ANN001", "ANN201", "ANN202", "S101", "PLR2004", "PLR6301"]
+"tests/**" = ["missing-type-function-argument", "missing-return-type-undocumented-public-function", "missing-return-type-private-function", "assert", "magic-value-comparison", "no-self-use"]
 
 [tool.ty.analysis]
 respect-type-ignore-comments = false
@@ -157,6 +158,7 @@ addopts = [
     "-ra",
     "--strict-markers",
     "--strict-config",
+    "-p", "no:pykissembed",
     "-m", "not live",
     "-n", "auto",
 ]

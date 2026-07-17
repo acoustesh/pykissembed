@@ -48,7 +48,7 @@ def _run_ruff_docstring_check(target_dir: Path) -> list[DocstringViolation]:
     if ruff is None:
         return []
     # S603: fixed argv (resolved ruff binary + literal flags + a configured directory).
-    result = subprocess.run(  # noqa: S603
+    result = subprocess.run(  # ruff:ignore[subprocess-without-shell-equals-true]
         [ruff, "check", str(target_dir), "--select=D", "--output-format=json"],
         capture_output=True,
         text=True,

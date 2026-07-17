@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import importlib
 import tomllib
 from textwrap import dedent
 from typing import TYPE_CHECKING
@@ -37,10 +38,10 @@ class TestProvidersList:
 
     @staticmethod
     def test_providers_list_exits_zero() -> None:
-        """Providers list runs successfully (built-in local stub)."""
+        """Providers list runs successfully without a built-in local provider."""
         result = runner.invoke(app, ["providers", "list"])
         assert result.exit_code == 0
-        assert "local" in result.stdout
+        assert "pykissembed.providers" in result.stdout
 
 
 class TestInit:
@@ -66,6 +67,7 @@ class TestInit:
         text = pyproject.read_text()
         assert "[tool.pykissembed]" in text
         assert "paths" in text
+        assert "cache_dir" not in text
 
     @staticmethod
     def test_init_idempotent_without_force(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
@@ -152,6 +154,7 @@ class TestInit:
         text = pyproject.read_text()
         parsed = tomllib.loads(text)
         assert parsed["tool"]["pykissembed"]["paths"] == ["."]
+        assert "cache_dir" not in parsed["tool"]["pykissembed"]
         assert text.count("[tool.pykissembed]") == 1
         # The old buggy regex left a dangling `["."]` fragment behind, which
         # TOML happily (re-)parses as a bogus top-level table named ".".
@@ -185,6 +188,26 @@ class TestInit:
         assert result.exit_code == 0
         parsed = tomllib.loads(pyproject.read_text())
         assert parsed["tool"]["pykissembed"]["cached_only"] is True
+
+    @staticmethod
+    def test_init_with_force_preserves_cloud_opt_in(
+        tmp_path: Path,
+        monkeypatch: pytest.MonkeyPatch,
+    ) -> None:
+        """Forced scaffolding retains an explicit cached_only = false opt-in."""
+        pyproject = tmp_path / "pyproject.toml"
+        pyproject.write_text(
+            '[project]\nname = "demo"\nversion = "0.1.0"\n'
+            '[tool.pykissembed]\npaths = ["lib"]\ncached_only = false\n',
+            encoding="utf-8",
+        )
+        monkeypatch.chdir(tmp_path)
+
+        result = runner.invoke(app, ["init", "--force"])
+
+        assert result.exit_code == 0
+        parsed = tomllib.loads(pyproject.read_text())
+        assert parsed["tool"]["pykissembed"]["cached_only"] is False
 
     @staticmethod
     def test_init_creates_vscode_settings(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
@@ -363,14 +386,58 @@ class TestPopulateEmbeddingsMissingProvider:
         assert "Unknown provider" in result.stdout
 
     @staticmethod
-    def test_cached_only_is_noop() -> None:
-        """--cached-only prints and exits without calling the API."""
+    @pytest.mark.parametrize("provider", ["openai", "gemini", "jina"])
+    def test_ambiguous_short_provider_exits_nonzero(provider: str) -> None:
+        """Legacy family names require an explicit text/AST variant."""
+        result = runner.invoke(app, ["populate-embeddings", "--provider", provider])
+
+        assert result.exit_code != 0
+        assert "ambiguous" in result.stdout
+        assert f"{provider}-text" in result.stdout
+
+    @staticmethod
+    def test_local_provider_exits_nonzero_even_for_inspection() -> None:
+        """The retired local name always produces its migration message."""
         result = runner.invoke(
             app,
             ["populate-embeddings", "--provider", "local", "--cached-only"],
         )
+
+        assert result.exit_code != 0
+        assert "Local embeddings were removed" in result.stdout
+
+    @staticmethod
+    def test_cached_only_delegates_canonical_provider_without_network(
+        tmp_path: Path,
+        monkeypatch: pytest.MonkeyPatch,
+    ) -> None:
+        """Top-level CLI passes canonical provider, paths, and inspection mode."""
+        populate_module = importlib.import_module("pykissembed.similarity.populate_embeddings")
+        calls: list[tuple[str, list[Path] | None, bool]] = []
+
+        def fake_populate(
+            provider: str,
+            *,
+            paths: list[Path] | None,
+            cached_only: bool,
+        ) -> None:
+            calls.append((provider, paths, cached_only))
+
+        monkeypatch.setattr(populate_module, "_populate_embeddings", fake_populate)
+        result = runner.invoke(
+            app,
+            [
+                "populate-embeddings",
+                "--provider",
+                "openai-text",
+                "--path",
+                str(tmp_path),
+                "--cached-only",
+            ],
+        )
+
         assert result.exit_code == 0
-        assert "no embeddings will be computed" in result.stdout
+        assert calls == [("openai-text", [tmp_path], True)]
 
 
 @pytest.fixture

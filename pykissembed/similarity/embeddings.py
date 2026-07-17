@@ -3,12 +3,13 @@
 Ported from ``mega-scrapper/tests/similarity/embeddings.py``. The cloud
 provider clients (OpenAI, Codestral, Voyage, Gemini, Qwen, Jina) are imported
 lazily so the module is importable without cloud dependencies installed. The
-local provider (sentence-transformers) is handled by
-``pykissembed-local``.
+retired local provider is represented only by lightweight compatibility shims;
+this module never loads a local model.
 """
 
 from __future__ import annotations
 
+import math as _math
 import os
 import time
 from typing import TYPE_CHECKING, TypeGuard, cast
@@ -32,6 +33,10 @@ from pykissembed.similarity.constants import (
 
 # Exponential backoff delays
 _RETRY_DELAYS = [1.0, 2.0, 4.0]
+_VOYAGE_API_URL = "https://api.voyageai.com/v1/embeddings"
+_HTTP_TOO_MANY_REQUESTS = 429
+_HTTP_SERVER_ERROR_MIN = 500
+_HTTP_SERVER_ERROR_MAX = 600
 
 # Maximum token limits per provider
 _OPENAI_MAX_TOKENS = 8191  # text-embedding-3-large limit is 8192
@@ -68,7 +73,7 @@ def _get_tiktoken_encoding() -> object:
         If ``tiktoken`` is not installed.
     """
     try:
-        import tiktoken  # noqa: PLC0415 — presence probe, kept lazy for a clearer error message
+        import tiktoken  # ruff:ignore[import-outside-top-level] — clearer lazy error
     except ImportError as exc:
         msg = "tiktoken is required for token-aware truncation"
         raise RuntimeError(msg) from exc
@@ -251,7 +256,7 @@ def _build_jina_caller(
     tuple[Callable[[list[str]], list[list[float]]], Callable[[Exception], bool]]
         ``(make_request, is_retryable)`` callables.
     """
-    import requests  # noqa: PLC0415
+    import requests  # ruff:ignore[import-outside-top-level]
 
     api_key = _require_api_key("JINA_API_KEY")
     headers = {"Authorization": f"Bearer {api_key}", "Content-Type": "application/json"}
@@ -293,6 +298,166 @@ def _build_jina_caller(
     )
 
 
+def _parse_voyage_embedding_item(
+    value: object,
+    expected_count: int,
+) -> tuple[int, list[float]]:
+    """Validate one Voyage response item and convert its vector to floats.
+
+    Parameters
+    ----------
+    value : object
+        Candidate item from the response ``data`` array.
+    expected_count : int
+        Number of inputs in the request batch.
+
+    Returns
+    -------
+    tuple[int, list[float]]
+        Validated ``(input_index, embedding)`` pair.
+
+    Raises
+    ------
+    ValueError
+        If the item has an invalid index or embedding vector.
+    """
+    if not _is_str_object_dict(value):
+        msg = "Voyage API returned a non-object embedding item"
+        raise ValueError(msg)
+
+    raw_index = value.get("index")
+    if (
+        isinstance(raw_index, bool)
+        or not isinstance(raw_index, int)
+        or not 0 <= raw_index < expected_count
+    ):
+        msg = f"Voyage API returned an invalid embedding index: {raw_index!r}"
+        raise ValueError(msg)
+
+    raw_embedding = value.get("embedding")
+    if not isinstance(raw_embedding, list) or not raw_embedding:
+        msg = f"Voyage API returned an invalid embedding for index {raw_index}"
+        raise ValueError(msg)
+    components = cast("list[object]", raw_embedding)
+    if any(
+        isinstance(component, bool)
+        or not isinstance(component, (int, float))
+        or not _math.isfinite(component)
+        for component in components
+    ):
+        msg = f"Voyage API returned a non-numeric embedding for index {raw_index}"
+        raise ValueError(msg)
+    numeric_components = cast("list[int | float]", raw_embedding)
+    return raw_index, [float(component) for component in numeric_components]
+
+
+def _parse_voyage_response(payload: object, expected_count: int) -> list[list[float]]:
+    """Validate a Voyage REST response and restore input order.
+
+    Parameters
+    ----------
+    payload : object
+        Decoded JSON response body.
+    expected_count : int
+        Number of inputs in the request batch.
+
+    Returns
+    -------
+    list[list[float]]
+        Embeddings ordered by the response item indices.
+
+    Raises
+    ------
+    ValueError
+        If the envelope, item count, indices, or vectors are malformed.
+    """
+    if not _is_str_object_dict(payload):
+        msg = "Voyage API returned a non-object response"
+        raise ValueError(msg)
+    raw_data = payload.get("data")
+    if not isinstance(raw_data, list):
+        msg = "Voyage API response does not contain a data array"
+        raise ValueError(msg)  # ruff:ignore[type-check-without-type-error] — remote value
+    if len(raw_data) != expected_count:
+        msg = f"Voyage API returned {len(raw_data)} embeddings for {expected_count} inputs"
+        raise ValueError(msg)
+
+    indexed_embeddings = [
+        _parse_voyage_embedding_item(item, expected_count)
+        for item in cast("list[object]", raw_data)
+    ]
+    embeddings_by_index = dict(indexed_embeddings)
+    if len(embeddings_by_index) != expected_count:
+        msg = "Voyage API returned duplicate embedding indices"
+        raise ValueError(msg)
+    ordered = [embeddings_by_index[index] for index in range(expected_count)]
+    dimensions = {len(embedding) for embedding in ordered}
+    if len(dimensions) > 1:
+        msg = "Voyage API returned embeddings with inconsistent dimensions"
+        raise ValueError(msg)
+    return ordered
+
+
+def _build_voyage_caller(
+    model: str,
+    timeout: float,
+) -> tuple[Callable[[list[str]], list[list[float]]], Callable[[Exception], bool]]:
+    """Build request/retry callables for Voyage's native REST endpoint.
+
+    Returns
+    -------
+    tuple[Callable[[list[str]], list[list[float]]], Callable[[Exception], bool]]
+        The validated request callable and transient-error classifier.
+    """
+    import requests  # ruff:ignore[import-outside-top-level]
+
+    api_key = _require_api_key("VOYAGE_API_KEY")
+    headers = {
+        "Authorization": f"Bearer {api_key}",
+        "Content-Type": "application/json",
+    }
+
+    def _voyage_request(truncated: list[str]) -> list[list[float]]:
+        """Send an embedding request to the Voyage REST API.
+
+        Returns
+        -------
+        list[list[float]]
+            Validated vectors ordered to match the input texts.
+        """
+        response = requests.post(
+            _VOYAGE_API_URL,
+            headers=headers,
+            json={
+                "input": truncated,
+                "model": model,
+                "input_type": "document",
+            },
+            timeout=timeout,
+        )
+        response.raise_for_status()
+        return _parse_voyage_response(response.json(), len(truncated))
+
+    def _voyage_is_retryable(exc: Exception) -> bool:
+        """Return whether a Voyage REST failure is transient.
+
+        Returns
+        -------
+        bool
+            ``True`` for timeouts, HTTP 429, and HTTP 5xx failures.
+        """
+        if isinstance(exc, requests.exceptions.Timeout):
+            return True
+        if not isinstance(exc, requests.exceptions.HTTPError) or exc.response is None:
+            return False
+        status_code = exc.response.status_code
+        return status_code == _HTTP_TOO_MANY_REQUESTS or (
+            _HTTP_SERVER_ERROR_MIN <= status_code < _HTTP_SERVER_ERROR_MAX
+        )
+
+    return (_voyage_request, _voyage_is_retryable)
+
+
 def _build_provider_caller(
     provider: str,
     model: str,
@@ -326,8 +491,8 @@ def _build_provider_caller(
     if provider == "gemini":
         # Optional cloud SDK: not a pykissembed core/cloud dependency, only
         # needed if the caller actually requests the gemini provider.
-        from google import genai  # noqa: PLC0415
-        from google.genai import types  # noqa: PLC0415
+        from google import genai  # ruff:ignore[import-outside-top-level]
+        from google.genai import types  # ruff:ignore[import-outside-top-level]
 
         api_key = _load_api_key_from_env("GOOGLE_API_KEY")
         gemini_client = genai.Client(
@@ -388,7 +553,7 @@ def _build_provider_caller(
     if provider == "openai":
         # Optional cloud SDK: not a pykissembed core dependency, only needed
         # if the caller actually requests the openai provider.
-        import openai  # noqa: PLC0415
+        import openai  # ruff:ignore[import-outside-top-level]
 
         openai_client = openai.OpenAI(
             api_key=_load_api_key_from_env("OPENAI_API_KEY"),
@@ -411,7 +576,7 @@ def _build_provider_caller(
     if provider in {"codestral", "qwen"}:
         # Optional cloud SDK: not a pykissembed core dependency, only needed
         # if the caller actually requests the codestral provider.
-        import requests  # noqa: PLC0415
+        import requests  # ruff:ignore[import-outside-top-level]
 
         api_key = _require_api_key("OPENROUTER_API_KEY")
         headers = {
@@ -451,7 +616,10 @@ def _build_provider_caller(
             if "data" not in data:
                 msg = f"Unexpected API response: {data}"
                 raise ValueError(msg)
-            return [item["embedding"] for item in data["data"]]
+            return [
+                [float(component) for component in item["embedding"]]
+                for item in data["data"]
+            ]
 
         return (
             _openrouter_request,
@@ -468,42 +636,7 @@ def _build_provider_caller(
         return _build_jina_caller(model, timeout, task)
 
     if provider == "voyage":
-        # Optional cloud SDK: not a pykissembed core dependency, only needed
-        # if the caller actually requests the voyage provider.
-        from voyageai.client import Client as VoyageClient  # noqa: PLC0415
-
-        voyage_client = VoyageClient(
-            api_key=_require_api_key("VOYAGE_API_KEY"),
-            timeout=timeout,
-        )
-
-        def _voyage_is_retryable(exc: Exception) -> bool:
-            """Determine whether a Voyage API error is retryable.
-
-            Parameters
-            ----------
-            exc : Exception
-                The caught exception.
-
-            Returns
-            -------
-            bool
-                ``True`` if the error appears to be a rate-limit error.
-            """
-            error_str = str(exc).lower()
-            return "rate" in error_str and "limit" in error_str
-
-        return (
-            lambda t: [
-                list(map(float, emb))
-                for emb in voyage_client.embed(
-                    t,
-                    model=model,
-                    input_type="document",
-                ).embeddings
-            ],
-            _voyage_is_retryable,
-        )
+        return _build_voyage_caller(model, timeout)
 
     msg = f"Unknown embedding provider: {provider!r}"
     raise ValueError(msg)

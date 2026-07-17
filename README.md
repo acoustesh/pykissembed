@@ -39,7 +39,7 @@ pytest -m lint         # lint + type-check gate
 pytest -m complexity   # CC + COG + MI + line counts + docstrings
 pytest -m density      # comment density
 pytest -m docstring_format  # NumPy docstring format (ruff D rules)
-pytest -m similarity    # embedding-based near-duplicate detection; populates missing embeddings
+pytest -m similarity    # embedding-based near-duplicate detection; cache-only by default
 ```
 
 > **A bare `pytest` with no flag or marker does NOT run pykissembed's
@@ -84,14 +84,15 @@ automatic — bare `pytest` collects nothing from pykissembed. Pick one:
   nothing from pykissembed, so your own tests run untouched.
 
 `pykissembed init` configures VS Code's Test Explorer with `tests` and
-`--pykissembed-all`, but does not add `--cached-only`. Therefore, a newly
-initialized consumer project auto-populates missing embeddings through its
-configured providers when it runs similarity checks. If an older
-`pykissembed init` generated `--cached-only`, a subsequent `pykissembed init`
-automatically removes that stale flag; unrelated custom pytest arguments are
-left untouched.
+`--pykissembed-all`. New projects rely on the cache-only default, so missing
+embeddings are reported without transmitting code-derived data. Automatic
+population requires either `--allow-cloud-embeddings` or an explicit
+`cached_only = false` in `[tool.pykissembed]`; unrelated custom pytest
+arguments are left untouched.
 
-The plugin's `pytest_collect_file` hook
+The plugin's `pytest_collect_file` hook (registered with `tryfirst=True`)
+collects these modules before pytest's default `python_files` filter can reject
+them.
 
 ### Baseline-and-ratchet workflow
 
@@ -137,14 +138,12 @@ The `[tool.pykissembed]` config reference:
 | `paths` | `["src"]` | Source directories to scan |
 | `mode` | `"ratchet"` | `"ratchet"` (per-baseline) or `"strict"` (zero tolerance) |
 | `baseline_dir` | `"tests/baselines"` | Where committed JSON envelopes live |
-| `cache_dir` | `"tests/.pykissembed_cache"` | Where embedding caches live (gitignored) |
+| `cache_dir` | `"tests/.pykissembed_cache"` | Deprecated compatibility setting; ignored by cloud caches |
 | `include_notebooks` | `false` | If true, run ruff/similarity against `.ipynb` files |
-| `cached_only` | `false` | If true, skip similarity checks with missing embeddings instead of calling providers |
+| `cached_only` | `true` | If true, skip similarity checks with missing embeddings instead of calling providers |
 | `wrapper_max_call_sites` | `1` | Maximum static call sites allowed for an exact pass-through wrapper |
 | `wrapper_exclude` | `[]` | Glob patterns for intentional wrappers (`relative/path.py:QualifiedName`) |
 | `wrapper_exempt_decorators` | `[]` | Glob patterns for decorators that mark intentional wrappers |
-(registered with `tryfirst=True`) collects these modules before pytest's
-default `python_files` filter can reject them.
 
 ---
 
@@ -212,54 +211,80 @@ Each provider detects:
 
 ### Prerequisites
 
-Similarity uses cached embeddings when they are available. By default, a
-similarity test populates missing embeddings through its configured provider,
-then saves them for later runs. Install the extra and configure the provider
-you intend to use:
+Similarity uses committed compressed embeddings when they are available. A
+normal test run is cache-only and never calls a provider. Install the cloud
+extra and configure only the providers you explicitly intend to populate:
 
 ```bash
-# Local — no API key, runs offline once the model is downloaded
-pip install "pykissembed[local]"
-
-# Cloud — requires API keys
 pip install "pykissembed[cloud]"
 export OPENAI_API_KEY=sk-...
 export OPENROUTER_API_KEY=sk-or-...
 export VOYAGE_API_KEY=pa-...
 export GOOGLE_API_KEY=...
+export JINA_API_KEY=jina_...
 
-# Optional: pre-warm a cache before running similarity checks
-pykissembed populate-embeddings --provider local
+# Explicitly populate only the selected cache
 pykissembed populate-embeddings --provider openai-text
 pykissembed populate-embeddings --provider openai-ast
-# ... or populate all at once:
-python -m pykissembed.similarity.populate_embeddings
+# "all" must be requested explicitly
+pykissembed populate-embeddings --provider all
+```
+
+The canonical similarity routes remain intentionally distinct:
+
+| Variants | Service | Credential |
+|---|---|---|
+| `openai-*` | Native OpenAI | `OPENAI_API_KEY` |
+| `codestral-*`, `qwen-*` | OpenRouter | `OPENROUTER_API_KEY` |
+| `gemini-*` | Native Google | `GOOGLE_API_KEY` |
+| `voyage-*` | Native Voyage | `VOYAGE_API_KEY` |
+| `jina-*` | Native Jina | `JINA_API_KEY` |
+
+Population transmits per-function code-derived data to the selected service.
+Text variants send decorators, signatures, docstrings, and comments. AST
+variants send the normalized full function/class implementation produced by
+`ast.unparse`, including bodies, literals, decorators, and docstrings.
+Jina-Text sends the docstring (or signature fallback) as its query and the full
+AST-derived implementation as its passage. The retired whole-file JSONL path is
+not used, but these representations still contain repository source-derived
+content. Calls may incur charges. Review each provider's data-retention and
+privacy policy before opting in.
+
+Old whole-file local caches are ignored and never deleted automatically. If
+you have verified that you no longer need them, remove them manually with an
+interactive command such as:
+
+```bash
+rm -i tests/.pykissembed_cache/local-*.jsonl
 ```
 
 ### Running similarity tests
 
 ```bash
-# Run all similarity tests (auto-populates missing embeddings through configured providers)
+# Run against committed caches; missing provider caches skip with instructions
 pytest -m similarity
 
 # Use only cached embeddings — skip if any are missing (no API calls)
 pytest -m similarity --cached-only
 
-# Update baselines (also auto-populates missing embeddings by default)
+# Explicitly allow pytest to populate missing cloud embeddings
+pytest -m similarity --allow-cloud-embeddings
+
+# Baseline updates remain cache-only unless cloud access is explicitly allowed
 pytest -m similarity --update-baselines
 ```
 
-For a persistent offline or cost-controlled workflow, set cache-only mode in
-your consumer `pyproject.toml`:
+Cache-only is the default. To make cloud auto-population an explicit persistent
+project choice, set:
 
 ```toml
 [tool.pykissembed]
-cached_only = true
+cached_only = false
 ```
 
-The TOML setting and `--cached-only` both prevent provider/API calls. If an
-embedding is absent in either mode, the affected similarity check is skipped
-with a command showing how to pre-warm the cache.
+`--cached-only` always prevents provider calls. Passing it together with
+`--allow-cloud-embeddings` is an error. In cache-only mode, an absent embedding
+skips the affected check with an exact pre-warm command.
 
 ### Similarity infrastructure
 
@@ -272,7 +297,7 @@ The `pykissembed.similarity` sub-package provides:
 | `storage.py` | `EmbeddingRegistry`, compressed embedding cache, baselines I/O |
 | `ast_helpers.py` | Function extraction from Python AST |
 | `complexity.py` | CC/COG complexity map loaders |
-| `embeddings.py` | API clients (OpenAI, Codestral, Voyage, Gemini) with retry |
+| `embeddings.py` | API clients (OpenAI, Codestral, Voyage, Gemini, Qwen, Jina) with retry |
 | `pca.py` | PCA dimensionality reduction (GPU/cuML with CPU/sklearn fallback) |
 | `refactor_index.py` | Refactor index: `0.25*CC + 0.15*COG + 0.6*similarity_index` |
 | `file_split.py` | File split proposal via PCA + k-means clustering |
@@ -290,22 +315,19 @@ panel**. Open the workspace, install the recommended extensions
 
 ### Test discovery
 
-| Package | Command | Count |
-| --- | --- | --- |
-| `pykissembed` (core) | `uv run pytest -m "not live"` | 66 |
-| `pykissembed_cloud` | `uv run pytest -m "not live"` | 27 |
-| `pykissembed_local` | `uv run pytest -m "not live"` | 19 |
+| Package | Command |
+| --- | --- |
+| `pykissembed` (core) | `uv run pytest -m "not live and not slow"` |
+| `pykissembed_cloud` | `uv run pytest -m "not live"` |
+| `pykissembed_local` tombstone | `uv run pytest -m "not live"` |
 
 The panel respects the `[tool.pytest.ini_options]` block in each
-`pyproject.toml`. **Live tests (network calls, model downloads) are
+`pyproject.toml`. **Live network tests are
 skipped by default.** To opt in:
 
 ```bash
-# Run everything live (one cloud provider smoke + model load)
+# Run cloud smoke calls against fixed synthetic strings
 uv run pytest -m "live and smoke"
-
-# Run only the model-load live test
-cd pykissembed_local && uv run pytest -m live
 ```
 
 ### Running / debugging a single test
@@ -318,7 +340,7 @@ Test**. The debug configurations in `.vscode/launch.json` set the right
 
 | Marker | Meaning |
 | --- | --- |
-| `live` | Network calls or model downloads — skipped by default. |
+| `live` | Network calls — skipped by default. |
 | `smoke` | Fast subset of `live`; suitable for CI fast-gate (`-m "live and smoke"`). |
 | `lint`, `complexity`, `density`, `docstring_format`, `similarity`, `experimental` | Project-specific gates provided by the pykissembed pytest plugin. |
 
@@ -332,10 +354,10 @@ split). Embedding providers are opt-in via extras:
 
 | Extras | Command | What you get |
 | --- | --- | --- |
-| *(none)* | `uv add pykissembed` | Lint, type, complexity, docstring, density, similarity (skips without providers) |
-| `local` | `uv add "pykissembed[local]"` | Adds the `local` sentence-transformers provider |
+| *(none)* | `uv add pykissembed` | Core checks and cached similarity; no provider entry points or cloud clients |
+| `local` | `uv add "pykissembed[local]"` | Transitional alias: cloud support plus a lightweight migration tombstone; no local provider |
 | `cloud` | `uv add "pykissembed[cloud]"` | Adds `openai`, `gemini`, `qwen` (OpenRouter) and `jina` (native) providers |
-| `all` | `uv add "pykissembed[all]"` | Both `local` and `cloud` at once |
+| `all` | `uv add "pykissembed[all]"` | Compatibility alias for `cloud` |
 
 ### Installing from TestPyPI (current release channel)
 
@@ -358,42 +380,29 @@ Then:
 
 ```bash
 uv add "pykissembed[all]"
-uv lock --upgrade-package pykissembed --upgrade-package pykissembed-cloud --upgrade-package pykissembed-local
+uv lock --upgrade-package pykissembed --upgrade-package pykissembed-cloud
 uv sync
-uv run pykissembed --version    # should show 0.1.4
+uv run pykissembed --version    # should show 0.1.24
 ```
 
-> **Important:** If `uv lock --upgrade-package` doesn't pick up the new
-> version, delete `uv.lock` and run `uv lock` fresh. This forces a full
-> re-resolution from TestPyPI.
-
 After installing, configure a provider and run the suite. Missing embeddings
-are populated automatically; the explicit population commands below are an
-optional pre-warming step:
+remain offline by default; population is an explicit pre-warming step:
 
 ```bash
-# Local — no API key, runs offline once the model is downloaded
-pytest -m similarity
-
-# Optional: pre-warm the local cache before running the suite
-pykissembed populate-embeddings --provider local
-
-# Cloud — one OpenRouter key enables openai/gemini/qwen; jina uses its own key
+# Entry-point openai/gemini/qwen providers use OpenRouter; fixed similarity
+# variants preserve their documented native/OpenRouter credentials.
 export OPENROUTER_API_KEY=sk-or-...
 export JINA_API_KEY=jina_...
 # ... or drop the keys into a .env file at the project root
 
-# Optional: pre-warm cloud caches before running the suite
-pykissembed populate-embeddings --provider openai
-pykissembed populate-embeddings --provider gemini
-pykissembed populate-embeddings --provider qwen
-pykissembed populate-embeddings --provider jina
+# Explicitly pre-warm canonical text/AST caches
+pykissembed populate-embeddings --provider qwen-text
+pykissembed populate-embeddings --provider jina-ast
 pytest -m similarity
 ```
 
-> **Why extras?** `pykissembed-local` pulls `sentence-transformers` (~hundreds
-> of MB) and `pykissembed-cloud` pulls the `openai` client. Keeping them
-> optional means slim projects don't pay for similarity they don't use.
+> `pykissembed-local` is a temporary dependency-free tombstone for v0.1 users.
+> It registers no provider and is removed from the workspace in v0.2.
 
 ---
 
@@ -402,7 +411,7 @@ pytest -m similarity
 ```text
 pykissembed check                          # run the same gate pytest runs
 pykissembed ratchet                        # lower baselines; refuse to raise
-pykissembed.providers list                 # show installed embedding providers
+pykissembed providers list                 # show installed embedding providers
 pykissembed populate-embeddings --provider NAME
 pykissembed type-review --json REPORT.json # iterative type-fix helper
 pykissembed init                           # (opt-in) scaffold [tool.pykissembed] and sync .vscode/settings.json
@@ -455,9 +464,12 @@ class MyProvider:
 - **Embedding cache keys** — `provider.name|model_id|schema_version|content_hash`.
   Mandatory `schema_version` prevents silent cache corruption.
 - **Sync provider Protocol** — providers are tiny CPU/IO wrappers.
-- **No telemetry.** The library runs offline.
-- **Slim default install** — `pip install pykissembed` is ~10 MB. ML features
-  live in `pykissembed-local` and `pykissembed-cloud` subpackages.
+- **No telemetry.** Core checks and cached similarity run offline. Explicit
+  embedding population transmits code-derived inputs to the selected provider.
+- **No local model runtime** — core retains NumPy, SciPy/scikit-learn, and
+  tiktoken for current similarity/PCA/truncation semantics, while provider
+  clients live in the optional `pykissembed-cloud` subpackage. Torch and the
+  Hugging Face model stack are not installed.
 
 ---
 

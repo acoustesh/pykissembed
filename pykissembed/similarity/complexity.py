@@ -103,11 +103,11 @@ def _get_complexities(
     # cognitive
     # Lazy: complexipy is a compiled (Rust) analyzer; deferring the import
     # avoids its cost for callers that only need cyclomatic complexity.
-    from complexipy import file_complexity  # noqa: PLC0415
+    from complexipy import file_complexity  # ruff:ignore[import-outside-top-level]
 
     try:
         result = file_complexity(str(file_path))
-    except Exception:  # noqa: BLE001 — third-party analyzer; any failure on arbitrary
+    except Exception:  # ruff:ignore[blind-except] — third-party analyzer; any failure on arbitrary
         # user source degrades to "no cognitive-complexity data" rather than crashing.
         return []
     return [(f.name, f.line_start, f.complexity) for f in result.functions]
@@ -156,27 +156,24 @@ def _scan_complexity_directory(
 
 
 def load_complexity_maps(directory: Path | None = None) -> tuple[dict[str, int], dict[str, int]]:
-    """Load CC and COG complexity maps for functions in a directory.
+    """Return metrics for one directory, defaulting to the first configured path.
+
+    Unlike :func:`load_all_complexity_maps`, this compatibility entry point
+    performs a shallow scan and never aggregates multiple configured roots.
 
     Returns
     -------
     tuple[dict[str, int], dict[str, int]]
-        A ``(cc_map, cog_map)`` pair.
+        CC and COG mappings for the selected directory only.
     """
-    if directory is None:
-        paths = resolve_paths()
-        if not paths:
-            return {}, {}
-        # Only the first configured path, unlike load_all_complexity_maps()
-        # below which scans every one — this single-directory variant
-        # exists for callers (tests, ad-hoc scripts) that want one
-        # directory's map without paying for a full multi-path scan.
-        directory = paths[0]
-    return _scan_complexity_directory(directory)
+    if directory is not None:
+        return _scan_complexity_directory(directory)
+    paths = resolve_paths()
+    return _scan_complexity_directory(paths[0]) if paths else ({}, {})
 
 
 def load_all_complexity_maps() -> tuple[dict[str, int], dict[str, int]]:
-    """Load CC and COG complexity maps for ALL configured source directories.
+    """Aggregate recursive metrics across every configured source directory.
 
     Scans recursively through every directory returned by
     :func:`pykissembed.paths.resolve_paths`.
@@ -184,7 +181,7 @@ def load_all_complexity_maps() -> tuple[dict[str, int], dict[str, int]]:
     Returns
     -------
     tuple[dict[str, int], dict[str, int]]
-        A ``(cc_map, cog_map)`` pair.
+        Merged CC and COG mappings with project-relative path prefixes.
     """
     root = get_config().root
     cc_map: dict[str, int] = {}

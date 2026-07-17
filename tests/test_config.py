@@ -248,11 +248,11 @@ class TestCachedOnly:
     """Tests for the cached_only config flag."""
 
     @staticmethod
-    def test_default_is_false(
+    def test_default_is_true(
         tmp_path: Path,
         monkeypatch: pytest.MonkeyPatch,
     ) -> None:
-        """cached_only defaults to False so embeddings are auto-populated."""
+        """Cloud population is opt-in when cached_only is omitted."""
         (tmp_path / "pyproject.toml").write_text(
             dedent(
                 """
@@ -265,7 +265,7 @@ class TestCachedOnly:
         (tmp_path / "src").mkdir()
         monkeypatch.chdir(tmp_path)
         config = load_config()
-        assert config.cached_only is False
+        assert config.cached_only is True
 
     @staticmethod
     def test_explicit_true_is_loaded(
@@ -287,6 +287,39 @@ class TestCachedOnly:
         monkeypatch.chdir(tmp_path)
         config = load_config()
         assert config.cached_only is True
+
+    @staticmethod
+    def test_explicit_false_is_loaded(
+        tmp_path: Path,
+        monkeypatch: pytest.MonkeyPatch,
+    ) -> None:
+        """cached_only = false explicitly permits cloud auto-population."""
+        (tmp_path / "pyproject.toml").write_text(
+            '[tool.pykissembed]\npaths = ["src"]\ncached_only = false\n',
+            encoding="utf-8",
+        )
+        (tmp_path / "src").mkdir()
+        monkeypatch.chdir(tmp_path)
+
+        assert load_config().cached_only is False
+
+    @staticmethod
+    @pytest.mark.parametrize("value", ["0", '""', "[]", '"false"'])
+    def test_non_boolean_value_cannot_enable_cloud_population(
+        tmp_path: Path,
+        monkeypatch: pytest.MonkeyPatch,
+        value: str,
+    ) -> None:
+        """Only the TOML boolean false is accepted as cloud-population consent."""
+        (tmp_path / "pyproject.toml").write_text(
+            f'[tool.pykissembed]\npaths = ["src"]\ncached_only = {value}\n',
+            encoding="utf-8",
+        )
+        (tmp_path / "src").mkdir()
+        monkeypatch.chdir(tmp_path)
+
+        with pytest.raises(TypeError, match=r"cached_only.*boolean"):
+            load_config()
 
 
 class TestIterPyFiles:

@@ -353,23 +353,45 @@ def extract_function_infos(
     ]
 
 
-def extract_all_function_infos(min_loc: int = 15) -> list[FunctionInfo]:
-    """Extract all functions and classes from ALL configured source directories.
-
-    Scans recursively through every directory returned by
-    :func:`pykissembed.paths.resolve_paths`.
+def _collapse_scan_directories(directories: list[Path]) -> list[Path]:
+    """Resolve, deduplicate, and collapse overlapping scan roots.
 
     Returns
     -------
-        List of all extracted FunctionInfo objects.
+    list[Path]
+        Roots in caller order, excluding a child when an earlier or later
+        selected parent already covers it.
     """
-    root = get_config().root
+    resolved = list(dict.fromkeys(path.resolve() for path in directories))
+    return [
+        path
+        for path in resolved
+        if not any(path != other and path.is_relative_to(other) for other in resolved)
+    ]
+
+
+def _extract_function_infos_from_directories(
+    directories: list[Path],
+    *,
+    min_loc: int,
+) -> list[FunctionInfo]:
+    """Extract functions from explicit roots with project-stable file identities.
+
+    Returns
+    -------
+    list[FunctionInfo]
+        Deduplicated functions whose in-project file names are always relative
+        to the project root, independent of which parent directory was scanned.
+    """
+    root = get_config().root.resolve()
     all_functions: list[FunctionInfo] = []
-    for base_dir in resolve_paths():
+    for base_dir in _collapse_scan_directories(directories):
         rel_dir = (
-            str(base_dir.relative_to(root)) if base_dir.is_relative_to(root) else str(base_dir)
+            base_dir.relative_to(root).as_posix()
+            if base_dir.is_relative_to(root)
+            else str(base_dir)
         )
-        prefix = f"{rel_dir}/"
+        prefix = "" if rel_dir == "." else f"{rel_dir}/"
         all_functions.extend(
             extract_function_infos(
                 min_loc,
@@ -378,7 +400,36 @@ def extract_all_function_infos(min_loc: int = 15) -> list[FunctionInfo]:
                 recursive=True,
             )
         )
-    return all_functions
+
+    unique: dict[tuple[str, str, int, str, str], FunctionInfo] = {}
+    for function in all_functions:
+        identity = (
+            function.file,
+            function.name,
+            function.start_line,
+            function.hash,
+            function.text_hash,
+        )
+        unique.setdefault(identity, function)
+    return list(unique.values())
+
+
+def extract_all_function_infos(min_loc: int = 15) -> list[FunctionInfo]:
+    """Extract all functions and classes from ALL configured source directories.
+
+    Scans recursively through every directory returned by
+    :func:`pykissembed.paths.resolve_paths`.
+
+    Parameters
+    ----------
+    min_loc : int
+        Minimum executable lines for inclusion.
+
+    Returns
+    -------
+        List of all extracted FunctionInfo objects.
+    """
+    return _extract_function_infos_from_directories(resolve_paths(), min_loc=min_loc)
 
 
 def extract_function_infos_from_file(file_path: Path, min_loc: int = 1) -> list[FunctionInfo]:

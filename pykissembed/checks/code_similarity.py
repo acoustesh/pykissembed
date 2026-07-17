@@ -323,7 +323,7 @@ def test_providers_parallel(
             # valid modern syntax; this project targets py314+.
             except KeyboardInterrupt, SystemExit, GeneratorExit:
                 raise
-            except BaseException as exc:  # noqa: BLE001 — deliberately broad: aggregates every
+            except BaseException as exc:  # ruff:ignore[blind-except] — deliberately broad: aggregates every
                 # provider's failure (network, API, assertion) so one provider's error doesn't
                 # hide the others'; process-exit signals are already re-raised above.
                 errors[provider.label] = exc

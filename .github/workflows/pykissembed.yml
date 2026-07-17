@@ -29,7 +29,7 @@ name: pykissembed
         required: true
         type: string
       install-local:
-        description: "Install pykissembed-local for similarity"
+        description: "Deprecated v1 compatibility input; installs the cloud extra and tombstone"
         required: false
         type: boolean
         default: false
@@ -39,7 +39,7 @@ name: pykissembed
         type: boolean
         default: false
       run-smoke:
-        description: "Run live + smoke tests after the main gate (requires install-local and/or install-cloud)."
+        description: "Run live cloud smoke tests after the main gate (requires install-cloud)."
         required: false
         type: boolean
         default: false
@@ -79,7 +79,8 @@ jobs:
           # above pulls a pip 26.x that supports `--group`.
           python -m pip install --group dev
           if [ "${{ inputs.install-local }}" = "true" ]; then
-            pip install ./pykissembed_local
+            echo "::warning::install-local is deprecated; installing cloud support plus the lightweight tombstone"
+            pip install ./pykissembed_cloud ./pykissembed_local
           fi
           if [ "${{ inputs.install-cloud }}" = "true" ]; then
             pip install ./pykissembed_cloud
@@ -103,31 +104,8 @@ jobs:
             exit 0
           }
 
-      # --- Live smoke gate ---------------------------------------------------
-      # Caches the HuggingFace model weights so the ~120 MB bge-small-en-v1.5
-      # download only happens once per CI run. The cache key is derived from
-      # the provider module's hash so any change to the default model id
-      # invalidates the cache automatically.
-      - name: Cache HuggingFace model weights
-        if: inputs.run-smoke && inputs.install-local
-        uses: actions/cache@v6
-        with:
-          path: ~/.cache/huggingface
-          key: hf-${{ hashFiles('pykissembed_local/pykissembed_local/provider.py') }}-bge-small-en-v1.5
-          restore-keys: |
-            hf-${{ hashFiles('pykissembed_local/pykissembed_local/provider.py') }}-
-            hf-
-
-      # Live smoke tests are best-effort: missing API keys, transient
-      # network blips, or HuggingFace rate limits shouldn't block CI on the
-      # main pykissembed gate. A failure here emits a warning annotation
-      # but does not turn the job red.
-      - name: Run live smoke tests (local)
-        if: inputs.run-smoke && inputs.install-local
-        continue-on-error: true
-        working-directory: pykissembed_local
-        run: pytest -m "live and smoke" --tb=short
-
+      # Live cloud smoke tests use fixed synthetic strings and are best-effort:
+      # missing keys or transient provider failures do not block the main gate.
       - name: Run live smoke tests (cloud)
         if: inputs.run-smoke && inputs.install-cloud
         continue-on-error: true

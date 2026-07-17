@@ -1,5 +1,1 @@
-"""Unit tests for the local sentence-transformers provider.
-
-Live model-load tests live in ``tests/integration`` and are skipped
-unless the ``-m live`` flag is passed.
-"""
+"""Unit tests for the lightweight local-provider compatibility tombstone."""

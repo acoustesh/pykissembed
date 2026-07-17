@@ -112,11 +112,17 @@ class OpenAICompatProvider:
             return []
         # Only forward extra_body when set so providers without extra request
         # fields keep the exact create() signature the OpenAI SDK expects.
-        extra = {"extra_body": self.extra_body} if self.extra_body else {}
         vectors: list[list[float]] = []
         for start in range(0, len(inputs), self.batch_size):
             chunk = inputs[start : start + self.batch_size]
-            response = client.embeddings.create(input=chunk, model=self.model_id, **extra)
+            if self.extra_body:
+                response = client.embeddings.create(
+                    input=chunk,
+                    model=self.model_id,
+                    extra_body=self.extra_body,
+                )
+            else:
+                response = client.embeddings.create(input=chunk, model=self.model_id)
             vectors.extend(_extract_embeddings(response))
         return vectors
 
