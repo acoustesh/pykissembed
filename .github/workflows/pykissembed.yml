@@ -5,7 +5,7 @@
 #   .github/workflows/pykissembed.yml:
 #     jobs:
 #       pykissembed:
-#         uses: acoustesh/pykissembed/.github/workflows/pykissembed.yml@v1
+#         uses: acoustesh/pykissembed/.github/workflows/pykissembed.yml@v2
 #         with:
 #           mode: ratchet    # or "strict"
 #           python-version: "3.12"
@@ -28,11 +28,6 @@ name: pykissembed
         description: "pykissembed mode (ratchet or strict)"
         required: true
         type: string
-      install-local:
-        description: "Deprecated v1 compatibility input; installs the cloud extra and tombstone"
-        required: false
-        type: boolean
-        default: false
       install-cloud:
         description: "Install pykissembed-cloud for similarity"
         required: false
@@ -78,10 +73,6 @@ jobs:
           # the runner ships with pip 24.0 but `pip install --upgrade pip`
           # above pulls a pip 26.x that supports `--group`.
           python -m pip install --group dev
-          if [ "${{ inputs.install-local }}" = "true" ]; then
-            echo "::warning::install-local is deprecated; installing cloud support plus the lightweight tombstone"
-            pip install ./pykissembed_cloud ./pykissembed_local
-          fi
           if [ "${{ inputs.install-cloud }}" = "true" ]; then
             pip install ./pykissembed_cloud
           fi

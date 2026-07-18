@@ -1,4 +1,4 @@
-"""Slow isolated-install tests for core and cloud-only compatibility extras.
+"""Slow isolated-install tests for core and cloud-only extras.
 
 Enable with ``uv run pytest -m slow tests/test_install_extras.py``. These tests
 build wheels and resolve a fresh consumer environment, so they may use the
@@ -84,9 +84,9 @@ def _require_uv() -> str:
 
 
 def _build_wheels(destination: Path) -> None:
-    """Build core, cloud, and tombstone wheels into *destination*."""
+    """Build core and cloud wheels into *destination*."""
     destination.mkdir(parents=True, exist_ok=True)
-    for source in (REPO_ROOT, REPO_ROOT / "pykissembed_cloud", REPO_ROOT / "pykissembed_local"):
+    for source in (REPO_ROOT, REPO_ROOT / "pykissembed_cloud"):
         subprocess.run(  # ruff:ignore[subprocess-without-shell-equals-true]
             [_require_uv(), "build", "--wheel", "--out-dir", str(destination), str(source)],
             cwd=REPO_ROOT,
@@ -175,7 +175,7 @@ def _run_metadata_probe(venv_python: Path) -> tuple[set[str], dict[str, str], se
 
 
 @pytest.mark.slow
-@pytest.mark.parametrize("extra", [None, "cloud", "all", "local"])
+@pytest.mark.parametrize("extra", [None, "cloud", "all"])
 def test_isolated_install_is_cloud_only(tmp_path: Path, extra: str | None) -> None:
     """Core and every supported extra resolve without the retired ML graph."""
     wheels = tmp_path / "wheels"
@@ -207,17 +207,15 @@ def test_isolated_install_is_cloud_only(tmp_path: Path, extra: str | None) -> No
     else:
         assert entry_points == CLOUD_ENTRY_POINTS
         assert active == set(CLOUD_ENTRY_POINTS)
-    if extra == "local":
-        assert "pykissembed-local" in distributions
 
 
 def test_extras_declared_in_pyproject() -> None:
-    """The transition extra and cloud-only aliases have the intended shape."""
+    """Only the cloud extra and its all alias remain."""
     data = tomllib.loads((REPO_ROOT / "pyproject.toml").read_text(encoding="utf-8"))
     extras = data["project"]["optional-dependencies"]
     assert extras["cloud"] == ["pykissembed-cloud"]
     assert extras["all"] == extras["cloud"]
-    assert set(extras["local"]) == {"pykissembed-cloud", "pykissembed-local"}
+    assert "local" not in extras
 
 
 @pytest.mark.slow
@@ -232,69 +230,13 @@ def test_built_wheel_metadata_is_cloud_only(tmp_path: Path) -> None:
             requirements = metadata.get_all("Requires-Dist", [])
             names = {_requirement_name(requirement) for requirement in requirements}
             _assert_no_forbidden(names)
-            entry_points = [
-                name for name in archive.namelist() if name.endswith("/entry_points.txt")
-            ]
-        if metadata["Name"] == "pykissembed-local":
-            assert requirements == []
-            assert entry_points == []
 
 
 @pytest.mark.slow
-def test_tombstone_wheel_installs_standalone(tmp_path: Path) -> None:
-    """The final local artifact imports without core or any retired dependency."""
-    wheels = tmp_path / "wheels"
-    _build_wheels(wheels)
-    tombstone = next(wheels.glob("pykissembed_local-*.whl"))
-    project = tmp_path / "tombstone-consumer"
-    project.mkdir()
-    (project / "pyproject.toml").write_text(
-        textwrap.dedent(
-            f"""
-            [project]
-            name = "tombstone-consumer"
-            version = "0.0.0"
-            requires-python = ">=3.14"
-            dependencies = ["pykissembed-local @ {tombstone.resolve().as_uri()}"]
-            """,
-        ),
-        encoding="utf-8",
-    )
-    subprocess.run(  # ruff:ignore[subprocess-without-shell-equals-true]
-        [_require_uv(), "sync", "--no-dev"],
-        cwd=project,
-        check=True,
-    )
-    python = _consumer_python(project)
-    subprocess.run(  # ruff:ignore[subprocess-without-shell-equals-true]
-        [_require_uv(), "pip", "check", "--python", str(python)],
-        check=True,
-    )
-    probe = subprocess.run(  # ruff:ignore[subprocess-without-shell-equals-true]
-        [
-            str(python),
-            "-c",
-            (
-                "from importlib.metadata import distributions; import pykissembed_local; "
-                "print(','.join(sorted(d.metadata['Name'].lower() for d in distributions())))"
-            ),
-        ],
-        capture_output=True,
-        text=True,
-        check=True,
-    )
-    names = set(probe.stdout.strip().split(","))
-    # The minimal consumer has no build system, so uv installs only its
-    # dependency into the environment rather than the consumer project itself.
-    assert names == {"pykissembed-local"}
-
-
-@pytest.mark.slow
-@pytest.mark.parametrize("package_name", ["pykissembed_cloud", "pykissembed_local"])
-def test_standalone_package_lock_is_current(tmp_path: Path, package_name: str) -> None:
-    """Standalone package locks remain fresh outside root-workspace discovery."""
-    source = REPO_ROOT / package_name
-    project = tmp_path / package_name
+def test_standalone_cloud_lock_is_current(tmp_path: Path) -> None:
+    """The cloud package lock remains fresh outside root-workspace discovery."""
+    source = REPO_ROOT / "pykissembed_cloud"
+    project = tmp_path / "pykissembed_cloud"
     shutil.copytree(
         source,
         project,

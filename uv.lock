@@ -11,7 +11,6 @@ resolution-markers = [
 members = [
     "pykissembed",
     "pykissembed-cloud",
-    "pykissembed-local",
 ]
 
 [[package]]
@@ -873,10 +872,6 @@ all = [
 cloud = [
     { name = "pykissembed-cloud" },
 ]
-local = [
-    { name = "pykissembed-cloud" },
-    { name = "pykissembed-local" },
-]
 
 [package.dev-dependencies]
 dev = [
@@ -895,8 +890,6 @@ requires-dist = [
     { name = "numpy", specifier = ">=1.26" },
     { name = "pykissembed-cloud", marker = "extra == 'all'", editable = "pykissembed_cloud" },
     { name = "pykissembed-cloud", marker = "extra == 'cloud'", editable = "pykissembed_cloud" },
-    { name = "pykissembed-cloud", marker = "extra == 'local'", editable = "pykissembed_cloud" },
-    { name = "pykissembed-local", marker = "extra == 'local'", editable = "pykissembed_local" },
     { name = "pyright", extras = ["nodejs"], specifier = ">=1.1.411" },
     { name = "pytest", specifier = ">=8.0" },
     { name = "pyyaml", specifier = ">=6.0" },
@@ -907,7 +900,7 @@ requires-dist = [
     { name = "tiktoken", specifier = ">=0.7" },
     { name = "typer", specifier = ">=0.21" },
 ]
-provides-extras = ["all", "cloud", "local"]
+provides-extras = ["all", "cloud"]
 
 [package.metadata.requires-dev]
 dev = [
@@ -938,24 +931,6 @@ requires-dist = [
     { name = "openai", specifier = ">=1.50" },
     { name = "requests", specifier = ">=2.32" },
 ]
-
-[package.metadata.requires-dev]
-dev = [
-    { name = "pytest-cov", specifier = ">=5.0" },
-    { name = "pytest-xdist", specifier = ">=3.6" },
-]
-
-[[package]]
-name = "pykissembed-local"
-source = { editable = "pykissembed_local" }
-
-[package.dev-dependencies]
-dev = [
-    { name = "pytest-cov" },
-    { name = "pytest-xdist" },
-]
-
-[package.metadata]
 
 [package.metadata.requires-dev]
 dev = [

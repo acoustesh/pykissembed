@@ -2,45 +2,46 @@
 
 from __future__ import annotations
 
-from typing import cast
+from typing import TYPE_CHECKING, cast
 
 import pytest
 
 import pykissembed.providers.registry as reg_mod
 from pykissembed.providers import REGISTRY, Provider
-from pykissembed.providers.local import LocalProvider
-from pykissembed.providers.registry import cache_key, discover_all
+from pykissembed.providers.registry import cache_key
+
+if TYPE_CHECKING:
+    from collections.abc import Sequence
 
 
-class TestLocalProviderStub:
-    """Tests for the in-tree stub LocalProvider."""
+class _TestProvider:
+    """Small provider implementation used to exercise the public registry."""
 
-    @staticmethod
-    def test_stub_attributes() -> None:
-        """The stub exposes the documented attributes."""
-        p = LocalProvider()
-        assert p.name == "local"
-        assert p.model_id == "sentence-transformers/all-MiniLM-L6-v2"
-        assert p.schema_version == "1"
-        assert p.max_tokens == 256
-        assert p.batch_size == 32
+    name = "test"
+    model_id = "test/model"
+    schema_version = "1"
+    max_tokens = 256
+    batch_size = 32
 
-    @staticmethod
-    def test_stub_satisfies_protocol() -> None:
-        """The stub class is structurally a Provider (Protocol)."""
-        assert isinstance(LocalProvider(), Provider)
+    def embed(self, texts: Sequence[str]) -> list[list[float]]:
+        """Return one deterministic vector per input text.
 
-    @staticmethod
-    def test_stub_embed_raises_cloud_migration_error() -> None:
-        """embed() raises a clear cloud-only migration error."""
-        p = LocalProvider()
-        with pytest.raises(RuntimeError, match=r"pykissembed\[cloud\]"):
-            p.embed(["hello"])
+        Returns
+        -------
+        list[list[float]]
+            One length-derived vector for each input text.
+        """
+        return [[float(len(text))] for text in texts]
 
-    @staticmethod
-    def test_is_configured_is_always_false() -> None:
-        """The retired local provider is never configured."""
-        assert LocalProvider().is_configured() is False
+    def is_configured(self) -> bool:
+        """Return whether this synthetic provider is ready.
+
+        Returns
+        -------
+        bool
+            Always ``True`` for this test implementation.
+        """
+        return True
 
 
 class TestRegistry:
@@ -57,26 +58,21 @@ class TestRegistry:
     @staticmethod
     def test_register_and_get() -> None:
         """register() then get() returns the same instance."""
-        p = LocalProvider()
+        p = _TestProvider()
+        assert isinstance(p, Provider)
         REGISTRY.register(p)
-        assert REGISTRY.get("local") is p
+        assert REGISTRY.get("test") is p
 
     @staticmethod
     def test_register_overwrites() -> None:
         """Re-registering the same name overwrites the prior entry."""
-        a = LocalProvider()
-        b = LocalProvider()
+        a = _TestProvider()
+        b = _TestProvider()
         b.schema_version = "2"
         REGISTRY.register(a)
         REGISTRY.register(b)
-        assert REGISTRY.get("local") is b
-        assert cast("LocalProvider", REGISTRY.get("local")).schema_version == "2"
-
-    @staticmethod
-    def test_discover_builtin_registers_no_local_provider() -> None:
-        """Core discovery does not register the retired local provider."""
-        registry = discover_all()
-        assert "local" not in registry
+        assert REGISTRY.get("test") is b
+        assert cast("_TestProvider", REGISTRY.get("test")).schema_version == "2"
 
     @staticmethod
     def test_discover_handles_broken_entry_point(
@@ -123,7 +119,7 @@ class TestRegistry:
             def load(self) -> object:
                 return self.value
 
-        healthy = LocalProvider()
+        healthy = _TestProvider()
         monkeypatch.setattr(
             reg_mod.metadata,
             "entry_points",
@@ -133,7 +129,7 @@ class TestRegistry:
         with pytest.warns(RuntimeWarning, match="constructor boom"):
             registry = reg_mod.discover_all()
 
-        assert registry.get("local") is healthy
+        assert registry.get("test") is healthy
 
     @staticmethod
     def test_discover_lets_first_entry_point_override(
@@ -149,7 +145,7 @@ class TestRegistry:
         """
 
         class _StubProvider:
-            name = "local"
+            name = "custom"
             model_id = "stub-model"
             schema_version = "1"
             max_tokens = 256
@@ -162,7 +158,7 @@ class TestRegistry:
                 return True
 
         class _OverrideProvider:
-            name = "local"
+            name = "custom"
             model_id = "override-model"
             schema_version = "2"
             max_tokens = 512
@@ -185,8 +181,8 @@ class TestRegistry:
                 return self.value
 
         eps = [
-            _EP("local", _OverrideProvider()),  # listed first → wins
-            _EP("local", _StubProvider()),
+            _EP("custom", _OverrideProvider()),  # listed first → wins
+            _EP("custom", _StubProvider()),
         ]
 
         REGISTRY.clear()
@@ -196,7 +192,7 @@ class TestRegistry:
             lambda group=None: eps,  # ruff:ignore[unused-lambda-argument] — must accept `group=` to match the real entry_points(group=...) call
         )
         reg_mod.discover_all()
-        winner = REGISTRY.get("local")
+        winner = REGISTRY.get("custom")
         assert winner is not None
         assert cast("_OverrideProvider", winner).model_id == "override-model"
         REGISTRY.clear()
@@ -208,20 +204,20 @@ class TestCacheKey:
     @staticmethod
     def test_cache_key_format() -> None:
         """Cache keys include name, model, schema_version, and content hash."""
-        p = LocalProvider()
+        p = _TestProvider()
         key = cache_key(p, "abc123")
-        assert key == "local|sentence-transformers/all-MiniLM-L6-v2|1|abc123"
+        assert key == "test|test/model|1|abc123"
 
     @staticmethod
     def test_cache_key_differs_per_content() -> None:
         """Different content hashes produce different cache keys."""
-        p = LocalProvider()
+        p = _TestProvider()
         assert cache_key(p, "a") != cache_key(p, "b")
 
     @staticmethod
     def test_cache_key_differs_per_schema_version() -> None:
         """Different schema versions produce different cache keys."""
-        p = LocalProvider()
+        p = _TestProvider()
         v1 = cache_key(p, "h")
         p.schema_version = "2"
         v2 = cache_key(p, "h")

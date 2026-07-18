@@ -2,7 +2,6 @@
 #
 # Distribution model:
 #   pykissembed              — slim core (lint + type + complexity + docstring + comment density)
-#   pykissembed-local        — lightweight v0.1 compatibility tombstone
 #   pykissembed-cloud        — adds cloud embedding providers
 #
 # Default mode is "baseline-and-ratchet" — see README.md.
@@ -51,12 +50,6 @@ dependencies = [
 ]
 
 [project.optional-dependencies]
-# Transitional compatibility extra: installs cloud support plus the lightweight
-# pykissembed-local tombstone. No local model or heavy ML runtime is installed.
-local = [
-    "pykissembed-cloud",
-    "pykissembed-local",
-]
 # Cloud embedding providers (openai / gemini / qwen via OpenRouter) — separate subpackage.
 cloud = [
     "pykissembed-cloud",
@@ -94,14 +87,12 @@ include = ["pykissembed/schemas/*.json"]
 paths = ["pykissembed"]
 wrapper_exclude = ["pykissembed/similarity/populate_embeddings.py:get_provider_populator"]
 
-# The `[local]` / `[cloud]` extras reference sibling subpackages. They are
-# workspace members, so we mark them as such under `[tool.uv.sources]`.
+# The cloud extra references its sibling workspace package.
 [tool.uv.sources]
-pykissembed-local = { workspace = true }
 pykissembed-cloud = { workspace = true }
 
 [tool.uv.workspace]
-members = ["pykissembed_local", "pykissembed_cloud"]
+members = ["pykissembed_cloud"]
 
 [tool.pytest.ini_options]
 minversion = "8.0"
@@ -189,8 +180,8 @@ convention = "numpy"
 # S404 (suspicious-subprocess-import, preview-only) — test helpers legitimately
 # `import subprocess` to shell out and exercise the CLI end-to-end.
 # INP001 (implicit-namespace-package) — root tests/ must NOT get an __init__.py:
-# pykissembed_local/tests/__init__.py and pykissembed_cloud/tests/__init__.py
-# already make `tests` a real package name in this workspace; a root
+# pykissembed_cloud/tests/__init__.py already makes `tests` a real package name
+# in this workspace; a root
 # tests/__init__.py would collide with them on sys.path (this exact
 # regression is documented in tests/test_similarity_parity.py). Verified by
 # testing the __init__.py addition directly: it broke `from

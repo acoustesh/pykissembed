@@ -13,17 +13,14 @@ REPO_ROOT = Path(__file__).resolve().parents[1]
 MANIFESTS = (
     REPO_ROOT / "pyproject.toml",
     REPO_ROOT / "pykissembed_cloud" / "pyproject.toml",
-    REPO_ROOT / "pykissembed_local" / "pyproject.toml",
 )
 LOCKFILES = (
     REPO_ROOT / "uv.lock",
     REPO_ROOT / "pykissembed_cloud" / "uv.lock",
-    REPO_ROOT / "pykissembed_local" / "uv.lock",
 )
 PRODUCTION_ROOTS = (
     REPO_ROOT / "pykissembed",
     REPO_ROOT / "pykissembed_cloud" / "pykissembed_cloud",
-    REPO_ROOT / "pykissembed_local" / "pykissembed_local",
 )
 FORBIDDEN_PACKAGES = frozenset(
     {
@@ -92,14 +89,6 @@ def test_locks_have_no_forbidden_distributions(lockfile: Path) -> None:
     data = tomllib.loads(lockfile.read_text(encoding="utf-8"))
     names = {str(package["name"]).lower().replace("_", "-") for package in data["package"]}
     _assert_allowed(names, source=lockfile)
-
-
-def test_local_distribution_is_an_entry_point_free_tombstone() -> None:
-    """The transitional local wheel stays dependency- and provider-free."""
-    manifest = MANIFESTS[-1]
-    data = tomllib.loads(manifest.read_text(encoding="utf-8"))
-    assert data["project"]["dependencies"] == []
-    assert "entry-points" not in data["project"]
 
 
 def test_production_code_has_no_forbidden_imports() -> None:

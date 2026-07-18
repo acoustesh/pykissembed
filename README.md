@@ -319,7 +319,6 @@ panel**. Open the workspace, install the recommended extensions
 | --- | --- |
 | `pykissembed` (core) | `uv run pytest -m "not live and not slow"` |
 | `pykissembed_cloud` | `uv run pytest -m "not live"` |
-| `pykissembed_local` tombstone | `uv run pytest -m "not live"` |
 
 The panel respects the `[tool.pytest.ini_options]` block in each
 `pyproject.toml`. **Live network tests are
@@ -355,7 +354,6 @@ split). Embedding providers are opt-in via extras:
 | Extras | Command | What you get |
 | --- | --- | --- |
 | *(none)* | `uv add pykissembed` | Core checks and cached similarity; no provider entry points or cloud clients |
-| `local` | `uv add "pykissembed[local]"` | Transitional alias: cloud support plus a lightweight migration tombstone; no local provider |
 | `cloud` | `uv add "pykissembed[cloud]"` | Adds `openai`, `gemini`, `qwen` (OpenRouter) and `jina` (native) providers |
 | `all` | `uv add "pykissembed[all]"` | Compatibility alias for `cloud` |
 
@@ -372,7 +370,6 @@ explicit = true
 
 [tool.uv.sources]
 pykissembed = { index = "testpypi" }
-pykissembed-local = { index = "testpypi" }
 pykissembed-cloud = { index = "testpypi" }
 ```
 
@@ -382,7 +379,7 @@ Then:
 uv add "pykissembed[all]"
 uv lock --upgrade-package pykissembed --upgrade-package pykissembed-cloud
 uv sync
-uv run pykissembed --version    # should show 0.1.24
+uv run pykissembed --version    # should show 0.2.0
 ```
 
 After installing, configure a provider and run the suite. Missing embeddings
@@ -400,9 +397,6 @@ pykissembed populate-embeddings --provider qwen-text
 pykissembed populate-embeddings --provider jina-ast
 pytest -m similarity
 ```
-
-> `pykissembed-local` is a temporary dependency-free tombstone for v0.1 users.
-> It registers no provider and is removed from the workspace in v0.2.
 
 ---
 

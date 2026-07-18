@@ -1,16 +1,14 @@
 # Publish the **core** pykissembed package to TestPyPI via API token.
 #
-# This workflow publishes **only** the core package. The local and
-# cloud subpackages are published by sibling workflows so each PyPI
+# This workflow publishes **only** the core package. The cloud
+# subpackage is published by a sibling workflow so each PyPI
 # project gets its own dedicated publish step (one artifact name,
 # one path, one token consumer). See:
 #
-#   - publish-testpypi-local.yml  →  pykissembed-local
 #   - publish-testpypi-cloud.yml  →  pykissembed-cloud
 #
-# All three workflows share the same tag triggers (``v*.*.*`` and
-# ``v*.*.*-*``), so a single ``git push --tags`` fans out to all
-# three uploads in parallel.
+# Both workflows share the same tag triggers (``v*.*.*`` and
+# ``v*.*.*-*``), so a single tag push fans out to both uploads.
 #
 # Required GitHub secret: ``TESTPYPI_TOKEN`` — a TestPyPI API token
 # scoped to the entire ``acoustesh`` account. Generate one at
