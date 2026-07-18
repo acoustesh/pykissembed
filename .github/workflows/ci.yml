@@ -92,6 +92,9 @@ jobs:
         run: |
           python -m pip install --upgrade pip
           python -m pip install . --group dev
+      - name: Install core Provider contract for cloud tests
+        if: matrix.name == 'cloud'
+        run: python -m pip install .
       - name: Run package tests without live provider calls
         working-directory: ${{ matrix.source }}
         run: python -m pytest -p no:pykissembed -m "not live" --tb=short
