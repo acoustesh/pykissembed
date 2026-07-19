@@ -7,7 +7,7 @@
 # Default mode is "baseline-and-ratchet" — see README.md.
 
 [build-system]
-requires = ["hatchling>=1.31.0", "hatch-vcs>=0.4"]
+requires = ["hatchling>=1.31.0", "hatch-vcs>=0.5.0"]
 build-backend = "hatchling.build"
 
 [project]
@@ -39,7 +39,7 @@ dependencies = [
     "typer>=0.21",
     "click>=8.1",
     "jsonschema>=4.21",
-    "filelock>=3.12",
+    "filelock>=3.31.0",
     "ruff>=0.7",
     "pyright[nodejs]>=1.1.411",
     "radon>=6.0",
