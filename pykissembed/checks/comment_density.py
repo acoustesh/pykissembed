@@ -18,6 +18,7 @@ from pykissembed.paths import iter_py_files as _iter_py_files
 from pykissembed.paths import warn_non_utf8
 
 if TYPE_CHECKING:
+    from collections.abc import Iterator
     from pathlib import Path
 
 DEFAULT_MIN_DENSITY = 5.0
@@ -138,6 +139,26 @@ def _file_stats(file_path: Path) -> CommentStats:
     return _comment_density_from_source(source)
 
 
+def _iter_density_files(base_dir: Path, consumer_tests: Path) -> Iterator[Path]:
+    """Yield density candidates outside the consumer's root tests directory.
+
+    Parameters
+    ----------
+    base_dir
+        Configured source root to scan.
+    consumer_tests
+        Resolved ``tests`` directory beneath the consumer project root.
+
+    Yields
+    ------
+    Path
+        Python files whose resolved paths are not inside ``consumer_tests``.
+    """
+    for py_file in _iter_py_files(base_dir):
+        if not py_file.resolve().is_relative_to(consumer_tests):
+            yield py_file
+
+
 class TestCommentDensity:
     """Tests for comment density."""
 
@@ -168,8 +189,9 @@ class TestCommentDensity:
             current: dict[str, float] = {}
             total_sloc = 0
             total_comments = 0
+            consumer_tests = (config.root / "tests").resolve()
             for base_dir in pykissembed_paths:
-                for py_file in _iter_py_files(base_dir):
+                for py_file in _iter_density_files(base_dir, consumer_tests):
                     rel = py_file.relative_to(config.root)
                     key = str(rel)
                     stats = _file_stats(py_file)
