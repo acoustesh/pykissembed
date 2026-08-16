@@ -7,7 +7,7 @@
 # Default mode is "baseline-and-ratchet" — see README.md.
 
 [build-system]
-requires = ["hatchling>=1.31.0", "hatch-vcs>=0.4"]
+requires = ["hatchling>=1.32.0", "hatch-vcs>=0.5.0"]
 build-backend = "hatchling.build"
 
 [project]
@@ -36,15 +36,15 @@ dependencies = [
     "pytest>=8.0",
     "pyyaml>=6.0",
     "rich>=13.0",
-    "typer>=0.21",
+    "typer>=0.27.1",
     "click>=8.1",
     "jsonschema>=4.21",
-    "filelock>=3.12",
-    "ruff>=0.7",
+    "filelock>=3.32.2",
+    "ruff>=0.16.2",
     "pyright[nodejs]>=1.1.411",
     "radon>=6.0",
-    "complexipy>=0.5",
-    "numpy>=1.26",
+    "complexipy>=7.0.1",
+    "numpy>=2.5.2",
     "scikit-learn>=1.5",
     "tiktoken>=0.7",
 ]
@@ -71,8 +71,8 @@ pykissembed = "pykissembed.plugin"
 dev = [
     "pytest-cov>=5.0",
     "pytest-xdist>=3.6",
-    "ruff>=0.15.20",
-    "twine>=6.0",
+    "ruff>=0.16.2",
+    "twine>=7.0.0",
 ]
 
 [tool.hatch.version]
