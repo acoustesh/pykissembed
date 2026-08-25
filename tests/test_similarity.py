@@ -1560,6 +1560,7 @@ class TestPluginCollection:
         assert "comment_density" in _CHECK_STEMS
         assert "docstring_format" in _CHECK_STEMS
         assert "lint_typecheck" in _CHECK_STEMS
+        assert "no_suppressions" in _CHECK_STEMS
 
         checks = _checks_dir()
         assert checks is not None

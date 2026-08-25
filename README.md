@@ -35,7 +35,7 @@ Then run:
 
 ```bash
 pytest --pykissembed-all   # run every installed check module
-pytest -m lint         # lint + type-check gate
+pytest -m lint         # lint + type-check + no-suppressions gates
 pytest -m complexity   # CC + COG + MI + line counts + docstrings
 pytest -m density      # comment density
 pytest -m docstring_format  # NumPy docstring format (ruff D rules)
@@ -62,9 +62,10 @@ git add tests/baselines && git commit -m "seed pykissembed baselines"
 pykissembed's pytest plugin can inject the installed `pykissembed/checks/`
 directory into pytest's collection paths, so the check modules
 (`code_complexity.py`, `code_similarity.py`, `comment_density.py`,
-`docstring_format.py`, `lint_typecheck.py`) run without you copying test
-files or configuring `testpaths`. **This injection is opt-in**, not
-automatic — bare `pytest` collects nothing from pykissembed. Pick one:
+`docstring_format.py`, `lint_typecheck.py`, `no_suppressions.py`) run without
+you copying test files or configuring `testpaths`. **This injection is
+opt-in**, not automatic — bare `pytest` collects nothing from pykissembed.
+Pick one:
 
 - `pytest --pykissembed-all` — collect and run every check module (the
   full battery).
@@ -89,6 +90,11 @@ embeddings are reported without transmitting code-derived data. Automatic
 population requires either `--allow-cloud-embeddings` or an explicit
 `cached_only = false` in `[tool.pykissembed]`; unrelated custom pytest
 arguments are left untouched.
+
+The `no_suppressions.py` check is a strict, non-ratcheted gate. It scans every
+`.py` file below the consumer project root for `# type: ignore`, `# noqa`, and
+calls to `typing.cast` or `typing_extensions.cast`. It excludes `tests` and
+common VCS, virtual-environment, dependency, build, and tool-cache directories.
 
 The plugin's `pytest_collect_file` hook (registered with `tryfirst=True`)
 collects these modules before pytest's default `python_files` filter can reject

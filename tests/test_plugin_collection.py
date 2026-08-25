@@ -24,6 +24,7 @@ from unittest.mock import MagicMock
 import pytest
 
 from pykissembed.plugin import (
+    _CHECK_MODULES,
     _CHECK_STEMS,
     _decide_injection,
 )
@@ -335,14 +336,20 @@ class TestPluginEntryPoint:
     def test_check_stems_are_frozenset() -> None:
         """``_CHECK_STEMS`` is an immutable set of check module stems."""
         assert isinstance(_CHECK_STEMS, frozenset)
-        # All five check modules must be listed
+        # All six check modules must be listed.
         assert {
             "code_complexity",
             "code_similarity",
             "comment_density",
             "docstring_format",
             "lint_typecheck",
+            "no_suppressions",
         } == set(_CHECK_STEMS)
+
+    @staticmethod
+    def test_suppression_gate_is_registered_after_lint_typecheck() -> None:
+        """The strict suppression gate follows the ratcheted lint/type gate."""
+        assert _CHECK_MODULES[-2:] == ["lint_typecheck", "no_suppressions"]
 
     @staticmethod
     def test_plugin_registers_pytest11_entry() -> None:

@@ -107,7 +107,7 @@ addopts = [
     "-n", "auto",
 ]
 markers = [
-    "lint: lint + type-check gate",
+    "lint: lint + type-check + no-suppressions gates",
     "complexity: code complexity metrics (CC, COG, MI, line counts, docstrings)",
     "density: comment density checks",
     "docstring_format: NumPy docstring format (ruff D rules)",
@@ -191,7 +191,13 @@ convention = "numpy"
 
 [tool.pyright]
 include = ["pykissembed", "tests"]
-exclude = ["tests/fixtures/sample_repo"]
+exclude = [
+    "**/node_modules",
+    "**/__pycache__",
+    "**/.*",
+    ".venv",
+    "tests/fixtures/sample_repo",
+]
 pythonVersion = "3.14"
 venvPath = "."
 venv = ".venv"

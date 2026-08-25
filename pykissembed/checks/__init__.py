@@ -2,7 +2,14 @@
 
 from __future__ import annotations
 
-from . import code_complexity, code_similarity, comment_density, docstring_format, lint_typecheck
+from . import (
+    code_complexity,
+    code_similarity,
+    comment_density,
+    docstring_format,
+    lint_typecheck,
+    no_suppressions,
+)
 
 __all__ = [
     "code_complexity",
@@ -10,4 +17,5 @@ __all__ = [
     "comment_density",
     "docstring_format",
     "lint_typecheck",
+    "no_suppressions",
 ]

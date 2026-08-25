@@ -34,6 +34,7 @@ _CHECK_MODULES = [
     "comment_density",
     "docstring_format",
     "lint_typecheck",
+    "no_suppressions",
 ]
 
 # Set of file stems that the plugin should collect as test modules.
@@ -194,7 +195,7 @@ def pytest_configure(config: pytest.Config) -> None:
 
     config.addinivalue_line(
         "markers",
-        "lint: lint + type-check gate (ruff, pyright)",
+        "lint: lint + type-check + no-suppressions gates",
     )
     config.addinivalue_line(
         "markers",
