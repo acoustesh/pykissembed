@@ -38,7 +38,13 @@ class _RefactorConfig(TypedDict):
 
 
 def _as_str_object_mapping(value: object) -> Mapping[str, object]:
-    """Cast an object to a string-to-object mapping.
+    """Validate an object as a string-to-object mapping.
+
+    Parameters
+    ----------
+    value : object
+        Candidate mapping from untrusted data; non-dicts yield an empty
+        mapping.
 
     Returns
     -------
@@ -63,7 +69,12 @@ def _as_str_object_mapping(value: object) -> Mapping[str, object]:
 
 
 def _parse_refactor_config(config_obj: object) -> _RefactorConfig:
-    """Parse the refactor configuration.
+    """Parse the refactor configuration, applying defaults for missing keys.
+
+    Parameters
+    ----------
+    config_obj : object
+        Raw ``config`` mapping from the baselines dict.
 
     Returns
     -------
@@ -106,7 +117,12 @@ def _parse_refactor_config(config_obj: object) -> _RefactorConfig:
 
 
 def _parse_cached_embeddings(embeddings_obj: object) -> dict[str, list[float]]:
-    """Parse cached embeddings.
+    """Parse cached embeddings, silently dropping malformed entries.
+
+    Parameters
+    ----------
+    embeddings_obj : object
+        Raw ``embeddings`` mapping from the baselines dict.
 
     Returns
     -------
@@ -135,8 +151,17 @@ def _parse_cached_embeddings(embeddings_obj: object) -> dict[str, list[float]]:
 def compute_similarity_matrix(functions: list[FunctionInfo]) -> Float32Array:
     """Compute pairwise cosine similarity matrix for all functions.
 
+    Functions without an embedding contribute a zero vector so matrix
+    indices stay aligned with *functions* positions.
+
+    Parameters
+    ----------
+    functions : list[FunctionInfo]
+        Functions under comparison.
+
     Returns
     -------
+    Float32Array
         Cosine similarity matrix with diagonal zeroed out.
     """
     embeddings: list[list[float]] = []
@@ -168,18 +193,30 @@ def compute_similarity_matrix(functions: list[FunctionInfo]) -> Float32Array:
 def compute_max_similarities(similarity_matrix: Float32Array) -> Float64Array:
     """Compute max similarity for each function (excluding self).
 
+    Parameters
+    ----------
+    similarity_matrix : Float32Array
+        Square symmetric similarity matrix with a zeroed diagonal.
+
     Returns
     -------
+    Float64Array
         Array of maximum similarity values per function.
     """
     return np.max(similarity_matrix, axis=1).astype(np.float64)
 
 
 def compute_similarity_indices(max_similarities: Float64Array) -> Float64Array:
-    """Compute similarity index: 25.403 * max_similarity^5.
+    """Compute similarity index: ``25.403 * max_similarity**5``.
+
+    Parameters
+    ----------
+    max_similarities : Float64Array
+        Per-function maximum similarities.
 
     Returns
     -------
+    Float64Array
         Array of similarity index values.
     """
     # The 5th power makes this deliberately nonlinear: moderate similarity
@@ -196,10 +233,21 @@ def compute_refactor_indices(
     cog_values: Float32Array,
     similarity_indices: Float64Array,
 ) -> Float64Array:
-    """Compute refactor index: 0.25*CC + 0.15*COG + 0.6*similarity_index.
+    """Compute refactor index: ``0.25*CC + 0.15*COG + 0.6*similarity_index``.
+
+    Parameters
+    ----------
+    cc_values : Float32Array
+        Cyclomatic complexity per function.
+    cog_values : Float32Array
+        Cognitive complexity per function.
+    similarity_indices : Float64Array
+        Similarity index per function (see
+        :func:`compute_similarity_indices`).
 
     Returns
     -------
+    Float64Array
         Array of refactor index values.
     """
     return 0.25 * cc_values + 0.15 * cog_values + 0.6 * similarity_indices
@@ -217,6 +265,20 @@ def _zero_excluded_similarities(
     Mirrors the pair exclusions applied during violation detection so a method
     is not surfaced as a refactor priority merely because its ``MaxSim`` is
     inflated by the class that contains it.
+
+    Parameters
+    ----------
+    similarity_matrix : Float32Array
+        Matrix modified in place.
+    functions : list[FunctionInfo]
+        Functions indexing the rows/columns of the matrix.
+    excluded_file_pairs : list[list[str]]
+        File pairs whose similarities are zeroed.
+    excluded_function_pairs : list[list[str]]
+        Function pairs whose similarities are zeroed.
+    class_function_proximity : int
+        Max source lines allowed between a class and a nearby function
+        when applying proximity exclusions.
     """
     for i, func_a in enumerate(functions):
         # Only the upper triangle is walked; each excluded pair zeros both the
@@ -249,8 +311,29 @@ def get_refactor_priority_message(
     (defaulting to no exclusions) so a method's ``MaxSim`` is not inflated by
     the class that encloses it.
 
+    Parameters
+    ----------
+    functions : list[FunctionInfo]
+        Functions under consideration; at least one must have an embedding.
+    cc_map : dict[str, int]
+        Cyclomatic complexity keyed by ``"{file}:{name}"``.
+    cog_map : dict[str, int]
+        Cognitive complexity keyed by ``"{file}:{name}"``.
+    threshold : float, optional
+        Refactor index at or above which a function is recommended.
+    top_n : int, optional
+        Maximum number of recommendations included.
+    excluded_file_pairs : list[list[str]] | None
+        File pairs exempt from similarity scoring.
+    excluded_function_pairs : list[list[str]] | None
+        Function pairs exempt from similarity scoring.
+    class_function_proximity : int
+        Max source lines allowed between a class and a nearby function
+        when applying proximity exclusions.
+
     Returns
     -------
+    str | None
         Formatted message string, or ``None`` if no functions exceed the threshold.
     """
     if len(functions) < _MIN_FUNCTIONS_FOR_REFACTOR_INDEX or not any(
@@ -334,8 +417,13 @@ def get_refactor_priority_message(
 def get_refactor_priority_message_for_complexity() -> str:
     """Get the refactoring priority message for complexity test failures.
 
+    Loads baselines, hydrates cached embeddings, and computes the priority
+    message over all extracted functions. Any failure degrades to an empty
+    string so the underlying check failure is never masked.
+
     Returns
     -------
+    str
         Refactoring priority message, or empty string if unavailable.
     """
     try:

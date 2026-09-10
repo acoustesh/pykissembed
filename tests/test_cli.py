@@ -348,6 +348,7 @@ class TestCheck:
         captured: list[str] = []
 
         def _fake_call(cmd: list[str]) -> int:
+            """Record the argv pytest would receive and report success."""
             captured.extend(cmd)
             return 0
 
@@ -364,6 +365,7 @@ class TestCheck:
         captured: list[str] = []
 
         def _fake_call(cmd: list[str]) -> int:
+            """Record the forwarded argv and report success."""
             captured.extend(cmd)
             return 0
 
@@ -421,6 +423,7 @@ class TestPopulateEmbeddingsMissingProvider:
             paths: list[Path] | None,
             cached_only: bool,
         ) -> None:
+            """Capture the populate arguments instead of touching caches."""
             calls.append((provider, paths, cached_only))
 
         monkeypatch.setattr(populate_module, "_populate_embeddings", fake_populate)

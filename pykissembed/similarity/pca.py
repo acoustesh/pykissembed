@@ -64,6 +64,7 @@ def _load_cupy_module() -> _CupyModule:
 
     Returns
     -------
+    _CupyModule
         The validated CuPy module typed as ``_CupyModule``.
 
     Raises
@@ -87,8 +88,16 @@ def _load_cupy_module() -> _CupyModule:
 def _to_numpy_float_array(value: object, *, name: str) -> npt.NDArray[np.floating[Any]]:
     """Validate and convert dynamic arrays to NumPy floating arrays.
 
+    Parameters
+    ----------
+    value : object
+        Candidate array from a dynamic (GPU or third-party) boundary.
+    name : str
+        Label used in error messages to identify the offending value.
+
     Returns
     -------
+    npt.NDArray[np.floating[Any]]
         The input array validated as a floating NumPy ndarray.
 
     Raises
@@ -109,8 +118,16 @@ def _to_numpy_float_array(value: object, *, name: str) -> npt.NDArray[np.floatin
 def _to_numpy_from_cupy(value: object, *, name: str) -> npt.NDArray[np.floating[Any]]:
     """Convert CuPy-like arrays to validated NumPy floating arrays.
 
+    Parameters
+    ----------
+    value : object
+        CuPy-like array exposing a callable ``.get()`` method.
+    name : str
+        Label used in error messages to identify the offending value.
+
     Returns
     -------
+    npt.NDArray[np.floating[Any]]
         The converted and validated floating NumPy ndarray.
 
     Raises
@@ -130,6 +147,7 @@ def _load_sklearn_pca_class() -> type:
 
     Returns
     -------
+    type
         The ``sklearn.decomposition.PCA`` class.
 
     Raises
@@ -150,6 +168,7 @@ def _load_sklearn_kmeans_class() -> type:
 
     Returns
     -------
+    type
         The ``sklearn.cluster.KMeans`` class.
 
     Raises
@@ -170,8 +189,9 @@ def _get_pca_class() -> tuple[type, bool]:
 
     Returns
     -------
-        Tuple of (PCA_class, is_gpu). Falls back to sklearn if cuML unavailable.
-
+    tuple[type, bool]
+        ``(PCA_class, is_gpu)``; falls back to sklearn when cuML is
+        unavailable or incompatible.
     """
     try:
         cuml_decomp = import_module("cuml.decomposition")
@@ -202,11 +222,26 @@ def fit_pca(
     When *pca_cache* and *cache_key* are supplied the result is stored and
     returned from cache on subsequent calls with the same key.
 
+    Parameters
+    ----------
+    embeddings_cache : dict[str, list[float]]
+        Hash-keyed embedding vectors to fit on.
+    variance_threshold : float
+        Cumulative explained variance target used to pick the component
+        count; also part of the cache key.
+    pca_cache : dict[str, tuple[PCAModel | None, int, bool]] | None
+        Optional session-scoped fitted-model cache keyed by
+        ``f"{cache_key}_{variance_threshold}"``.
+    cache_key : str
+        Provider identifier combined with *variance_threshold* for the
+        cache entry.
+
     Returns
     -------
-        Tuple of (fitted PCA model, number of components to use, is_gpu)
-        Returns (None, 0, False) if not enough embeddings (<10)
-
+    tuple[PCAModel | None, int, bool]
+        ``(fitted PCA model, number of components to use, is_gpu)``;
+        returns ``(None, 0, False)`` when there are fewer than 10
+        embeddings.
     """
     # variance_threshold is part of the cache key, not just cache_key: the
     # same embedding set fitted for two different variance targets needs a
@@ -266,7 +301,23 @@ def transform_embeddings_with_pca(
     *,
     is_gpu: bool = True,
 ) -> None:
-    """Transform function embeddings using pre-fitted PCA model in-place."""
+    """Transform function embeddings using a pre-fitted PCA model in-place.
+
+    Functions without an embedding are skipped; the rest get their
+    ``embedding`` replaced by the first *n_components* reduced dimensions.
+
+    Parameters
+    ----------
+    functions : list[FunctionInfo]
+        Functions whose ``embedding`` values are transformed in place.
+    pca_model : PCAModel
+        Pre-fitted PCA model (GPU or CPU).
+    n_components : int
+        Number of leading components to keep.
+    is_gpu : bool
+        Whether *pca_model* is a GPU (cuML) model; a CPU model triggers a
+        performance warning.
+    """
     if not is_gpu:
         warnings.warn(
             "\n" + "=" * 60 + "\n"
@@ -318,8 +369,22 @@ def _make_kmeans(
 ) -> Any:  # ruff:ignore[any-type] — cls is a dynamically-loaded, type-erased sklearn class
     """Construct a KMeans instance with validated int ``n_init``.
 
+    Parameters
+    ----------
+    cls : type
+        Dynamically loaded KMeans class.
+    n_clusters : int
+        Number of clusters.
+    random_state : int
+        Seed for reproducibility.
+    n_init : object
+        Number of initialisations; must be a positive integer.
+    max_iter : int
+        Maximum iterations per run.
+
     Returns
     -------
+    Any
         A configured KMeans instance.
 
     Raises
@@ -351,9 +416,26 @@ def cluster_functions_kmeans_with_pca(
 ) -> tuple[list[list[FunctionInfo]], list[str]]:
     """Cluster functions using k-means on PCA-reduced embeddings.
 
+    Functions without an embedding are excluded. When fewer valid
+    functions remain than requested clusters, everything is returned in a
+    single ``all_functions`` bucket instead of fitting k-means.
+
+    Parameters
+    ----------
+    functions : list[FunctionInfo]
+        Candidate functions to cluster.
+    pca_model : PCAModel
+        Pre-fitted PCA model applied before clustering.
+    n_components : int
+        Number of leading components kept from the transform.
+    n_clusters : int, optional
+        Number of clusters to form (default 2).
+
     Returns
     -------
-        A tuple of (clustered function lists, cluster name strings).
+    tuple[list[list[FunctionInfo]], list[str]]
+        A tuple of (clustered function lists sorted by start line, cluster
+        name strings).
     """
     kmeans_cls = _load_sklearn_kmeans_class()
 

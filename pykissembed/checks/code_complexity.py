@@ -70,6 +70,21 @@ _DEFAULT_CONFIG: _DefaultConfig = {
 # keeps the untyped surface confined to one place instead of leaking
 # `Any` through every call site.
 def _load_callable(module_name: str, attribute: str) -> Callable[..., object] | None:
+    """Dynamically load a callable from an untyped third-party module.
+
+    Parameters
+    ----------
+    module_name : str
+        Dotted module path to import (e.g. ``"radon.complexity"``).
+    attribute : str
+        Name of the callable to fetch from the module.
+
+    Returns
+    -------
+    Callable[..., object] | None
+        The callable, or ``None`` when the module is not installed or the
+        attribute is missing or not callable.
+    """
     try:
         module = importlib.import_module(module_name)
     except ImportError:
@@ -144,6 +159,18 @@ def _decorator_tail(decorator: ast.expr) -> str | None:
 
 
 def _get_line_count(file_path: Path) -> int:
+    """Count the lines in *file_path*.
+
+    Parameters
+    ----------
+    file_path : Path
+        File whose physical line count is measured.
+
+    Returns
+    -------
+    int
+        Number of lines reported by reading the whole file as UTF-8 text.
+    """
     with file_path.open(encoding="utf-8") as f:
         return len(f.readlines())
 
@@ -258,6 +285,22 @@ def _collect_metric_results(
 ) -> tuple[dict[str, int], list[str]]:
     """Collect one file's metric values and threshold violations.
 
+    A value violates its baseline when it exceeds ``baselines[key]``; keys
+    without a stored baseline fall back to *threshold*.
+
+    Parameters
+    ----------
+    relative_path : Path
+        Repo-relative path used to build each metric key.
+    metrics : list[tuple[str, int, int]]
+        ``(name, lineno, value)`` tuples for one file.
+    baselines : dict[str, int]
+        Stored per-function metric baselines.
+    threshold : int
+        Default threshold applied where no baseline exists.
+    label : str
+        Metric label used in violation messages (e.g. ``"CC"``).
+
     Returns
     -------
     tuple[dict[str, int], list[str]]
@@ -282,7 +325,21 @@ def _record_excess_metric_baselines(
     *,
     threshold: int,
 ) -> None:
-    """Record values above the default threshold in an update baseline."""
+    """Record values above the default threshold in an update baseline.
+
+    Only entries in *current* whose value exceeds *threshold* are copied
+    into *baselines*, so the ratchet never relaxes existing records and
+    never pins compliant functions to their current value.
+
+    Parameters
+    ----------
+    baselines : dict[str, int]
+        Stored metric baselines, updated in place.
+    current : dict[str, int]
+        Freshly measured metric values keyed by function.
+    threshold : int
+        Default threshold; only values strictly above it are recorded.
+    """
     baselines.update({key: value for key, value in current.items() if value > threshold})
 
 
@@ -294,6 +351,17 @@ def _complexity_failure_message(
     cog_threshold: int,
 ) -> str:
     """Format cyclomatic and cognitive complexity violations.
+
+    Parameters
+    ----------
+    cc_violations : list[str]
+        Pre-formatted cyclomatic complexity violation messages.
+    cog_violations : list[str]
+        Pre-formatted cognitive complexity violation messages.
+    cc_threshold : int
+        Cyclomatic threshold echoed in the section header.
+    cog_threshold : int
+        Cognitive threshold echoed in the section header.
 
     Returns
     -------

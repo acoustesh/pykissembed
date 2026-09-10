@@ -36,6 +36,25 @@ class CommentStats:
 
 
 def _get_int_attr(obj: object, attr_name: str) -> int:
+    """Read an integer attribute off an untyped radon metrics object.
+
+    Parameters
+    ----------
+    obj : object
+        Radon raw-analysis result.
+    attr_name : str
+        Attribute to read (e.g. ``"loc"``, ``"comments"``).
+
+    Returns
+    -------
+    int
+        The attribute value narrowed to ``int``.
+
+    Raises
+    ------
+    TypeError
+        If the attribute is missing or not an int.
+    """
     # radon.raw.analyze() returns an untyped namedtuple (no stubs), so
     # every field read is narrowed through this boundary rather than
     # trusted as `int` at the call site.
@@ -131,6 +150,18 @@ def _all_functions_short(file_path: Path, max_lines: int = SMALL_FUNCTION_THRESH
 
 
 def _file_stats(file_path: Path) -> CommentStats:
+    """Compute comment-density statistics for one file.
+
+    Parameters
+    ----------
+    file_path : Path
+        File to analyse; unreadable files yield zeroed statistics.
+
+    Returns
+    -------
+    CommentStats
+        Source lines of code, comment count, and density percentage.
+    """
     try:
         source = file_path.read_text(encoding="utf-8")
     except (UnicodeDecodeError, OSError) as exc:

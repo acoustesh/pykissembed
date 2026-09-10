@@ -149,7 +149,24 @@ def load_envelope(path: Path, kind: str) -> BaselineEnvelope:
 
 
 def save_envelope(path: Path, envelope: BaselineEnvelope) -> None:
-    """Atomically write a v1 envelope to *path*."""
+    """Atomically write a v1 envelope to *path*.
+
+    The payload is validated against the v1 schema before writing; a
+    sibling temp file is renamed into place so readers never observe a
+    partially written file, and the temp file is removed on failure.
+
+    Parameters
+    ----------
+    path : Path
+        Destination file path (parent directories are created).
+    envelope : BaselineEnvelope
+        Envelope whose ``kind`` and ``data`` are persisted.
+
+    Raises
+    ------
+    jsonschema.ValidationError
+        If the payload does not conform to the v1 baseline schema.
+    """
     payload = {
         "schema_version": SCHEMA_VERSION,
         "kind": envelope.kind,

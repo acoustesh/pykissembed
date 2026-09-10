@@ -94,7 +94,19 @@ def _load_cached_embeddings(
     functions: list[FunctionInfo],
     provider: ProviderEntry,
 ) -> list[FunctionInfo]:
-    """Load cached embeddings and return list of uncached functions.
+    """Load cached embeddings into each function, returning uncached ones.
+
+    Functions with a cached vector get ``func.embedding`` assigned in place;
+    the rest are collected unchanged (their ``embedding`` stays unset).
+
+    Parameters
+    ----------
+    baselines : dict
+        Baselines dict holding the provider caches.
+    functions : list[FunctionInfo]
+        Functions to hydrate from cache.
+    provider : ProviderEntry
+        Provider whose ``cache_key`` and ``hash_field`` drive the lookups.
 
     Returns
     -------
@@ -118,6 +130,13 @@ def _combined_member_gaps(
     uncached: list[FunctionInfo],
 ) -> dict[str, int]:
     """Count the uncached functions missing each combined member's embeddings.
+
+    Parameters
+    ----------
+    baselines : dict
+        Baselines dict holding the member caches.
+    uncached : list[FunctionInfo]
+        Functions already found to be missing a Combined embedding.
 
     Returns
     -------
@@ -147,6 +166,14 @@ def _missing_embeddings_advice(
     member_gaps: dict[str, int] | None,
 ) -> list[str]:
     """Build the remediation lines for a missing-embeddings skip.
+
+    Parameters
+    ----------
+    provider : ProviderEntry
+        Provider whose embeddings are missing.
+    member_gaps : dict[str, int] | None
+        For the combined provider, per-member missing counts; ``None`` for
+        any other provider.
 
     Returns
     -------
@@ -208,6 +235,13 @@ def _skip_missing_embeddings(
 def _format_pair_violation(func_a: FunctionInfo, func_b: FunctionInfo, similarity: float) -> str:
     """Format a single pair violation message.
 
+    Parameters
+    ----------
+    func_a, func_b : FunctionInfo
+        The similar function pair.
+    similarity : float
+        Cosine similarity between the pair.
+
     Returns
     -------
     str
@@ -222,6 +256,14 @@ def _format_pair_violation(func_a: FunctionInfo, func_b: FunctionInfo, similarit
 
 def _format_neighbor_violation(func_a: FunctionInfo, similar_neighbors: list[NeighborEntry]) -> str:
     """Format a neighbor violation message.
+
+    Parameters
+    ----------
+    func_a : FunctionInfo
+        Function that has several similar neighbors.
+    similar_neighbors : list[NeighborEntry]
+        ``(file, name, start_line, similarity)`` tuples for the similar
+        neighbors; only the first three are shown in the message.
 
     Returns
     -------
@@ -246,6 +288,28 @@ def _check_against_others(
     class_function_proximity: int = 0,
 ) -> tuple[list[str], list[NeighborEntry]]:
     """Check one function against all later functions in the list.
+
+    Parameters
+    ----------
+    func_a : FunctionInfo
+        Function being compared; must have ``embedding`` set.
+    func_a_idx : int
+        Index of *func_a* in *functions*; used to restrict comparisons to
+        the upper triangle of the pair matrix.
+    functions : list[FunctionInfo]
+        All functions under comparison.
+    threshold_pair : float
+        Similarity at or above which a pair violation is recorded.
+    threshold_neighbor : float
+        Similarity at or above which *func_b* is counted as a neighbor of
+        *func_a*.
+    excluded_file_pairs : list[list[str]] | None
+        File pairs exempt from comparison.
+    excluded_function_pairs : list[list[str]] | None
+        Function pairs exempt from comparison.
+    class_function_proximity : int
+        Max source lines allowed between a class and a nearby function
+        when applying proximity exclusions.
 
     Returns
     -------
@@ -290,6 +354,24 @@ def _find_violations(
     class_function_proximity: int = 0,
 ) -> tuple[list[str], list[str]]:
     """Find similarity violations among functions.
+
+    Parameters
+    ----------
+    functions : list[FunctionInfo]
+        Functions with hydrated ``embedding`` attributes; functions without
+        an embedding are skipped.
+    threshold_pair : float
+        Similarity at or above which a pair violation is recorded.
+    threshold_neighbor : float
+        Similarity at or above which a function counts as a neighbor;
+        neighbor violations require at least two neighbors.
+    excluded_file_pairs : list[list[str]] | None
+        File pairs exempt from comparison.
+    excluded_function_pairs : list[list[str]] | None
+        Function pairs exempt from comparison.
+    class_function_proximity : int
+        Max source lines allowed between a class and a nearby function
+        when applying proximity exclusions.
 
     Returns
     -------
@@ -340,6 +422,33 @@ def _report_violations(
     The exclusion arguments mirror those used for pair/neighbor detection so
     the refactor-priority recommendation does not surface a method merely
     because its similarity is inflated by the class that contains it.
+
+    Parameters
+    ----------
+    pair_violations : list[str]
+        Pre-formatted pair violation messages.
+    neighbor_violations : list[str]
+        Pre-formatted neighbor violation messages.
+    threshold_pair : float
+        Pair threshold, echoed in the failure header.
+    threshold_neighbor : float
+        Neighbor threshold, echoed in the failure header.
+    functions : list[FunctionInfo]
+        Functions under comparison, passed through to the refactor index.
+    load_complexity_maps_fn : Callable
+        Returns ``(cc_map, cog_map)`` complexity maps for the refactor index.
+    excluded_file_pairs : list[list[str]] | None
+        File pairs exempt from comparison.
+    excluded_function_pairs : list[list[str]] | None
+        Function pairs exempt from comparison.
+    class_function_proximity : int
+        Max source lines allowed between a class and a nearby function
+        when applying proximity exclusions.
+    refactor_index_threshold : float
+        Complexity score above which a violating function is recommended
+        for refactoring.
+    refactor_index_top_n : int
+        Maximum number of refactor recommendations to include.
     """
     all_violations: list[str] = []
     if pair_violations:
@@ -491,6 +600,17 @@ def _jina_uncached(
 ) -> list[FunctionInfo]:
     """Return functions missing either a query or a passage Jina embedding.
 
+    Parameters
+    ----------
+    functions : list[FunctionInfo]
+        Functions to check.
+    provider : ProviderEntry
+        Standalone Jina provider whose ``hash_field`` keys the caches.
+    query_cache : dict[str, list[float]]
+        Raw query embeddings keyed by content hash.
+    passage_cache : dict[str, list[float]]
+        Raw passage embeddings keyed by content hash.
+
     Returns
     -------
     list[FunctionInfo]
@@ -519,6 +639,26 @@ def _find_matrix_violations(
     Mirrors :func:`_find_violations` but reads scores from *similarity* (the
     symmetrized Jina matrix) instead of computing per-pair cosine, so the same
     upper-triangle pairing, exclusions, and message formatting apply.
+
+    Parameters
+    ----------
+    functions : list[FunctionInfo]
+        Functions under comparison; ``similarity[i, j]`` scores the pair
+        ``(functions[i], functions[j])``.
+    similarity : Float32Array
+        Precomputed square symmetric score matrix.
+    threshold_pair : float
+        Similarity at or above which a pair violation is recorded.
+    threshold_neighbor : float
+        Similarity at or above which a function counts as a neighbor;
+        neighbor violations require at least two neighbors.
+    excluded_file_pairs : list[list[str]] | None
+        File pairs exempt from comparison.
+    excluded_function_pairs : list[list[str]] | None
+        Function pairs exempt from comparison.
+    class_function_proximity : int
+        Max source lines allowed between a class and a nearby function
+        when applying proximity exclusions.
 
     Returns
     -------
@@ -656,7 +796,12 @@ def run_jina_similarity_checks(
 
 
 def _extract_config(baselines: Baselines) -> dict[str, object]:
-    """Extract configuration from a dictionary.
+    """Extract the validated ``config`` mapping from *baselines*.
+
+    Parameters
+    ----------
+    baselines : dict
+        Loaded baselines dict.
 
     Returns
     -------
@@ -676,7 +821,18 @@ def _extract_config(baselines: Baselines) -> dict[str, object]:
 
 
 def _extract_pca_variance(config: dict[str, object], provider: ProviderEntry) -> float:
-    """Extract PCA variance from a dictionary.
+    """Resolve the PCA variance retention for one provider.
+
+    The provider-specific override key wins over the generic
+    ``pca_variance_threshold`` setting, which wins over the provider's
+    built-in default.
+
+    Parameters
+    ----------
+    config : dict[str, object]
+        Similarity configuration mapping.
+    provider : ProviderEntry
+        Provider supplying its override key and default variance.
 
     Returns
     -------
@@ -703,6 +859,11 @@ def _extract_pca_variance(config: dict[str, object], provider: ProviderEntry) ->
 def _extract_refactor_index_threshold(config: dict[str, object]) -> float:
     """Extract the refactor-index threshold from similarity configuration.
 
+    Parameters
+    ----------
+    config : dict[str, object]
+        Similarity configuration mapping.
+
     Returns
     -------
     float
@@ -722,6 +883,11 @@ def _extract_refactor_index_threshold(config: dict[str, object]) -> float:
 
 def _extract_refactor_index_top_n(config: dict[str, object]) -> int:
     """Extract the number of refactor recommendations to report.
+
+    Parameters
+    ----------
+    config : dict[str, object]
+        Similarity configuration mapping.
 
     Returns
     -------
@@ -767,6 +933,14 @@ def _extract_embedding_cache(baselines: Baselines, cache_key: str) -> dict[str, 
 
 def _extract_excluded_pairs(config: dict[str, object], key: str) -> list[list[str]]:
     """Extract excluded pairs from a dictionary.
+
+    Parameters
+    ----------
+    config : dict[str, object]
+        Similarity configuration mapping.
+    key : str
+        Config key holding the exclusion list (e.g.
+        ``"excluded_file_pairs"``).
 
     Returns
     -------

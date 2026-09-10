@@ -54,6 +54,7 @@ def _make_config(
     cfg = MagicMock()
 
     def _getoption(name: str) -> bool:
+        """Return the configured value for the two flags the decision reads."""
         if name == "--pykissembed-all":
             return all_flag
         if name == "--collect-only":

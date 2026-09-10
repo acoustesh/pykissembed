@@ -101,12 +101,21 @@ def _get_embedding_cache(baselines: Baselines, cache_key: str) -> dict[str, list
 
 
 def _get_function_hashes(baselines: Baselines) -> dict[str, object]:
-    """Get the function hashes.
+    """Return the live ``function_hashes`` mapping, creating it when absent.
+
+    A missing entry is initialised to an empty dict and stored back into
+    *baselines*, so later writes by the caller persist. This deliberately
+    mutates *baselines* rather than returning a defensive copy.
+
+    Parameters
+    ----------
+    baselines : dict
+        Mutable baselines dict; may gain a ``function_hashes`` entry.
 
     Returns
     -------
     dict[str, object]
-        The function hashes.
+        The mutable function-hashes mapping owned by *baselines*.
 
     Raises
     ------
@@ -168,6 +177,18 @@ def _find_uncached(
     hash_attr: str,
 ) -> list[FunctionInfo]:
     """Return the subset of *functions* not yet present in the embedding cache.
+
+    Parameters
+    ----------
+    baselines : dict
+        Baselines dict holding the embedding caches.
+    functions : list[FunctionInfo]
+        Candidate functions to filter.
+    cache_key : str
+        Embedding cache to inspect.
+    hash_attr : str
+        Name of the ``FunctionInfo`` attribute used as the cache lookup key
+        (``"hash"`` for AST caches, ``"text_hash"`` for text caches).
 
     Returns
     -------
@@ -280,6 +301,15 @@ def _populate_jina(baselines: Baselines, functions: list[FunctionInfo], cfg: _Ji
 
     A function is considered uncached when *either* its query or passage vector
     is missing, since the symmetrized score needs both.
+
+    Parameters
+    ----------
+    baselines : dict
+        Mutable baselines dict.
+    functions : list[FunctionInfo]
+        All extracted functions.
+    cfg : _JinaCfg
+        Jina-variant parameters (cache keys, tasks, text vs AST mode).
 
     Returns
     -------
@@ -577,7 +607,19 @@ def _populate_combined_scoped(
 
 
 def _update_function_hashes(baselines: Baselines, functions: list[FunctionInfo]) -> None:
-    """Update function_hashes with the new format containing both hash and text_hash."""
+    """Insert current-function entries into ``baselines["function_hashes"]``.
+
+    Each function is keyed by ``"{file}:{name}:{start_line}"`` and mapped to
+    both its AST hash and text hash. Existing entries for other identities are
+    left untouched.
+
+    Parameters
+    ----------
+    baselines : dict
+        Mutable baselines dict whose ``function_hashes`` entry is updated.
+    functions : list[FunctionInfo]
+        Functions to record.
+    """
     function_hashes = _get_function_hashes(baselines)
 
     for func in functions:
@@ -845,10 +887,21 @@ def _populate_all(
 ) -> tuple[int, bool]:
     """Populate every available cloud provider and rebuild Combined.
 
+    Parameters
+    ----------
+    baselines : dict
+        Mutable baselines dict.
+    functions : list[FunctionInfo]
+        All extracted functions.
+    replace_combined_hashes : set[str] | None
+        Text hashes whose Combined vectors may be replaced during the
+        rebuild, or ``None`` for a full rebuild scope.
+
     Returns
     -------
     tuple[int, bool]
-        Total provider result count and whether any requested work completed.
+        Total number of newly embedded functions across providers (including
+        the Combined rebuild) and whether any requested work completed.
 
     Raises
     ------

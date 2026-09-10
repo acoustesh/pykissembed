@@ -21,10 +21,17 @@ class ProviderRegistry:
     __slots__ = ("_providers",)
 
     def __init__(self) -> None:
+        """Create an empty registry."""
         self._providers: dict[str, Provider] = {}
 
     def register(self, provider: Provider) -> None:
-        """Register *provider*. Overwrites any existing provider with the same name."""
+        """Register *provider*, overwriting any existing provider of the same name.
+
+        Parameters
+        ----------
+        provider : Provider
+            Provider instance to register under its ``name``.
+        """
         self._providers[provider.name] = provider
 
     def clear(self) -> None:
@@ -85,12 +92,15 @@ class ProviderRegistry:
         return self._providers.get(name)
 
     def __contains__(self, name: object) -> bool:
+        """Return whether a provider is registered under string *name*."""
         return isinstance(name, str) and name in self._providers
 
     def __len__(self) -> int:
+        """Return the number of registered providers."""
         return len(self._providers)
 
     def __repr__(self) -> str:
+        """Return a summary listing registered provider names."""
         names = ", ".join(sorted(self._providers))
         return f"<ProviderRegistry providers={names!r}>"
 

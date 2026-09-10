@@ -198,6 +198,23 @@ exclude = [
     ".venv",
     "tests/fixtures/sample_repo",
 ]
+enableTypeIgnoreComments = false
+
+useLibraryCodeForTypes = true
+strictListInference = true
+strictDictionaryInference = true
+strictSetInference = true
+
+reportImplicitOverride = "warning"
+reportImportCycles = "warning"
+reportMissingParameterType = "error"
+reportPrivateUsage = "warning"
+reportUnnecessaryTypeIgnoreComment = "error"
+reportUntypedBaseClass = "warning"
+reportUntypedFunctionDecorator = "warning"
+reportUnusedCallResult = "warning"
+reportUnusedImport = "warning"
+reportUnusedVariable = "warning"
 pythonVersion = "3.14"
 venvPath = "."
 venv = ".venv"

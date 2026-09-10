@@ -26,7 +26,12 @@ from pykissembed.paths import include_notebooks
 
 
 def _resolve_tool(name: str) -> str:
-    """Return ``name`` if it exists on PATH, else ``name`` (PATH-resolved at call).
+    """Return the absolute PATH-resolved path of *name*, or *name* itself.
+
+    Parameters
+    ----------
+    name : str
+        Executable name to resolve.
 
     Returns
     -------
@@ -40,6 +45,11 @@ def _resolve_tool(name: str) -> str:
 
 def _run_ruff(paths: list[Path]) -> list[dict[str, Any]]:
     """Run ``ruff check --output-format json`` and return parsed diagnostics.
+
+    Parameters
+    ----------
+    paths : list[Path]
+        Directories passed to ruff for checking.
 
     Notebooks (``.ipynb``) are excluded by default because they typically
     contain exploratory code that isn't held to the same hygiene standards
@@ -80,6 +90,11 @@ def _run_ruff(paths: list[Path]) -> list[dict[str, Any]]:
 def _run_pyright(paths: list[Path]) -> list[dict[str, Any]]:
     """Run ``pyright --outputjson`` and return ``generalDiagnostics``.
 
+    Parameters
+    ----------
+    paths : list[Path]
+        Directories passed to pyright for checking.
+
     Returns
     -------
     list[dict[str, Any]]
@@ -111,6 +126,15 @@ def _build_report(
     root: Path,
 ) -> dict[str, Any]:
     """Aggregate diagnostics into a per-file JSON report.
+
+    Parameters
+    ----------
+    ruff_diags : list[dict[str, Any]]
+        Parsed ruff JSON diagnostics.
+    pyright_diags : list[dict[str, Any]]
+        Parsed pyright ``generalDiagnostics`` entries.
+    root : Path
+        Project root used to make file paths relative.
 
     Returns
     -------

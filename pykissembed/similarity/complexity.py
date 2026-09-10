@@ -20,6 +20,11 @@ if TYPE_CHECKING:
 def _extract_block_tuple(block: object) -> tuple[str, int, int]:
     """Validate and normalize a radon block object to a typed tuple.
 
+    Parameters
+    ----------
+    block : object
+        Untyped radon block from ``cc_visit`` output.
+
     Returns
     -------
     tuple[str, int, int]
@@ -49,6 +54,11 @@ def _extract_block_tuple(block: object) -> tuple[str, int, int]:
 
 def _cc_complexities_from_source(source_code: str) -> list[tuple[str, int, int]]:
     """Run radon cc_visit through a validated, fully typed boundary.
+
+    Parameters
+    ----------
+    source_code : str
+        Python source text to analyse.
 
     Returns
     -------

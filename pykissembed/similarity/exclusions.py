@@ -29,6 +29,20 @@ def is_excluded_pair(
 ) -> bool:
     """Check whether a pair is configured or structurally excluded.
 
+    Parameters
+    ----------
+    func_a, func_b : FunctionInfo
+        The pair under comparison.
+    excluded_file_pairs : list[list[str]]
+        Two-element substring pairs matched against the two files' names.
+    excluded_function_pairs : list[list[str]]
+        Two-element substring pairs matched against the two functions'
+        ``"{file}:{name}"`` keys.
+    class_function_proximity : int
+        Maximum non-blank, non-comment source lines allowed between an
+        enclosing class and a nearby function for the pair to be treated
+        as structurally related.
+
     Returns
     -------
     bool

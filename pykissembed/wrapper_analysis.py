@@ -46,6 +46,11 @@ class WrapperCandidate:
 def parse_source_files(paths: list[Path]) -> list[tuple[Path, ast.Module]]:
     """Parse configured Python files, skipping unreadable or invalid source.
 
+    Parameters
+    ----------
+    paths : list[Path]
+        Configured source directories to scan recursively.
+
     Returns
     -------
     list[tuple[Path, ast.Module]]
@@ -82,6 +87,17 @@ def find_wrapper_candidates(
     wrapper_exempt_decorators: list[str],
 ) -> list[WrapperCandidate]:
     """Return non-exempt exact forwarding wrappers and their call counts.
+
+    Parameters
+    ----------
+    modules : list[tuple[Path, ast.Module]]
+        Parsed source files from :func:`parse_source_files`.
+    root : Path
+        Project root used to build relative-path identifiers.
+    wrapper_exclude : list[str]
+        Glob patterns of identifiers exempt from the wrapper rule.
+    wrapper_exempt_decorators : list[str]
+        Glob patterns of decorator names exempting a function.
 
     Returns
     -------

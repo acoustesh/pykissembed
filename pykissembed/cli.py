@@ -166,6 +166,12 @@ def ratchet_cmd(
 def _compute_current_for(baseline_name: str) -> dict[str, Any]:
     """Dispatch to the right current-diagnostics computer based on filename.
 
+    Parameters
+    ----------
+    baseline_name : str
+        Baseline file name (e.g. ``"lint_typecheck.json"``) selecting the
+        computer to run.
+
     Returns
     -------
     dict[str, Any]
@@ -271,6 +277,15 @@ def populate_embeddings(
 ) -> None:
     """Populate or inspect compressed per-function embedding caches.
 
+    Parameters
+    ----------
+    provider_name : str
+        Canonical provider variant (e.g. ``"openai-text"``), or ``"all"``.
+    paths : list[Path] | None
+        Directories to scan; ``None`` uses the configured source paths.
+    cached_only : bool
+        Inspect cache coverage without API calls or cache writes.
+
     Raises
     ------
     typer.Exit
@@ -310,6 +325,11 @@ def type_review(
 
     For each file with pyright errors, runs ``pyright`` against just that
     file so the developer can focus on the failing diagnostics.
+
+    Parameters
+    ----------
+    report : Path
+        Path to a ``lint_typecheck_report.json`` produced by the lint gate.
 
     Raises
     ------
@@ -412,6 +432,13 @@ def init(
 
 def _auto_detect_paths(root: Path, pyproject_text: str) -> list[str]:
     """Auto-detect source directories from the project layout.
+
+    Parameters
+    ----------
+    root : Path
+        Project root containing ``pyproject.toml``.
+    pyproject_text : str
+        Raw text of ``pyproject.toml``.
 
     Priority:
     1. ``[tool.setuptools.packages.find]`` ``where`` field

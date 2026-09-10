@@ -90,6 +90,11 @@ class PyqtestConfig:
 def _read_toml(path: Path) -> dict[str, Any]:
     """Read a TOML file and return its contents as a dict.
 
+    Parameters
+    ----------
+    path : Path
+        TOML file to read.
+
     Returns
     -------
     dict[str, Any]
@@ -103,6 +108,13 @@ def _read_toml(path: Path) -> dict[str, Any]:
 
 def _coerce_str_list(value: object, *, key: str) -> list[str]:
     """Coerce a TOML value into a ``list[str]``.
+
+    Parameters
+    ----------
+    value : object
+        Raw TOML value to coerce.
+    key : str
+        Config key name used in error messages.
 
     Returns
     -------
@@ -131,6 +143,13 @@ def _coerce_str_list(value: object, *, key: str) -> list[str]:
 def _require_str_list(value: object, *, key: str) -> list[str]:
     """Validate a TOML list containing only strings.
 
+    Parameters
+    ----------
+    value : object
+        Raw TOML value to validate.
+    key : str
+        Config key name used in error messages.
+
     Returns
     -------
     list[str]
@@ -150,6 +169,13 @@ def _require_str_list(value: object, *, key: str) -> list[str]:
 def _require_nonnegative_int(value: object, *, key: str) -> int:
     """Validate a non-negative integer TOML value.
 
+    Parameters
+    ----------
+    value : object
+        Raw TOML value to validate; booleans are rejected.
+    key : str
+        Config key name used in error messages.
+
     Returns
     -------
     int
@@ -168,6 +194,13 @@ def _require_nonnegative_int(value: object, *, key: str) -> int:
 
 def _require_bool(value: object, *, key: str) -> bool:
     """Validate an explicit TOML boolean.
+
+    Parameters
+    ----------
+    value : object
+        Raw TOML value to validate.
+    key : str
+        Config key name used in error messages.
 
     Returns
     -------
@@ -329,7 +362,7 @@ def get_config() -> PyqtestConfig:
 
 
 def reset_config_cache() -> None:
-    """Clear the config cache (used by tests)."""
+    """Clear the per-cwd config cache (used by tests)."""
     cache = globals().get("pykissembed_CONFIG_CACHE")
     if isinstance(cache, dict):
         cache.clear()

@@ -18,7 +18,14 @@ _SPLIT_CLUSTER_COUNT = 2
 
 
 def _as_embeddings_cache(value: object) -> dict[str, list[float]]:
-    """Cast a dictionary to an embeddings cache.
+    """Validate a dictionary as an embeddings cache.
+
+    Any malformed entry discards the whole cache, returning ``{}``.
+
+    Parameters
+    ----------
+    value : object
+        Candidate ``embeddings`` mapping from the baselines dict.
 
     Returns
     -------
@@ -46,7 +53,14 @@ def _as_embeddings_cache(value: object) -> dict[str, list[float]]:
 
 
 def _as_config(value: object) -> dict[str, object]:
-    """Cast a dictionary to a configuration object.
+    """Validate a dictionary as a configuration object.
+
+    Non-string keys are dropped; non-dicts yield an empty mapping.
+
+    Parameters
+    ----------
+    value : object
+        Candidate ``config`` mapping from the baselines dict.
 
     Returns
     -------
@@ -61,6 +75,13 @@ def _as_config(value: object) -> dict[str, object]:
 
 def generate_file_split_proposal(file_path: Path, baselines: dict[str, object]) -> str | None:
     """Generate a proposal to split a file into two based on k-means clustering.
+
+    Parameters
+    ----------
+    file_path : Path
+        Source file to analyse.
+    baselines : dict[str, object]
+        Loaded baselines dict supplying cached embeddings and config.
 
     Returns
     -------

@@ -646,7 +646,7 @@ class TestComplexityMapScopes:
         monkeypatch.setattr(
             similarity_complexity,
             "_scan_complexity_directory",
-            lambda directory, **_kwargs: (calls.append(directory) or ({}, {})),
+            lambda directory, **_kwargs: calls.append(directory) or ({}, {}),
         )
 
         assert similarity_complexity.load_complexity_maps() == ({}, {})
@@ -853,8 +853,7 @@ class TestPopulateCombined:
         baselines = _complete_member_baselines("text1", "ast1")
         built = _populate_combined(baselines, [_combined_member_func("text1", "ast1")])
         assert built == 1
-        combined = baselines[REGISTRY.combined.cache_key]
-        assert isinstance(combined, dict)
+        combined = _get_embedding_cache(baselines, REGISTRY.combined.cache_key)
         assert "text1" in combined
 
     @staticmethod
@@ -893,8 +892,7 @@ class TestPopulateCombined:
             replace_text_hashes={"text1"},
         )
 
-        combined = baselines[REGISTRY.combined.cache_key]
-        assert isinstance(combined, dict)
+        combined = _get_embedding_cache(baselines, REGISTRY.combined.cache_key)
         assert set(combined) == {"text-old", "text1"}
         assert combined["text-old"] == [0.0, 1.0]
         assert built == 2
@@ -914,8 +912,7 @@ class TestPopulateCombined:
             replace_text_hashes={"text-old", "text1"},
         )
 
-        combined = baselines[REGISTRY.combined.cache_key]
-        assert isinstance(combined, dict)
+        combined = _get_embedding_cache(baselines, REGISTRY.combined.cache_key)
         assert set(combined) == {"text1"}
 
 

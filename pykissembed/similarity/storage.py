@@ -25,12 +25,19 @@ from pykissembed.similarity.embeddings import compute_combined_embedding, jina_c
 
 
 def _as_float_list(value: object, *, context: str) -> list[float]:
-    """Validate and return a numeric embedding vector as list[float].
+    """Validate and return a numeric embedding vector as ``list[float]``.
+
+    Parameters
+    ----------
+    value : object
+        Candidate embedding vector from untrusted JSON data.
+    context : str
+        Label used in error messages to identify the offending field.
 
     Returns
     -------
-        list[float]
-            Validated embedding vector.
+    list[float]
+        Validated embedding vector with components coerced to ``float``.
 
     Raises
     ------
@@ -52,10 +59,17 @@ def _as_float_list(value: object, *, context: str) -> list[float]:
 def _as_embedding_cache(value: object, *, context: str) -> dict[str, list[float]]:
     """Validate provider cache shape and return a typed mapping.
 
+    Parameters
+    ----------
+    value : object
+        Candidate provider cache from untrusted JSON data.
+    context : str
+        Label used in error messages to identify the offending field.
+
     Returns
     -------
-        dict[str, list[float]]
-            Typed provider cache mapping.
+    dict[str, list[float]]
+        Typed provider cache mapping.
 
     Raises
     ------
@@ -76,10 +90,17 @@ def _as_embedding_cache(value: object, *, context: str) -> dict[str, list[float]
 def _as_str_object_dict(value: object, *, context: str) -> dict[str, object]:
     """Validate a generic dict with string keys.
 
+    Parameters
+    ----------
+    value : object
+        Candidate mapping from untrusted JSON data.
+    context : str
+        Label used in error messages to identify the offending field.
+
     Returns
     -------
-        dict[str, object]
-            Typed dictionary with string keys.
+    dict[str, object]
+        The same mapping, validated to have string keys.
 
     Raises
     ------
@@ -99,8 +120,16 @@ def _as_str_object_dict(value: object, *, context: str) -> dict[str, object]:
 def _get_cache(baselines: dict[str, object], cache_key: str) -> dict[str, list[float]]:
     """Read a provider cache from baselines and validate its shape.
 
+    Parameters
+    ----------
+    baselines : dict[str, object]
+        Baselines dict holding the provider caches.
+    cache_key : str
+        Key of the provider cache to read; missing keys yield an empty dict.
+
     Returns
     -------
+    dict[str, list[float]]
         Provider cache mapping keyed by hash.
     """
     return _as_embedding_cache(baselines.get(cache_key, {}), context=cache_key)
@@ -109,9 +138,15 @@ def _get_cache(baselines: dict[str, object], cache_key: str) -> dict[str, list[f
 def _compress_embedding(vec: list[float]) -> str:
     """Compress a single embedding vector to base64-encoded zlib-compressed float32.
 
+    Parameters
+    ----------
+    vec : list[float]
+        Embedding vector to compress.
+
     Returns
     -------
-        Base64-encoded zlib-compressed float32 string.
+    str
+        Base64-encoded zlib-compressed float32 bytes (level 6).
     """
     # A 1536+ dim float vector as JSON decimal text (e.g. "0.0123456789,
     # -0.234567,...") is far larger than its binary form; packing to raw
@@ -125,9 +160,15 @@ def _compress_embedding(vec: list[float]) -> str:
 def _decompress_embedding(b64_str: str) -> list[float]:
     """Decompress a base64-encoded zlib-compressed float32 embedding.
 
+    Parameters
+    ----------
+    b64_str : str
+        String produced by :func:`_compress_embedding`.
+
     Returns
     -------
-        List of floats from the decompressed embedding.
+    list[float]
+        Floats decoded from the decompressed float32 buffer.
     """
     return np.frombuffer(zlib.decompress(base64.b64decode(b64_str)), dtype=np.float32).tolist()
 
@@ -135,9 +176,17 @@ def _decompress_embedding(b64_str: str) -> list[float]:
 def _load_compressed_embeddings(file_path: Path) -> dict[str, list[float]]:
     """Load and decompress embeddings from a compressed cache file.
 
+    Parameters
+    ----------
+    file_path : Path
+        Path to a compressed cache file written by
+        :func:`_save_compressed_embeddings`.
+
     Returns
     -------
-        Mapping of hash to embedding vector.
+    dict[str, list[float]]
+        Mapping of hash to embedding vector; empty when *file_path*
+        does not exist.
     """
     if not file_path.exists():
         return {}
@@ -147,7 +196,16 @@ def _load_compressed_embeddings(file_path: Path) -> dict[str, list[float]]:
 
 
 def _save_compressed_embeddings(embeddings: dict[str, list[float]], file_path: Path) -> None:
-    """Save embeddings to compressed cache file atomically."""
+    """Save embeddings to a compressed cache file atomically.
+
+    Parameters
+    ----------
+    embeddings : dict[str, list[float]]
+        Mapping of hash to embedding vector to persist.
+    file_path : Path
+        Destination path; written via :func:`_atomic_json_write` so readers
+        never observe a partially written file.
+    """
     compressed = {h: _compress_embedding(vec) for h, vec in embeddings.items()}
     _atomic_json_write(
         cast("dict[str, object]", compressed),
@@ -163,7 +221,25 @@ def _atomic_json_write(
     prefix: str = "tmp_",
     suffix: str = ".json",
 ) -> None:
-    """Write JSON data atomically using temp file + rename."""
+    """Write JSON data atomically using temp file + rename.
+
+    Parameters
+    ----------
+    data : dict[str, object]
+        JSON-serialisable payload to write (indented, keys sorted).
+    file_path : Path
+        Destination path; created (with parent directories) by renaming a
+        sibling temp file into place.
+    prefix : str, optional
+        Temp-file name prefix.
+    suffix : str, optional
+        Temp-file name suffix.
+
+    Notes
+    -----
+    Any serialisation or I/O error propagates to the caller after the
+    temp file is removed.
+    """
     # Writing to a sibling temp file and then renaming it into place is
     # atomic at the OS level (POSIX rename, Windows Path.replace): a
     # concurrent reader (e.g. another pytest-xdist worker) always sees
@@ -341,7 +417,16 @@ class EmbeddingRegistry:
     """
 
     def __init__(self, providers: list[ProviderEntry], combined_key: str) -> None:
-        """Initialize the storage object."""
+        """Index *providers* and record which entry is the combined provider.
+
+        Parameters
+        ----------
+        providers : list[ProviderEntry]
+            All provider entries to register.
+        combined_key : str
+            The ``cache_key`` identifying the combined provider among
+            *providers*.
+        """
         self._providers = tuple(providers)
         self._combined_key = combined_key
         self._by_cache_key: dict[str, ProviderEntry] = {p.cache_key: p for p in providers}
@@ -388,8 +473,14 @@ class EmbeddingRegistry:
     def by_cache_key(self, cache_key: str) -> ProviderEntry:
         """Look up a provider by its ``cache_key``.
 
+        Parameters
+        ----------
+        cache_key : str
+            Cache key of the provider to find.
+
         Returns
         -------
+        ProviderEntry
             The matching ``ProviderEntry``.
         """
         return self._by_cache_key[cache_key]
@@ -674,12 +765,17 @@ _DEFAULT_CONFIG = {
 def get_valid_hashes(baselines: dict[str, object]) -> tuple[set[str], set[str], dict[str, str]]:
     """Extract valid hashes from function_hashes.
 
+    Parameters
+    ----------
+    baselines : dict[str, object]
+        Baselines dict whose ``function_hashes`` entry is inspected.
+
     Returns
     -------
-        tuple: (valid_text_hashes, valid_ast_hashes, text_to_ast_map)
-            - valid_text_hashes: set of text_hash values
-            - valid_ast_hashes: set of hash (AST) values
-            - text_to_ast_map: mapping from text_hash -> hash for combined lookup
+    tuple[set[str], set[str], dict[str, str]]
+        ``(valid_text_hashes, valid_ast_hashes, text_to_ast_map)`` where
+        the sets collect the text and AST hashes of every entry and the
+        map maps each ``text_hash -> hash`` pair for combined lookup.
 
     Raises
     ------
@@ -729,7 +825,10 @@ def load_minimal_baselines() -> dict[str, object]:
 
     Returns
     -------
-        Baselines dict with config and function_hashes.
+    dict[str, object]
+        Baselines dict with default config plus ``function_hashes`` and any
+        extra top-level keys from the baselines JSON file. Embedding caches
+        are not loaded.
     """
     baselines: dict[str, object] = {
         "function_hashes": {},
@@ -759,8 +858,17 @@ def load_provider_embeddings(
     For combined provider, also loads the 10 cosine base providers and the 4 Jina
     raw query/passage caches if needed.
 
+    Parameters
+    ----------
+    baselines : dict[str, object]
+        Shared in-memory baseline state; populated in place when loading
+        from disk.
+    cache_key : str
+        Key selecting the provider cache to load.
+
     Returns
     -------
+    dict[str, list[float]]
         Mapping of hash to embedding vector for the requested provider.
     """
     with _SAVE_LOCK:
@@ -789,7 +897,10 @@ def load_baselines() -> dict[str, object]:
 
     Returns
     -------
-        Baselines dict with all embedding caches loaded.
+    dict[str, object]
+        Baselines dict with config, function_hashes, and every registered
+        embedding cache loaded from its compressed file (empty caches for
+        missing files).
     """
     baselines = load_minimal_baselines()
 
@@ -840,13 +951,29 @@ def merge_embedding_caches(
 
 
 def save_baselines(baselines: dict[str, object]) -> None:
-    """Save baselines atomically. Embeddings and function_hashes are saved separately."""
+    """Save baselines atomically under the storage lock.
+
+    Config-level keys, ``function_hashes``, and each embedding cache are
+    written as separate files; embeddings and function_hashes are saved
+    separately from the main baselines JSON.
+
+    Parameters
+    ----------
+    baselines : dict[str, object]
+        Shared in-memory baseline state to persist; not modified.
+    """
     with _SAVE_LOCK:
         _save_baselines_unlocked(baselines)
 
 
 def _save_baselines_unlocked(baselines: dict[str, object]) -> None:
-    """Save baselines to disk without holding the lock (caller must hold it)."""
+    """Save baselines to disk without holding the lock (caller must hold it).
+
+    Splits the shared dict into three groups — non-embedding top-level keys,
+    ``function_hashes`` (skipped when empty), and per-provider embedding
+    caches (each written only when non-empty) — and writes each group to
+    its own file atomically.
+    """
     baselines_file = _constants.baselines_file()
     baselines_file.parent.mkdir(parents=True, exist_ok=True)
 

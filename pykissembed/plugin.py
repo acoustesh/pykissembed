@@ -251,6 +251,14 @@ def _decide_injection(
 ) -> Path | str | None:
     """Decide which pykissembed check paths to append to ``config.args``.
 
+    Parameters
+    ----------
+    config : pytest.Config
+        Active pytest configuration; read for CLI options and raw
+        invocation arguments.
+    checks_dir : Path
+        Installed ``pykissembed/checks/`` directory.
+
     Returns
     -------
     Path | str | None
@@ -323,6 +331,11 @@ def _decide_injection(
 def _has_marker_filter(args: list[str]) -> bool:
     """Return whether raw pytest arguments contain a marker filter.
 
+    Parameters
+    ----------
+    args : list[str]
+        Raw pytest invocation arguments.
+
     Returns
     -------
     bool
@@ -333,6 +346,11 @@ def _has_marker_filter(args: list[str]) -> bool:
 
 def _has_keyword_filter(args: list[str]) -> bool:
     """Return whether raw pytest arguments contain a keyword filter.
+
+    Parameters
+    ----------
+    args : list[str]
+        Raw pytest invocation arguments.
 
     Returns
     -------
@@ -345,6 +363,11 @@ def _has_keyword_filter(args: list[str]) -> bool:
 def _has_deselect_filter(args: list[str]) -> bool:
     """Return whether raw pytest arguments contain a deselect filter.
 
+    Parameters
+    ----------
+    args : list[str]
+        Raw pytest invocation arguments.
+
     Returns
     -------
     bool
@@ -356,6 +379,11 @@ def _has_deselect_filter(args: list[str]) -> bool:
 def _first_node_id(args: list[str]) -> str | None:
     """Return the first NodeId from raw pytest arguments, if one is present.
 
+    Parameters
+    ----------
+    args : list[str]
+        Raw pytest invocation arguments.
+
     Returns
     -------
     str | None
@@ -366,6 +394,13 @@ def _first_node_id(args: list[str]) -> str | None:
 
 def _smart_restricted_target(node_id: str, checks_dir: Path) -> Path | str | None:
     """Map a check NodeId to its installed check file, preserving its selector.
+
+    Parameters
+    ----------
+    node_id : str
+        A pytest NodeId containing a ``::`` separator.
+    checks_dir : Path
+        Installed ``pykissembed/checks/`` directory.
 
     Returns
     -------
@@ -383,6 +418,13 @@ def _smart_restricted_target(node_id: str, checks_dir: Path) -> Path | str | Non
 def _check_candidate(path: str, checks_dir: Path) -> Path | None:
     """Return the installed check file identified by *path*'s stem, if any.
 
+    Parameters
+    ----------
+    path : str
+        File path portion of a NodeId (before the first ``::``).
+    checks_dir : Path
+        Installed ``pykissembed/checks/`` directory.
+
     Returns
     -------
     Path | None
@@ -397,6 +439,13 @@ def _check_candidate(path: str, checks_dir: Path) -> Path | None:
 
 def _is_same_file(path: str, candidate: Path) -> bool:
     """Return whether *path* resolves to the installed check *candidate*.
+
+    Parameters
+    ----------
+    path : str
+        User-supplied path argument.
+    candidate : Path
+        Installed check file to compare against.
 
     Returns
     -------
@@ -413,6 +462,13 @@ def _is_same_file(path: str, candidate: Path) -> bool:
 def _already_targets_check_file(args: list[str], checks_dir: Path) -> bool:
     """Return whether a bare path already selects an installed check file.
 
+    Parameters
+    ----------
+    args : list[str]
+        Raw pytest invocation arguments.
+    checks_dir : Path
+        Installed ``pykissembed/checks/`` directory.
+
     Returns
     -------
     bool
@@ -424,6 +480,13 @@ def _already_targets_check_file(args: list[str], checks_dir: Path) -> bool:
 def _is_installed_check_path(path: str, checks_dir: Path) -> bool:
     """Return whether *path* is a bare path to a known installed check file.
 
+    Parameters
+    ----------
+    path : str
+        Candidate argument (skipped when it names a selector or option).
+    checks_dir : Path
+        Installed ``pykissembed/checks/`` directory.
+
     Returns
     -------
     bool
@@ -433,7 +496,7 @@ def _is_installed_check_path(path: str, checks_dir: Path) -> bool:
         return False
     try:
         resolved = Path(path).resolve()
-    except OSError, ValueError:
+    except (OSError, ValueError):
         return False
     return (
         resolved.is_file()

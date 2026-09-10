@@ -29,6 +29,11 @@ Float32Array = npt.NDArray[np.float32]
 def _infer_dim(*caches: dict[str, list[float]]) -> int:
     """Return the embedding dimension from the first non-empty vector found.
 
+    Parameters
+    ----------
+    *caches : dict[str, list[float]]
+        Embedding caches searched in order for a first vector.
+
     Returns
     -------
     int
@@ -53,6 +58,17 @@ def _stacked(
     matrix stays index-aligned with *functions*; a zero vector yields zero
     similarity to every other function rather than shifting later indices.
 
+    Parameters
+    ----------
+    functions : list[FunctionInfo]
+        Functions defining the row order.
+    cache : dict[str, list[float]]
+        Embeddings keyed by the functions' hash attribute.
+    hash_field : str
+        ``FunctionInfo`` attribute used as the cache lookup key.
+    dim : int
+        Embedding dimension used for zero-row padding.
+
     Returns
     -------
     Float32Array
@@ -68,6 +84,11 @@ def _stacked(
 
 def _row_normalize(matrix: Float32Array) -> Float32Array:
     """Return *matrix* with each row scaled to unit L2 norm (zero rows unchanged).
+
+    Parameters
+    ----------
+    matrix : Float32Array
+        Matrix whose rows are normalised.
 
     Returns
     -------

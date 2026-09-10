@@ -27,9 +27,18 @@ def get_function_text(
 ) -> str:
     """Extract the full text of a function or class from source code.
 
+    Parameters
+    ----------
+    node : ast.FunctionDef | ast.AsyncFunctionDef | ast.ClassDef
+        AST node spanning the definition.
+    source : str
+        Full source text containing *node*.
+
     Returns
     -------
-        The full text of the function or class.
+    str
+        The full source text of the function or class, decorators through
+        final line.
     """
     lines = source.splitlines()
     start = node.lineno - 1
@@ -38,20 +47,33 @@ def get_function_text(
 
 
 def normalize_ast_tokens(node: ast.FunctionDef | ast.AsyncFunctionDef | ast.ClassDef) -> str:
-    """Produce deterministic token sequence from function or class AST.
+    """Produce a deterministic token sequence from a function or class AST.
+
+    Parameters
+    ----------
+    node : ast.FunctionDef | ast.AsyncFunctionDef | ast.ClassDef
+        AST node to normalise.
 
     Returns
     -------
-        The AST dump string.
+    str
+        The ``ast.dump`` string with field annotations and no source
+        attributes, so comments and formatting do not affect the result.
     """
     return ast.dump(node, annotate_fields=True, include_attributes=False)
 
 
 def compute_content_hash(text: str) -> str:
-    """Compute SHA256 hash of text content.
+    """Compute the SHA256 hash of text content.
+
+    Parameters
+    ----------
+    text : str
+        Text to hash (UTF-8 encoded).
 
     Returns
     -------
+    str
         The hex digest of the SHA256 hash.
     """
     return hashlib.sha256(text.encode("utf-8")).hexdigest()
@@ -68,9 +90,18 @@ def extract_text_for_embedding(
     - Docstring (if present)
     - All lines containing # comments (with their context)
 
+    Parameters
+    ----------
+    node : ast.FunctionDef | ast.AsyncFunctionDef | ast.ClassDef
+        AST node spanning the definition.
+    source : str
+        Full source text containing *node*.
+
     Returns
     -------
-        Text suitable for embedding (signature + docstring + comments)
+    str
+        Newline-joined signature, docstring, and comment lines suitable
+        for text embedding.
     """
     lines = source.splitlines()
     start_line = node.lineno  # 1-indexed
@@ -184,8 +215,16 @@ def _count_executable_lines(
 ) -> int:
     """Count lines of executable code, excluding docstrings, comments, and blanks.
 
+    Parameters
+    ----------
+    node : ast.FunctionDef | ast.AsyncFunctionDef | ast.ClassDef
+        AST node spanning the definition.
+    source : str
+        Full source text containing *node*.
+
     Returns
     -------
+    int
         The number of executable lines.
     """
     lines = source.splitlines()
@@ -227,8 +266,23 @@ def _extract_function_from_node(
 ) -> FunctionInfo | None:
     """Extract FunctionInfo from an AST node if it meets LOC threshold.
 
+    ``__init__`` methods are always skipped — they are often similar by
+    nature (initialization patterns).
+
+    Parameters
+    ----------
+    node : ast.FunctionDef | ast.AsyncFunctionDef | ast.ClassDef
+        Definition node to extract.
+    source : str
+        Full source text containing *node*.
+    file_name : str
+        Display name recorded for the file.
+    min_loc : int
+        Minimum executable lines for inclusion.
+
     Returns
     -------
+    FunctionInfo | None
         The extracted FunctionInfo, or None if the node is skipped.
     """
     # Skip __init__ methods - they are often similar by nature (initialization patterns)
@@ -282,9 +336,21 @@ def _extract_functions_from_source(
 ) -> list[FunctionInfo]:
     """Extract all functions/classes from source code meeting LOC threshold.
 
+    Parameters
+    ----------
+    source : str
+        Python source text to parse.
+    file_path : Path
+        Path used for error messages and display names.
+    min_loc : int
+        Minimum executable lines for inclusion.
+    file_prefix : str
+        Prefix prepended to each file's display name.
+
     Returns
     -------
-        List of extracted FunctionInfo objects.
+    list[FunctionInfo]
+        List of extracted FunctionInfo objects; empty when parsing fails.
     """
     functions: list[FunctionInfo] = []
     try:
@@ -328,6 +394,7 @@ def extract_function_infos(
 
     Returns
     -------
+    list[FunctionInfo]
         List of extracted FunctionInfo objects.
     """
     if directory is None:
@@ -376,6 +443,13 @@ def _extract_function_infos_from_directories(
     min_loc: int,
 ) -> list[FunctionInfo]:
     """Extract functions from explicit roots with project-stable file identities.
+
+    Parameters
+    ----------
+    directories : list[Path]
+        Explicit directories to scan recursively.
+    min_loc : int
+        Minimum executable lines for inclusion.
 
     Returns
     -------
@@ -435,8 +509,16 @@ def extract_all_function_infos(min_loc: int = 15) -> list[FunctionInfo]:
 def extract_function_infos_from_file(file_path: Path, min_loc: int = 1) -> list[FunctionInfo]:
     """Extract all functions from a single file meeting LOC threshold.
 
+    Parameters
+    ----------
+    file_path : Path
+        File to parse as UTF-8 text.
+    min_loc : int
+        Minimum executable lines for inclusion.
+
     Returns
     -------
+    list[FunctionInfo]
         List of extracted FunctionInfo objects.
     """
     source = file_path.read_text(encoding="utf-8")

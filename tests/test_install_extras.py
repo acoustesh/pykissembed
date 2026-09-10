@@ -7,6 +7,7 @@ package index for ordinary non-workspace dependencies.
 
 from __future__ import annotations
 
+import json
 import re
 import shutil
 import subprocess
@@ -37,6 +38,10 @@ FORBIDDEN_DISTRIBUTIONS = {
     "transformers",
     "triton",
     "voyageai",
+}
+TYPED_MARKERS = {
+    "pykissembed": "pykissembed/py.typed",
+    "pykissembed-cloud": "pykissembed_cloud/py.typed",
 }
 
 
@@ -117,6 +122,11 @@ def _make_consumer_project(tmp_path: Path, find_links: Path, extra: str | None) 
 
         [tool.uv]
         find-links = ["{find_links}"]
+
+        [tool.pyright]
+        typeCheckingMode = "strict"
+        venvPath = "."
+        venv = ".venv"
         """,
     )
     (project / "pyproject.toml").write_text(pyproject, encoding="utf-8")
@@ -174,6 +184,33 @@ def _run_metadata_probe(venv_python: Path) -> tuple[set[str], dict[str, str], se
     return distributions, entry_points, active
 
 
+def _run_typecheck_probe(project: Path, venv_python: Path) -> None:
+    """Require installed core and cloud packages to expose their inline types."""
+    probe = project / "typing_probe.py"
+    probe.write_text(
+        textwrap.dedent(
+            """
+            import pykissembed_cloud
+            from pykissembed.baselines_engine import locked_envelope
+            from pykissembed.config import get_config
+
+            TYPED_EXPORTS = (pykissembed_cloud.__version__, locked_envelope, get_config)
+            """,
+        ),
+        encoding="utf-8",
+    )
+    result = subprocess.run(  # ruff:ignore[subprocess-without-shell-equals-true]
+        [str(venv_python), "-m", "pyright", "--outputjson", str(probe)],
+        cwd=project,
+        capture_output=True,
+        text=True,
+        check=False,
+    )
+    report = json.loads(result.stdout)
+    assert report["generalDiagnostics"] == [], result.stdout
+    assert result.returncode == 0, result.stderr
+
+
 @pytest.mark.slow
 @pytest.mark.parametrize("extra", [None, "cloud", "all"])
 def test_isolated_install_is_cloud_only(tmp_path: Path, extra: str | None) -> None:
@@ -220,7 +257,7 @@ def test_extras_declared_in_pyproject() -> None:
 
 @pytest.mark.slow
 def test_built_wheel_metadata_is_cloud_only(tmp_path: Path) -> None:
-    """Every wheel advertises only the intended lightweight dependency graph."""
+    """Every wheel publishes its intended dependencies and inline typing marker."""
     wheels = tmp_path / "wheels"
     _build_wheels(wheels)
     for wheel in wheels.glob("*.whl"):
@@ -230,6 +267,23 @@ def test_built_wheel_metadata_is_cloud_only(tmp_path: Path) -> None:
             requirements = metadata.get_all("Requires-Dist", [])
             names = {_requirement_name(requirement) for requirement in requirements}
             _assert_no_forbidden(names)
+            distribution_name = metadata["Name"].lower().replace("_", "-")
+            marker = TYPED_MARKERS[distribution_name]
+            assert archive.read(marker) == b""
+
+
+@pytest.mark.slow
+def test_isolated_install_exposes_inline_types(tmp_path: Path) -> None:
+    """Strict Pyright accepts inline types from both installed distributions."""
+    wheels = tmp_path / "wheels"
+    _build_wheels(wheels)
+    consumer = _make_consumer_project(tmp_path, wheels, "cloud")
+    subprocess.run(  # ruff:ignore[subprocess-without-shell-equals-true]
+        [_require_uv(), "sync", "--no-dev"],
+        cwd=consumer,
+        check=True,
+    )
+    _run_typecheck_probe(consumer, _consumer_python(consumer))
 
 
 @pytest.mark.slow

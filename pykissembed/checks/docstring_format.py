@@ -119,6 +119,11 @@ def _run_ruff_docstring_check(target_dir: Path, *, root: Path) -> list[Docstring
 def _collect_docstring_violations(paths: list[Path]) -> list[DocstringViolation]:
     """Run the docstring check for every configured source path.
 
+    Parameters
+    ----------
+    paths : list[Path]
+        Configured source directories to check.
+
     Returns
     -------
     list[DocstringViolation]
@@ -134,6 +139,11 @@ def _group_violations_by_file(
     violations: list[DocstringViolation],
 ) -> dict[str, list[DocstringViolation]]:
     """Group docstring violations by their reported relative filename.
+
+    Parameters
+    ----------
+    violations : list[DocstringViolation]
+        Violations to group.
 
     Returns
     -------
@@ -151,6 +161,16 @@ def _classify_docstring_violations(
     per_file_baseline: dict[str, int],
 ) -> tuple[dict[str, int], list[str], list[str]]:
     """Return current counts, regressions, and new-file violations.
+
+    A file regresses when its violation count exceeds its baseline; files
+    with no stored baseline (count 0) are reported as new files instead.
+
+    Parameters
+    ----------
+    by_file : dict[str, list[DocstringViolation]]
+        Violations grouped by relative filename.
+    per_file_baseline : dict[str, int]
+        Stored per-file violation baselines.
 
     Returns
     -------
@@ -184,6 +204,11 @@ def _count_violations_by_code(
 ) -> dict[str, int]:
     """Count docstring violations by ruff diagnostic code.
 
+    Parameters
+    ----------
+    by_file : dict[str, list[DocstringViolation]]
+        Violations grouped by relative filename.
+
     Returns
     -------
     dict[str, int]
@@ -198,6 +223,13 @@ def _count_violations_by_code(
 
 def _violation_headers(heading: str, entries: list[str]) -> list[str]:
     """Return a heading and file-summary lines for a nonempty violation group.
+
+    Parameters
+    ----------
+    heading : str
+        Section heading emitted before the entries.
+    entries : list[str]
+        Multi-line violation messages; only their first lines are shown.
 
     Returns
     -------
@@ -216,6 +248,15 @@ def _docstring_failure_message(
     new_files: list[str],
 ) -> str:
     """Format the summary emitted for docstring-format baseline failures.
+
+    Parameters
+    ----------
+    by_file : dict[str, list[DocstringViolation]]
+        All violations grouped by relative filename.
+    regressions : list[str]
+        Formatted messages for files exceeding their baseline.
+    new_files : list[str]
+        Formatted messages for files with no baseline.
 
     Returns
     -------
