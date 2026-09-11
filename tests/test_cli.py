@@ -348,7 +348,13 @@ class TestCheck:
         captured: list[str] = []
 
         def _fake_call(cmd: list[str]) -> int:
-            """Record the argv pytest would receive and report success."""
+            """Record the argv pytest would receive and report success.
+
+            Returns
+            -------
+            int
+                Zero to represent a successful pytest invocation.
+            """
             captured.extend(cmd)
             return 0
 
@@ -365,7 +371,13 @@ class TestCheck:
         captured: list[str] = []
 
         def _fake_call(cmd: list[str]) -> int:
-            """Record the forwarded argv and report success."""
+            """Record the forwarded argv and report success.
+
+            Returns
+            -------
+            int
+                Zero to represent a successful pytest invocation.
+            """
             captured.extend(cmd)
             return 0
 

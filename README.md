@@ -385,7 +385,7 @@ Then:
 uv add "pykissembed[all]"
 uv lock --upgrade-package pykissembed --upgrade-package pykissembed-cloud
 uv sync
-uv run pykissembed --version    # should show 0.2.0
+uv run pykissembed --version    # should show 0.2.2
 ```
 
 After installing, configure a provider and run the suite. Missing embeddings

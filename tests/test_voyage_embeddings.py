@@ -10,6 +10,8 @@ import requests
 from pykissembed.similarity import embeddings
 from pykissembed.similarity.constants import VOYAGE_CODE_MODEL
 
+pytestmark = pytest.mark.usefixtures("_voyage_key")
+
 
 class _Response:
     """Minimal requests response double used by the Voyage transport tests."""
@@ -43,7 +45,7 @@ class _NoopEncoding:
         return ""
 
 
-@pytest.fixture(autouse=True)
+@pytest.fixture
 def _voyage_key(monkeypatch: pytest.MonkeyPatch) -> None:
     """Provide a non-secret Voyage key for request construction."""
     monkeypatch.setenv("VOYAGE_API_KEY", "voyage-test-key")

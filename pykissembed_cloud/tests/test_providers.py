@@ -27,13 +27,16 @@ if TYPE_CHECKING:
     from pykissembed_cloud.providers._openai_compat import OpenAICompatProvider
 
 
-@pytest.fixture(autouse=True)
+pytestmark = pytest.mark.usefixtures("_isolate_dotenv")
+
+
+@pytest.fixture
 def _isolate_dotenv(monkeypatch: pytest.MonkeyPatch) -> None:
     """Isolate every test from the real ``.env`` lookup.
 
     The repo has a real ``.env`` file at the project root. Without
     isolation, every test would trigger a filesystem walk that finds
-    it. The autouse fixture:
+    it. The module's ``usefixtures`` marker requests this fixture for every test:
 
     1. Resets the module-level "loaded once" cache.
     2. Stubs ``find_dotenv`` to return ``None`` by default, so no
@@ -297,7 +300,7 @@ class TestDotenv:
         monkeypatch: pytest.MonkeyPatch,
     ) -> None:
         """``find_dotenv`` walks up parent directories until it finds a ``.env``."""
-        # Note: the autouse ``_isolate_dotenv`` stub is *replaced* here
+        # Note: the module's ``_isolate_dotenv`` stub is *replaced* here
         # with the real implementation so the walk actually happens.
         monkeypatch.setattr(_dotenv, "find_dotenv", _real_find_dotenv)
         (tmp_path / ".env").write_text("OPENROUTER_API_KEY=test", encoding="utf-8")
