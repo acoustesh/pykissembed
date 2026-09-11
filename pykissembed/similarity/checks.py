@@ -7,8 +7,9 @@ adaptation is that imports use ``pykissembed.similarity.*`` instead of
 
 from __future__ import annotations
 
-from typing import TYPE_CHECKING, cast
+from typing import TYPE_CHECKING
 
+import numpy as np
 import pytest
 
 from pykissembed.similarity.constants import (
@@ -18,7 +19,6 @@ from pykissembed.similarity.constants import (
     JINA_TEXT_QUERY_EMBEDDINGS_FILE,
 )
 from pykissembed.similarity.embeddings import (
-    compute_cosine_similarity,
     get_cached_embedding,
     is_embedding_cache,
     is_str_object_dict,
@@ -27,7 +27,10 @@ from pykissembed.similarity.exclusions import is_excluded_pair
 from pykissembed.similarity.jina_similarity import Float32Array, build_symmetrized_matrix
 from pykissembed.similarity.pca import fit_pca, transform_embeddings_with_pca
 from pykissembed.similarity.populate_embeddings import cli_provider_name, get_provider_populator
-from pykissembed.similarity.refactor_index import get_refactor_priority_message
+from pykissembed.similarity.refactor_index import (
+    compute_similarity_matrix,
+    get_refactor_priority_message,
+)
 from pykissembed.similarity.storage import (
     REGISTRY,
     HashType,
@@ -277,132 +280,6 @@ def _format_neighbor_violation(func_a: FunctionInfo, similar_neighbors: list[Nei
     )
 
 
-def _check_against_others(
-    func_a: FunctionInfo,
-    func_a_idx: int,
-    functions: list[FunctionInfo],
-    threshold_pair: float,
-    threshold_neighbor: float,
-    excluded_file_pairs: list[list[str]] | None = None,
-    excluded_function_pairs: list[list[str]] | None = None,
-    class_function_proximity: int = 0,
-) -> tuple[list[str], list[NeighborEntry]]:
-    """Check one function against all later functions in the list.
-
-    Parameters
-    ----------
-    func_a : FunctionInfo
-        Function being compared; must have ``embedding`` set.
-    func_a_idx : int
-        Index of *func_a* in *functions*; used to restrict comparisons to
-        the upper triangle of the pair matrix.
-    functions : list[FunctionInfo]
-        All functions under comparison.
-    threshold_pair : float
-        Similarity at or above which a pair violation is recorded.
-    threshold_neighbor : float
-        Similarity at or above which *func_b* is counted as a neighbor of
-        *func_a*.
-    excluded_file_pairs : list[list[str]] | None
-        File pairs exempt from comparison.
-    excluded_function_pairs : list[list[str]] | None
-        Function pairs exempt from comparison.
-    class_function_proximity : int
-        Max source lines allowed between a class and a nearby function
-        when applying proximity exclusions.
-
-    Returns
-    -------
-    tuple[list[str], list[tuple]]
-        Tuple of (pair violation messages, neighbor entry tuples).
-    """
-    pair_violations: list[str] = []
-    neighbor_entries: list[NeighborEntry] = []
-    efp = excluded_file_pairs or []
-    efnp = excluded_function_pairs or []
-    embedding_a = func_a.embedding
-    if embedding_a is None:
-        return pair_violations, neighbor_entries
-
-    for j, func_b in enumerate(functions):
-        # `func_a_idx >= j` restricts comparisons to the upper triangle of
-        # the pair matrix: skips comparing a function to itself (j ==
-        # func_a_idx) and skips the (b, a) half of every pair already
-        # covered as (a, b) by an earlier outer-loop iteration.
-        if func_a_idx >= j or func_b.embedding is None:
-            continue
-
-        if is_excluded_pair(func_a, func_b, efp, efnp, class_function_proximity):
-            continue
-
-        similarity = compute_cosine_similarity(embedding_a, func_b.embedding)
-
-        if similarity >= threshold_pair:
-            pair_violations.append(_format_pair_violation(func_a, func_b, similarity))
-        if similarity >= threshold_neighbor:
-            neighbor_entries.append((func_b.file, func_b.name, func_b.start_line, similarity))
-
-    return pair_violations, neighbor_entries
-
-
-def _find_violations(
-    functions: list[FunctionInfo],
-    threshold_pair: float,
-    threshold_neighbor: float,
-    excluded_file_pairs: list[list[str]] | None = None,
-    excluded_function_pairs: list[list[str]] | None = None,
-    class_function_proximity: int = 0,
-) -> tuple[list[str], list[str]]:
-    """Find similarity violations among functions.
-
-    Parameters
-    ----------
-    functions : list[FunctionInfo]
-        Functions with hydrated ``embedding`` attributes; functions without
-        an embedding are skipped.
-    threshold_pair : float
-        Similarity at or above which a pair violation is recorded.
-    threshold_neighbor : float
-        Similarity at or above which a function counts as a neighbor;
-        neighbor violations require at least two neighbors.
-    excluded_file_pairs : list[list[str]] | None
-        File pairs exempt from comparison.
-    excluded_function_pairs : list[list[str]] | None
-        Function pairs exempt from comparison.
-    class_function_proximity : int
-        Max source lines allowed between a class and a nearby function
-        when applying proximity exclusions.
-
-    Returns
-    -------
-    tuple[list[str], list[str]]
-        Tuple of (pair violation messages, neighbor violation messages).
-    """
-    pair_violations: list[str] = []
-    neighbor_violations: list[str] = []
-
-    for i, func_a in enumerate(functions):
-        if func_a.embedding is None:
-            continue
-
-        func_pair_viols, similar_neighbors = _check_against_others(
-            func_a,
-            i,
-            functions,
-            threshold_pair,
-            threshold_neighbor,
-            excluded_file_pairs,
-            excluded_function_pairs,
-            class_function_proximity,
-        )
-        pair_violations.extend(func_pair_viols)
-
-        if len(similar_neighbors) >= _MIN_NEIGHBORS_FOR_VIOLATION:
-            neighbor_violations.append(_format_neighbor_violation(func_a, similar_neighbors))
-
-    return pair_violations, neighbor_violations
-
-
 def _report_violations(
     pair_violations: list[str],
     neighbor_violations: list[str],
@@ -523,7 +400,7 @@ def run_provider_similarity_checks(
         pytest.skip("Not enough functions to compare")
 
     # Lazy-load this provider's embeddings if not already loaded
-    load_provider_embeddings(baselines, provider.cache_key)
+    _ = load_provider_embeddings(baselines, provider.cache_key)
 
     # Load cached embeddings
     uncached = _load_cached_embeddings(baselines, functions, provider)
@@ -568,9 +445,11 @@ def run_provider_similarity_checks(
     excluded_file_pairs = _extract_excluded_pairs(config, "excluded_file_pairs")
     excluded_function_pairs = _extract_excluded_pairs(config, "excluded_function_pairs")
 
-    # Find and report violations
-    pair_violations, neighbor_violations = _find_violations(
+    # Score every pair with one normalise-and-matmul, then read the
+    # violations off that matrix.
+    pair_violations, neighbor_violations = _find_matrix_violations(
         functions,
+        compute_similarity_matrix(functions),
         threshold_pair,
         threshold_neighbor,
         excluded_file_pairs,
@@ -636,9 +515,10 @@ def _find_matrix_violations(
 ) -> tuple[list[str], list[str]]:
     """Find pair/neighbor violations from a precomputed similarity matrix.
 
-    Mirrors :func:`_find_violations` but reads scores from *similarity* (the
-    symmetrized Jina matrix) instead of computing per-pair cosine, so the same
-    upper-triangle pairing, exclusions, and message formatting apply.
+    Reads scores from *similarity* — a cosine matrix from
+    :func:`compute_similarity_matrix`, or the symmetrized Jina query/passage
+    matrix — so both provider paths share one set of thresholds, exclusions,
+    and message formatting.
 
     Parameters
     ----------
@@ -669,10 +549,19 @@ def _find_matrix_violations(
     neighbor_violations: list[str] = []
     efp = excluded_file_pairs or []
     efnp = excluded_function_pairs or []
+    # Exclusions only ever remove violations, so scoring first and excluding
+    # the survivors gives the same result as the reverse order while keeping
+    # the N^2 sweep inside NumPy — is_excluded_pair then runs on the handful
+    # of near-duplicates instead of on every pair.
+    min_threshold = min(threshold_pair, threshold_neighbor)
 
     for i, func_a in enumerate(functions):
         neighbor_entries: list[NeighborEntry] = []
-        for j in range(i + 1, len(functions)):
+        # Upper triangle only: each pair is scored once, as (i, j) with j > i.
+        # Ascending order is preserved, which _format_neighbor_violation relies
+        # on when it truncates to the first three neighbors.
+        candidates = np.flatnonzero(similarity[i, i + 1 :] >= min_threshold) + i + 1
+        for j in candidates:
             func_b = functions[j]
             if is_excluded_pair(func_a, func_b, efp, efnp, class_function_proximity):
                 continue
@@ -737,8 +626,8 @@ def run_jina_similarity_checks(
 
     query_key = f"{provider.name}_query_embeddings"
     passage_key = f"{provider.name}_passage_embeddings"
-    load_provider_embeddings(baselines, query_key)
-    load_provider_embeddings(baselines, passage_key)
+    _ = load_provider_embeddings(baselines, query_key)
+    _ = load_provider_embeddings(baselines, passage_key)
     query_cache = _extract_embedding_cache(baselines, query_key)
     passage_cache = _extract_embedding_cache(baselines, passage_key)
 
@@ -957,11 +846,17 @@ def _extract_excluded_pairs(config: dict[str, object], key: str) -> list[list[st
         msg = f"config['{key}'] must be a list"
         raise TypeError(msg)
     pairs: list[list[str]] = []
-    for pair in cast("list[object]", raw_pairs):
-        if not isinstance(pair, list) or not all(
-            isinstance(item, str) for item in cast("list[object]", pair)
-        ):
+    for pair in raw_pairs:
+        if not isinstance(pair, list):
             msg = f"config['{key}'] entries must be list[str]"
             raise TypeError(msg)
-        pairs.append(cast("list[str]", pair))
+        # Collect into a new list rather than relabelling `pair`: the copy is
+        # what makes the declared list[str] true, element by element.
+        validated: list[str] = []
+        for item in pair:
+            if not isinstance(item, str):
+                msg = f"config['{key}'] entries must be list[str]"
+                raise TypeError(msg)
+            validated.append(item)
+        pairs.append(validated)
     return pairs

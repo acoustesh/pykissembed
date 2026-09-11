@@ -24,15 +24,21 @@ import tempfile
 from dataclasses import dataclass
 from importlib import resources
 from pathlib import Path
-from typing import TYPE_CHECKING, Any, TypeGuard, cast
+from typing import TYPE_CHECKING, Any, TypeGuard
 
 from filelock import FileLock
 from jsonschema import Draft7Validator
 
 if TYPE_CHECKING:
-    from collections.abc import Iterator
+    from collections.abc import Iterator, Mapping, Sequence
 
     from jsonschema.protocols import Validator
+
+# Baseline payloads are JSON, so model them as JSON. Mapping/Sequence (not
+# dict/list) make the value slot covariant, which is what lets a caller store a
+# concrete dict[str, int] of baselines without re-labelling it, and lets the
+# whole payload be handed to jsonschema's validate() unchanged.
+type JsonValue = str | int | float | bool | Mapping[str, JsonValue] | Sequence[JsonValue] | None
 
 SCHEMA_VERSION = "1.0"
 _KIND_TO_FIELD: dict[str, str] = {}  # populated lazily
@@ -46,11 +52,19 @@ def _load_validator() -> Validator:
     -------
     Validator
         Compiled ``Draft7Validator`` for the v1 baseline schema.
+
+    Raises
+    ------
+    TypeError
+        If the packaged schema file does not contain a JSON object.
     """
     schema_text = (
         resources.files("pykissembed.schemas").joinpath("baselines.v1.json").read_text("utf-8")
     )
-    schema = cast("dict[str, Any]", json.loads(schema_text))
+    schema: object = json.loads(schema_text)
+    if not isinstance(schema, dict):
+        msg = "baselines.v1.json must contain a JSON object"
+        raise TypeError(msg)
     return Draft7Validator(schema)
 
 
@@ -71,7 +85,7 @@ class BaselineEnvelope:
     """
 
     kind: str
-    data: dict[str, Any]
+    data: dict[str, JsonValue]
     path: Path | None = None
 
 
@@ -121,7 +135,7 @@ def load_envelope(path: Path, kind: str) -> BaselineEnvelope:
         return BaselineEnvelope(kind=kind, data={}, path=path)
 
     with path.open(encoding="utf-8") as f:
-        raw = cast("object", json.load(f))
+        raw: object = json.load(f)
 
     if is_v1_envelope(raw):
         validator = _load_validator()
@@ -162,10 +176,11 @@ def save_envelope(path: Path, envelope: BaselineEnvelope) -> None:
     envelope : BaselineEnvelope
         Envelope whose ``kind`` and ``data`` are persisted.
 
-    Raises
-    ------
-    jsonschema.ValidationError
-        If the payload does not conform to the v1 baseline schema.
+    Notes
+    -----
+    A payload that does not conform to the v1 baseline schema raises
+    ``jsonschema.ValidationError`` during validation, before anything is
+    written.
     """
     payload = {
         "schema_version": SCHEMA_VERSION,
@@ -173,15 +188,15 @@ def save_envelope(path: Path, envelope: BaselineEnvelope) -> None:
         "data": envelope.data,
     }
     validator = _load_validator()
-    validator.validate(payload)  # raises on error
+    validator.validate(payload)  # raises ValidationError on error
 
     path.parent.mkdir(parents=True, exist_ok=True)
     fd, temp_path = tempfile.mkstemp(suffix=".json", prefix="baseline_", dir=path.parent)
     try:
         with os.fdopen(fd, "w", encoding="utf-8") as f:
             json.dump(payload, f, indent=2, sort_keys=True)
-            f.write("\n")
-        Path(temp_path).replace(path)
+            _ = f.write("\n")
+        _ = Path(temp_path).replace(path)
     except Exception:
         if Path(temp_path).exists():
             Path(temp_path).unlink()
@@ -257,3 +272,114 @@ def ratchet(data: dict[str, Any], current: dict[str, Any]) -> dict[str, Any]:
     # Add new keys (observed diagnostics that have no baseline yet)
     result.update({key: current_value for key, current_value in current.items() if key not in data})
     return result
+
+
+def read_int(data: Mapping[str, object], key: str, default: int) -> int:
+    """Read an integer baseline setting, falling back when absent or malformed.
+
+    Parameters
+    ----------
+    data
+        Baseline payload to read from.
+    key
+        Setting name.
+    default
+        Value returned when *key* is missing or not a plain integer.
+
+    Returns
+    -------
+    int
+        The stored integer, or *default*.
+    """
+    value = data.get(key, default)
+    # bool is a subclass of int; a True threshold is corruption, not a setting.
+    return value if isinstance(value, int) and not isinstance(value, bool) else default
+
+
+def read_float(data: Mapping[str, object], key: str, default: float) -> float:
+    """Read a float baseline setting, falling back when absent or malformed.
+
+    Parameters
+    ----------
+    data
+        Baseline payload to read from.
+    key
+        Setting name.
+    default
+        Value returned when *key* is missing or not numeric.
+
+    Returns
+    -------
+    float
+        The stored number as a float, or *default*.
+    """
+    value = data.get(key, default)
+    if isinstance(value, bool) or not isinstance(value, (int, float)):
+        return default
+    return float(value)
+
+
+def _numeric_entries(data: Mapping[str, object], key: str) -> Iterator[tuple[str, int | float]]:
+    """Yield the well-formed ``(name, number)`` pairs of a baseline sub-map.
+
+    Parameters
+    ----------
+    data
+        Baseline payload to read from.
+    key
+        Sub-map name.
+
+    Yields
+    ------
+    tuple[str, int | float]
+        Entries with a string name and a non-bool numeric value; everything
+        else in the sub-map is skipped, and a missing or non-mapping *key*
+        yields nothing.
+    """
+    raw = data.get(key)
+    if not isinstance(raw, dict):
+        return
+    for entry_key, entry_value in raw.items():
+        # bool is a subclass of int; a True baseline is corruption, not data.
+        if (
+            isinstance(entry_key, str)
+            and isinstance(entry_value, (int, float))
+            and not isinstance(entry_value, bool)
+        ):
+            yield entry_key, entry_value
+
+
+def read_int_map(data: Mapping[str, object], key: str) -> dict[str, int]:
+    """Read a ``{str: int}`` baseline sub-map, dropping malformed entries.
+
+    Parameters
+    ----------
+    data
+        Baseline payload to read from.
+    key
+        Sub-map name.
+
+    Returns
+    -------
+    dict[str, int]
+        Well-formed entries only; ``{}`` when *key* is absent or not a mapping.
+    """
+    return {key_: value for key_, value in _numeric_entries(data, key) if isinstance(value, int)}
+
+
+def read_float_map(data: Mapping[str, object], key: str) -> dict[str, float]:
+    """Read a ``{str: float}`` baseline sub-map, dropping malformed entries.
+
+    Parameters
+    ----------
+    data
+        Baseline payload to read from.
+    key
+        Sub-map name.
+
+    Returns
+    -------
+    dict[str, float]
+        Well-formed entries only; ``{}`` when *key* is absent or not a mapping.
+    """
+    return {key_: float(value) for key_, value in _numeric_entries(data, key)}

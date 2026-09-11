@@ -3,15 +3,21 @@
 from __future__ import annotations
 
 from dataclasses import dataclass, field
-from typing import TYPE_CHECKING, Protocol
+from typing import TYPE_CHECKING, Protocol, runtime_checkable
 
 if TYPE_CHECKING:
     import numpy as np
     from numpy.typing import NDArray
 
 
+@runtime_checkable
 class PCAModel(Protocol):
-    """Structural type for a fitted PCA model (sklearn or cuML)."""
+    """Structural type for a fitted PCA model (sklearn or cuML).
+
+    Runtime-checkable so callers can validate an estimator returned by an
+    untyped backend. ``isinstance`` against it proves ``transform`` exists,
+    not that its signature matches.
+    """
 
     def transform(self, X: NDArray[np.floating]) -> NDArray[np.floating]:  # ruff:ignore[invalid-argument-name]
         """Transform data using the fitted PCA model."""

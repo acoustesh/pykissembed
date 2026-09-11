@@ -33,7 +33,7 @@ from __future__ import annotations
 
 import copy
 from concurrent.futures import ThreadPoolExecutor, as_completed
-from typing import TYPE_CHECKING, cast
+from typing import TYPE_CHECKING
 
 import pytest
 
@@ -119,11 +119,13 @@ def _extract_str_list(config: dict[str, object], key: str) -> list[str]:
     if not isinstance(raw_value, list):
         msg = f"config['{key}'] must be list[str]"
         raise TypeError(msg)
-    raw_list = cast("list[object]", raw_value)
-    if not all(isinstance(item, str) for item in raw_list):
-        msg = f"config['{key}'] must be list[str]"
-        raise TypeError(msg)
-    return [item for item in raw_list if isinstance(item, str)]
+    validated: list[str] = []
+    for item in raw_value:
+        if not isinstance(item, str):
+            msg = f"config['{key}'] must be list[str]"
+            raise TypeError(msg)
+        validated.append(item)
+    return validated
 
 
 def _extract_float(config: dict[str, object], key: str, default: float) -> float:
@@ -315,7 +317,7 @@ def test_providers_parallel(
             provider = futures[future]
             try:
                 future.result()
-            except pytest.skip.Exception as exc:  # type: ignore[attr-defined]
+            except pytest.skip.Exception as exc:
                 skips[provider.label] = str(exc)
             # Unparenthesized multi-exception `except` (PEP 758, Python 3.14+)
             # — equivalent to `except (KeyboardInterrupt, SystemExit,

@@ -14,7 +14,7 @@ import tokenize
 from typing import TYPE_CHECKING
 
 from pykissembed.config import get_config
-from pykissembed.paths import _should_skip, resolve_paths
+from pykissembed.paths import resolve_paths, should_skip
 from pykissembed.similarity.types import FunctionInfo
 
 if TYPE_CHECKING:
@@ -408,7 +408,7 @@ def extract_function_infos(
         for p in glob_fn("*.py")
         if not p.name.startswith("__")
         and not any(p.name.startswith(ep) for ep in exclude_prefixes)
-        and not _should_skip(p)
+        and not should_skip(p)
         for fn in _extract_functions_from_source(
             p.read_text(encoding="utf-8"),
             p,
@@ -420,7 +420,7 @@ def extract_function_infos(
     ]
 
 
-def _collapse_scan_directories(directories: list[Path]) -> list[Path]:
+def collapse_scan_directories(directories: list[Path]) -> list[Path]:
     """Resolve, deduplicate, and collapse overlapping scan roots.
 
     Returns
@@ -429,15 +429,18 @@ def _collapse_scan_directories(directories: list[Path]) -> list[Path]:
         Roots in caller order, excluding a child when an earlier or later
         selected parent already covers it.
     """
+    # dict.fromkeys dedupes while preserving caller order, which set() would lose.
     resolved = list(dict.fromkeys(path.resolve() for path in directories))
     return [
         path
         for path in resolved
+        # `path != other` is load-bearing: is_relative_to is reflexive, so
+        # without it every path would match itself and the result would be empty.
         if not any(path != other and path.is_relative_to(other) for other in resolved)
     ]
 
 
-def _extract_function_infos_from_directories(
+def extract_function_infos_from_directories(
     directories: list[Path],
     *,
     min_loc: int,
@@ -459,7 +462,7 @@ def _extract_function_infos_from_directories(
     """
     root = get_config().root.resolve()
     all_functions: list[FunctionInfo] = []
-    for base_dir in _collapse_scan_directories(directories):
+    for base_dir in collapse_scan_directories(directories):
         rel_dir = (
             base_dir.relative_to(root).as_posix()
             if base_dir.is_relative_to(root)
@@ -475,6 +478,9 @@ def _extract_function_infos_from_directories(
             )
         )
 
+    # Overlapping roots can yield the same function twice. Keying on the
+    # project-relative file plus both content hashes means a genuine edit still
+    # counts as a distinct entry, while a re-scan of the same source collapses.
     unique: dict[tuple[str, str, int, str, str], FunctionInfo] = {}
     for function in all_functions:
         identity = (
@@ -484,7 +490,9 @@ def _extract_function_infos_from_directories(
             function.hash,
             function.text_hash,
         )
-        unique.setdefault(identity, function)
+        # setdefault keeps the first occurrence, so the earliest scan root in
+        # caller order determines the retained FunctionInfo.
+        _ = unique.setdefault(identity, function)
     return list(unique.values())
 
 
@@ -503,7 +511,7 @@ def extract_all_function_infos(min_loc: int = 15) -> list[FunctionInfo]:
     -------
         List of all extracted FunctionInfo objects.
     """
-    return _extract_function_infos_from_directories(resolve_paths(), min_loc=min_loc)
+    return extract_function_infos_from_directories(resolve_paths(), min_loc=min_loc)
 
 
 def extract_function_infos_from_file(file_path: Path, min_loc: int = 1) -> list[FunctionInfo]:

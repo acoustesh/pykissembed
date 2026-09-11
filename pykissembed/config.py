@@ -338,11 +338,17 @@ def _auto_detect(root: Path) -> PyqtestConfig:
     )
 
 
+# Keyed by cwd, not a single value: tests chdir into fixture repos and each
+# needs its own cached config, or one fixture's [tool.pykissembed] settings
+# leak into the next test that runs from a different directory.
+_CONFIG_CACHE: dict[str, PyqtestConfig] = {}
+
+
 def get_config() -> PyqtestConfig:
     """Return the cached pykissembed configuration.
 
     Uses :func:`load_config` on first call and caches the result in
-    ``pykissembed_CONFIG_CACHE`` for subsequent calls within the same process.
+    ``_CONFIG_CACHE`` for subsequent calls within the same process.
 
     Returns
     -------
@@ -354,15 +360,12 @@ def get_config() -> PyqtestConfig:
     # chdir into fixture repos need their own independent cached config —
     # a single shared cache would leak one fixture's [tool.pykissembed]
     # settings into the next test that runs from a different directory.
-    cache: dict[str, PyqtestConfig] = globals().setdefault("pykissembed_CONFIG_CACHE", {})  # type: ignore[var-annotated]
     key = str(Path.cwd())
-    if key not in cache:
-        cache[key] = load_config()
-    return cache[key]
+    if key not in _CONFIG_CACHE:
+        _CONFIG_CACHE[key] = load_config()
+    return _CONFIG_CACHE[key]
 
 
 def reset_config_cache() -> None:
     """Clear the per-cwd config cache (used by tests)."""
-    cache = globals().get("pykissembed_CONFIG_CACHE")
-    if isinstance(cache, dict):
-        cache.clear()
+    _CONFIG_CACHE.clear()

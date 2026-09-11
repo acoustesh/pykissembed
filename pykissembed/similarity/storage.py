@@ -16,11 +16,32 @@ import zlib
 from dataclasses import dataclass
 from enum import StrEnum
 from pathlib import Path
-from typing import cast
+from typing import TYPE_CHECKING
 
 import numpy as np
 
-from pykissembed.similarity import constants as _constants
+if TYPE_CHECKING:
+    from collections.abc import Mapping
+
+from pykissembed.similarity.constants import (
+    CODESTRAL_AST_EMBEDDINGS_FILE,
+    CODESTRAL_TEXT_EMBEDDINGS_FILE,
+    COMBINED_EMBEDDINGS_FILE,
+    GEMINI_AST_EMBEDDINGS_FILE,
+    GEMINI_TEXT_EMBEDDINGS_FILE,
+    JINA_AST_PASSAGE_EMBEDDINGS_FILE,
+    JINA_AST_QUERY_EMBEDDINGS_FILE,
+    JINA_TEXT_PASSAGE_EMBEDDINGS_FILE,
+    JINA_TEXT_QUERY_EMBEDDINGS_FILE,
+    OPENAI_AST_EMBEDDINGS_FILE,
+    OPENAI_TEXT_EMBEDDINGS_FILE,
+    QWEN_AST_EMBEDDINGS_FILE,
+    QWEN_TEXT_EMBEDDINGS_FILE,
+    VOYAGE_AST_EMBEDDINGS_FILE,
+    VOYAGE_TEXT_EMBEDDINGS_FILE,
+    baselines_file,
+    function_hashes_file,
+)
 from pykissembed.similarity.embeddings import compute_combined_embedding, jina_combined_members
 
 
@@ -48,7 +69,7 @@ def _as_float_list(value: object, *, context: str) -> list[float]:
         msg = f"{context} must be a list[float]"
         raise TypeError(msg)
     validated: list[float] = []
-    for idx, component in enumerate(cast("list[object]", value)):
+    for idx, component in enumerate(value):
         if not isinstance(component, (int, float)):
             msg = f"{context}[{idx}] must be numeric"
             raise TypeError(msg)
@@ -79,12 +100,17 @@ def _as_embedding_cache(value: object, *, context: str) -> dict[str, list[float]
     if not isinstance(value, dict):
         msg = f"{context} must be a dict[str, list[float]]"
         raise TypeError(msg)
-    for key, vec in cast("dict[object, object]", value).items():
+    for key, vec in value.items():
         if not isinstance(key, str):
             msg = f"{context} keys must be str"
             raise TypeError(msg)
-        _as_float_list(vec, context=f"{context}[{key!r}]")
-    return cast("dict[str, list[float]]", value)
+        # Write the coerced vector back rather than discarding it: JSON stores a
+        # whole-number component as int, so without this the returned mapping
+        # would not actually match its declared list[float] type. Mutating in
+        # place (not rebuilding) keeps the identity callers rely on — see
+        # merge_embedding_caches, which updates the returned dict.
+        value[key] = _as_float_list(vec, context=f"{context}[{key!r}]")
+    return value
 
 
 def _as_str_object_dict(value: object, *, context: str) -> dict[str, object]:
@@ -110,11 +136,11 @@ def _as_str_object_dict(value: object, *, context: str) -> dict[str, object]:
     if not isinstance(value, dict):
         msg = f"{context} must be a dict"
         raise TypeError(msg)
-    for key in cast("dict[object, object]", value):
+    for key in value:
         if not isinstance(key, str):
             msg = f"{context} keys must be str"
             raise TypeError(msg)
-    return cast("dict[str, object]", value)
+    return value
 
 
 def _get_cache(baselines: dict[str, object], cache_key: str) -> dict[str, list[float]]:
@@ -208,7 +234,7 @@ def _save_compressed_embeddings(embeddings: dict[str, list[float]], file_path: P
     """
     compressed = {h: _compress_embedding(vec) for h, vec in embeddings.items()}
     _atomic_json_write(
-        cast("dict[str, object]", compressed),
+        compressed,
         file_path,
         prefix="emb_",
         suffix=".json.zlib",
@@ -216,7 +242,9 @@ def _save_compressed_embeddings(embeddings: dict[str, list[float]], file_path: P
 
 
 def _atomic_json_write(
-    data: dict[str, object],
+    # Mapping, not dict: the value type is covariant here, so a dict[str, str]
+    # of compressed vectors can be passed without re-labelling it.
+    data: Mapping[str, object],
     file_path: Path,
     prefix: str = "tmp_",
     suffix: str = ".json",
@@ -249,8 +277,8 @@ def _atomic_json_write(
     try:
         with os.fdopen(fd, "w", encoding="utf-8") as f:
             json.dump(data, f, indent=2, sort_keys=True)
-            f.write("\n")
-        Path(temp_path).replace(file_path)
+            _ = f.write("\n")
+        _ = Path(temp_path).replace(file_path)
     except Exception:
         if Path(temp_path).exists():
             Path(temp_path).unlink()
@@ -617,7 +645,7 @@ REGISTRY = EmbeddingRegistry(
             name="openai_text",
             label="OpenAI-Text",
             cache_key="openai_text_embeddings",
-            file_path=_constants.OPENAI_TEXT_EMBEDDINGS_FILE,
+            file_path=OPENAI_TEXT_EMBEDDINGS_FILE,
             hash_type=HashType.TEXT,
             default_threshold_pair=0.86,
             default_threshold_neighbor=0.80,
@@ -626,7 +654,7 @@ REGISTRY = EmbeddingRegistry(
             name="openai_ast",
             label="OpenAI-AST",
             cache_key="openai_ast_embeddings",
-            file_path=_constants.OPENAI_AST_EMBEDDINGS_FILE,
+            file_path=OPENAI_AST_EMBEDDINGS_FILE,
             hash_type=HashType.AST,
             default_threshold_pair=0.86,
             default_threshold_neighbor=0.80,
@@ -635,7 +663,7 @@ REGISTRY = EmbeddingRegistry(
             name="codestral_text",
             label="Codestral-Text",
             cache_key="codestral_text_embeddings",
-            file_path=_constants.CODESTRAL_TEXT_EMBEDDINGS_FILE,
+            file_path=CODESTRAL_TEXT_EMBEDDINGS_FILE,
             hash_type=HashType.TEXT,
             default_threshold_pair=0.97,
             default_threshold_neighbor=0.93,
@@ -644,7 +672,7 @@ REGISTRY = EmbeddingRegistry(
             name="codestral_ast",
             label="Codestral-AST",
             cache_key="codestral_ast_embeddings",
-            file_path=_constants.CODESTRAL_AST_EMBEDDINGS_FILE,
+            file_path=CODESTRAL_AST_EMBEDDINGS_FILE,
             hash_type=HashType.AST,
             default_threshold_pair=0.97,
             default_threshold_neighbor=0.93,
@@ -653,7 +681,7 @@ REGISTRY = EmbeddingRegistry(
             name="voyage_text",
             label="Voyage-Text",
             cache_key="voyage_text_embeddings",
-            file_path=_constants.VOYAGE_TEXT_EMBEDDINGS_FILE,
+            file_path=VOYAGE_TEXT_EMBEDDINGS_FILE,
             hash_type=HashType.TEXT,
             default_threshold_pair=0.95,
             default_threshold_neighbor=0.90,
@@ -662,7 +690,7 @@ REGISTRY = EmbeddingRegistry(
             name="voyage_ast",
             label="Voyage-AST",
             cache_key="voyage_ast_embeddings",
-            file_path=_constants.VOYAGE_AST_EMBEDDINGS_FILE,
+            file_path=VOYAGE_AST_EMBEDDINGS_FILE,
             hash_type=HashType.AST,
             default_threshold_pair=0.95,
             default_threshold_neighbor=0.90,
@@ -671,7 +699,7 @@ REGISTRY = EmbeddingRegistry(
             name="gemini_text",
             label="Gemini-Text",
             cache_key="gemini_text_embeddings",
-            file_path=_constants.GEMINI_TEXT_EMBEDDINGS_FILE,
+            file_path=GEMINI_TEXT_EMBEDDINGS_FILE,
             hash_type=HashType.TEXT,
             default_threshold_pair=0.90,
             default_threshold_neighbor=0.85,
@@ -680,7 +708,7 @@ REGISTRY = EmbeddingRegistry(
             name="gemini_ast",
             label="Gemini-AST",
             cache_key="gemini_ast_embeddings",
-            file_path=_constants.GEMINI_AST_EMBEDDINGS_FILE,
+            file_path=GEMINI_AST_EMBEDDINGS_FILE,
             hash_type=HashType.AST,
             default_threshold_pair=0.90,
             default_threshold_neighbor=0.85,
@@ -689,7 +717,7 @@ REGISTRY = EmbeddingRegistry(
             name="qwen_text",
             label="Qwen-Text",
             cache_key="qwen_text_embeddings",
-            file_path=_constants.QWEN_TEXT_EMBEDDINGS_FILE,
+            file_path=QWEN_TEXT_EMBEDDINGS_FILE,
             hash_type=HashType.TEXT,
             default_threshold_pair=0.90,
             default_threshold_neighbor=0.85,
@@ -698,7 +726,7 @@ REGISTRY = EmbeddingRegistry(
             name="qwen_ast",
             label="Qwen-AST",
             cache_key="qwen_ast_embeddings",
-            file_path=_constants.QWEN_AST_EMBEDDINGS_FILE,
+            file_path=QWEN_AST_EMBEDDINGS_FILE,
             hash_type=HashType.AST,
             default_threshold_pair=0.90,
             default_threshold_neighbor=0.85,
@@ -710,7 +738,7 @@ REGISTRY = EmbeddingRegistry(
             name="jina_text_query",
             label="Jina-Text-Query",
             cache_key="jina_text_query_embeddings",
-            file_path=_constants.JINA_TEXT_QUERY_EMBEDDINGS_FILE,
+            file_path=JINA_TEXT_QUERY_EMBEDDINGS_FILE,
             hash_type=HashType.TEXT,
             standalone=True,
         ),
@@ -718,7 +746,7 @@ REGISTRY = EmbeddingRegistry(
             name="jina_text_passage",
             label="Jina-Text-Passage",
             cache_key="jina_text_passage_embeddings",
-            file_path=_constants.JINA_TEXT_PASSAGE_EMBEDDINGS_FILE,
+            file_path=JINA_TEXT_PASSAGE_EMBEDDINGS_FILE,
             hash_type=HashType.TEXT,
             standalone=True,
         ),
@@ -726,7 +754,7 @@ REGISTRY = EmbeddingRegistry(
             name="jina_ast_query",
             label="Jina-AST-Query",
             cache_key="jina_ast_query_embeddings",
-            file_path=_constants.JINA_AST_QUERY_EMBEDDINGS_FILE,
+            file_path=JINA_AST_QUERY_EMBEDDINGS_FILE,
             hash_type=HashType.AST,
             standalone=True,
         ),
@@ -734,7 +762,7 @@ REGISTRY = EmbeddingRegistry(
             name="jina_ast_passage",
             label="Jina-AST-Passage",
             cache_key="jina_ast_passage_embeddings",
-            file_path=_constants.JINA_AST_PASSAGE_EMBEDDINGS_FILE,
+            file_path=JINA_AST_PASSAGE_EMBEDDINGS_FILE,
             hash_type=HashType.AST,
             standalone=True,
         ),
@@ -742,7 +770,7 @@ REGISTRY = EmbeddingRegistry(
             name="combined",
             label="Combined",
             cache_key="combined_embeddings",
-            file_path=_constants.COMBINED_EMBEDDINGS_FILE,
+            file_path=COMBINED_EMBEDDINGS_FILE,
             hash_type=HashType.TEXT,
             default_threshold_pair=0.88,
             default_threshold_neighbor=0.82,
@@ -792,9 +820,8 @@ def get_valid_hashes(baselines: dict[str, object]) -> tuple[set[str], set[str], 
 
     for entry in function_hashes.values():
         if isinstance(entry, dict):
-            entry_obj = cast("dict[object, object]", entry)
-            ast_hash_obj = entry_obj.get("hash")
-            text_hash_obj = entry_obj.get("text_hash")
+            ast_hash_obj = entry.get("hash")
+            text_hash_obj = entry.get("text_hash")
             if isinstance(ast_hash_obj, str) and ast_hash_obj:
                 ast_hash = ast_hash_obj
                 valid_ast_hashes.add(ast_hash)
@@ -835,12 +862,12 @@ def load_minimal_baselines() -> dict[str, object]:
         "config": _DEFAULT_CONFIG.copy(),
     }
 
-    baselines_file = _constants.baselines_file()
-    if baselines_file.exists():
-        with baselines_file.open(encoding="utf-8") as f:
+    baselines_path = baselines_file()
+    if baselines_path.exists():
+        with baselines_path.open(encoding="utf-8") as f:
             baselines.update(json.load(f))
 
-    hashes_file = _constants.function_hashes_file()
+    hashes_file = function_hashes_file()
     if hashes_file.exists():
         with hashes_file.open(encoding="utf-8") as f:
             baselines["function_hashes"] = json.load(f)
@@ -974,8 +1001,8 @@ def _save_baselines_unlocked(baselines: dict[str, object]) -> None:
     caches (each written only when non-empty) — and writes each group to
     its own file atomically.
     """
-    baselines_file = _constants.baselines_file()
-    baselines_file.parent.mkdir(parents=True, exist_ok=True)
+    baselines_path = baselines_file()
+    baselines_path.parent.mkdir(parents=True, exist_ok=True)
 
     # Snapshot cache values without removing them from the shared dictionary.
     # The provider similarity checks populate several cache keys concurrently;
@@ -1000,11 +1027,11 @@ def _save_baselines_unlocked(baselines: dict[str, object]) -> None:
     }
 
     # Save main baselines
-    _atomic_json_write(main_baselines, baselines_file, prefix="baselines_")
+    _atomic_json_write(main_baselines, baselines_path, prefix="baselines_")
 
     # Save function_hashes
     if function_hashes:
-        _atomic_json_write(function_hashes, _constants.function_hashes_file(), prefix="hashes_")
+        _atomic_json_write(function_hashes, function_hashes_file(), prefix="hashes_")
 
     # Save embedding caches using provider mapping
     for cache_key, file_path in REGISTRY.files.items():

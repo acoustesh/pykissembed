@@ -12,6 +12,7 @@ from pathlib import Path
 from textwrap import dedent
 
 import numpy as np
+import numpy.typing as npt
 import pytest
 
 from pykissembed.plugin import (
@@ -20,9 +21,10 @@ from pykissembed.plugin import (
 )
 from pykissembed.similarity import checks as similarity_checks
 from pykissembed.similarity import complexity as similarity_complexity
+from pykissembed.similarity import refactor_index
 from pykissembed.similarity.ast_helpers import (
-    _extract_function_infos_from_directories,
     compute_content_hash,
+    extract_function_infos_from_directories,
     extract_function_infos_from_file,
 )
 from pykissembed.similarity.checks import OPENAI_TEXT_PROVIDER
@@ -39,17 +41,17 @@ from pykissembed.similarity.jina_similarity import build_symmetrized_matrix
 from pykissembed.similarity.populate_embeddings import (
     _JINA_TEXT_CFG,
     _PROVIDER_MAP,
+    PopulationError,
     _get_embedding_cache,
     _jina_texts,
     _populate_all,
     _populate_combined,
     _populate_combined_scoped,
-    _populate_embeddings,
-    _PopulationError,
     _resolve_scan_directories,
     _scoped_text_hashes,
     _synchronize_scanned_function_hashes,
     cli_provider_name,
+    populate_provider_embeddings,
 )
 from pykissembed.similarity.refactor_index import (
     compute_max_similarities,
@@ -181,8 +183,10 @@ class TestSimilarityProximityExclusions:
         )
         test_class.embedding = [1.0, 0.0]
         test_method.embedding = [1.0, 0.0]
-        assert similarity_checks._find_violations(  # ruff:ignore[private-member-access]
-            [test_class, test_method],
+        pair = [test_class, test_method]
+        assert similarity_checks._find_matrix_violations(  # ruff:ignore[private-member-access]
+            pair,
+            compute_similarity_matrix(pair),
             threshold_pair=0.9,
             threshold_neighbor=0.8,
             class_function_proximity=1,
@@ -392,7 +396,7 @@ class TestExtractFunctionInfosFromFile:
         (external / "module.py").write_text("def external():\n    return 1\n", encoding="utf-8")
         monkeypatch.chdir(project)
 
-        functions = _extract_function_infos_from_directories([external], min_loc=1)
+        functions = extract_function_infos_from_directories([external], min_loc=1)
 
         assert [function.name for function in functions] == ["external"]
         assert functions[0].file == f"{external}/module.py"
@@ -412,9 +416,9 @@ class TestExtractFunctionInfosFromFile:
         (package / "module.py").write_text("def target():\n    return 1\n", encoding="utf-8")
         monkeypatch.chdir(tmp_path)
 
-        from_child = _extract_function_infos_from_directories([package], min_loc=1)
-        from_parent = _extract_function_infos_from_directories([tmp_path], min_loc=1)
-        overlapping = _extract_function_infos_from_directories([tmp_path, package], min_loc=1)
+        from_child = extract_function_infos_from_directories([package], min_loc=1)
+        from_parent = extract_function_infos_from_directories([tmp_path], min_loc=1)
+        overlapping = extract_function_infos_from_directories([tmp_path, package], min_loc=1)
 
         assert [function.file for function in from_child] == ["pkg/module.py"]
         assert [function.file for function in from_parent] == ["pkg/module.py"]
@@ -956,7 +960,7 @@ class TestPopulateEmbeddingsCommand:
             lambda *_args: pytest.fail("cached-only inspection reached a provider"),
         )
 
-        _populate_embeddings("openai-text", cached_only=True)
+        populate_provider_embeddings("openai-text", cached_only=True)
 
         assert baselines["function_hashes"] == original_hashes
         assert "1 of 1 scanned functions missing" in capsys.readouterr().out
@@ -984,8 +988,8 @@ class TestPopulateEmbeddingsCommand:
             lambda _baselines: pytest.fail("failed population must not write"),
         )
 
-        with pytest.raises(_PopulationError, match="OPENAI_API_KEY"):
-            _populate_embeddings("openai-text")
+        with pytest.raises(PopulationError, match="OPENAI_API_KEY"):
+            populate_provider_embeddings("openai-text")
 
     @staticmethod
     def test_scan_path_validation_and_overlap_collapse(tmp_path: Path) -> None:
@@ -996,14 +1000,14 @@ class TestPopulateEmbeddingsCommand:
         child.mkdir(parents=True)
         other.mkdir()
 
-        with pytest.raises(_PopulationError, match="existing directories"):
+        with pytest.raises(PopulationError, match="existing directories"):
             _resolve_scan_directories([tmp_path / "missing"])
 
         source_file = parent / "module.py"
         source_file.write_text("def f():\n    return 1\n", encoding="utf-8")
-        with pytest.raises(_PopulationError, match=r"module\.py"):
+        with pytest.raises(PopulationError, match=r"module\.py"):
             _resolve_scan_directories([parent, source_file])
-        with pytest.raises(_PopulationError, match="missing-child"):
+        with pytest.raises(PopulationError, match="missing-child"):
             _resolve_scan_directories([parent, parent / "missing-child"])
 
         assert _resolve_scan_directories([child, parent, other, child]) == [parent, other]
@@ -1024,7 +1028,7 @@ class TestPopulateEmbeddingsCommand:
         )
         (source / "module.py").write_text("def current():\n    return 1\n", encoding="utf-8")
         monkeypatch.chdir(tmp_path)
-        functions = _extract_function_infos_from_directories([source], min_loc=1)
+        functions = extract_function_infos_from_directories([source], min_loc=1)
         current_key = "src/module.py:current:1"
         baselines: dict[str, object] = {
             "function_hashes": {
@@ -1082,7 +1086,7 @@ class TestPopulateEmbeddingsCommand:
         monkeypatch.setattr(module, "_combined_member_gaps", lambda *_args: {"openai-text": 1})
         monkeypatch.setattr(module, "_missing_for_provider", lambda *_args: 1)
 
-        with pytest.raises(_PopulationError, match="No requested cache work"):
+        with pytest.raises(PopulationError, match="No requested cache work"):
             _populate_all({}, [_combined_member_func("text", "ast")])
 
     @staticmethod
@@ -1425,6 +1429,288 @@ class TestRefactorIndex:
         assert result[0] == pytest.approx(expected)
 
 
+class TestMaxSimilaritiesExcluding:
+    """``_max_similarities_excluding`` must equal zeroing every excluded cell.
+
+    The check walks each row from its top score instead of testing all N^2/2
+    pairs; these tests pin it to the exhaustive version it replaced.
+    """
+
+    @staticmethod
+    def zero_then_max(
+        matrix: npt.NDArray[np.float32],
+        functions: list[FunctionInfo],
+        excluded_file_pairs: list[list[str]],
+        excluded_function_pairs: list[list[str]],
+        proximity: int,
+    ) -> npt.NDArray[np.float64]:
+        """Zero every excluded cell, then take each row's maximum.
+
+        Parameters
+        ----------
+        matrix : npt.NDArray[np.float32]
+            Similarity matrix; copied rather than modified.
+        functions : list[FunctionInfo]
+            Functions indexing the matrix.
+        excluded_file_pairs : list[list[str]]
+            File pairs whose similarities are zeroed.
+        excluded_function_pairs : list[list[str]]
+            Function pairs whose similarities are zeroed.
+        proximity : int
+            Max source lines between a class and a nearby function.
+
+        Returns
+        -------
+        npt.NDArray[np.float64]
+            Per-function maximum similarity.
+        """
+        zeroed = matrix.copy()
+        for i, func_a in enumerate(functions):
+            for j in range(i + 1, len(functions)):
+                if is_excluded_pair(
+                    func_a,
+                    functions[j],
+                    excluded_file_pairs,
+                    excluded_function_pairs,
+                    proximity,
+                ):
+                    zeroed[i, j] = np.float32(0.0)
+                    zeroed[j, i] = np.float32(0.0)
+        return compute_max_similarities(zeroed)
+
+    @staticmethod
+    def make(count: int, seed: int) -> list[FunctionInfo]:
+        """Build same-file class/method neighbours with duplicated embeddings.
+
+        Every other function is a class and shares its predecessor's vector, so
+        a row's highest-scoring pairs are the excluded ones — the case that
+        forces the row walk to iterate rather than stop immediately.
+
+        Parameters
+        ----------
+        count : int
+            Number of functions to build.
+        seed : int
+            Seed for the random generator.
+
+        Returns
+        -------
+        list[FunctionInfo]
+            The generated functions.
+        """
+        rng = np.random.default_rng(seed)
+        funcs: list[FunctionInfo] = []
+        for i in range(count):
+            previous = funcs[-1].embedding if funcs else None
+            vec = (
+                previous
+                if i % 3 == 0 and previous is not None
+                else [float(v) for v in rng.standard_normal(24)]
+            )
+            funcs.append(
+                FunctionInfo(
+                    name=f"f{i}",
+                    file=f"m{i % 3}.py",
+                    start_line=i * 6,
+                    end_line=i * 6 + 4,
+                    loc=4,
+                    hash=f"h{i}",
+                    text="class C:\n    pass" if i % 2 else "def f():\n    pass",
+                    embedding=vec,
+                )
+            )
+        return funcs
+
+    @staticmethod
+    @pytest.mark.parametrize(
+        ("excluded_file_pairs", "excluded_function_pairs", "proximity"),
+        [
+            ([], [], 0),
+            ([], [], 2),
+            ([["m0", "m1"]], [], 0),
+            ([], [["f1", "f2"]], 0),
+            ([["m0", "m2"]], [["f3", "f4"]], 2),
+        ],
+    )
+    def test_matches_exhaustive_zeroing(
+        excluded_file_pairs: list[list[str]],
+        excluded_function_pairs: list[list[str]],
+        proximity: int,
+    ) -> None:
+        """Row walk and exhaustive zeroing give identical maxima."""
+        cls = TestMaxSimilaritiesExcluding
+        funcs = cls.make(60, seed=13)
+        matrix = compute_similarity_matrix(funcs)
+        expected = cls.zero_then_max(
+            matrix, funcs, excluded_file_pairs, excluded_function_pairs, proximity
+        )
+        actual = refactor_index._max_similarities_excluding(  # ruff:ignore[private-member-access]
+            matrix, funcs, excluded_file_pairs, excluded_function_pairs, proximity
+        )
+        assert np.array_equal(actual, expected)
+
+    @staticmethod
+    def test_does_not_mutate_the_matrix() -> None:
+        """The similarity matrix is read, never zeroed in place."""
+        cls = TestMaxSimilaritiesExcluding
+        funcs = cls.make(20, seed=4)
+        matrix = compute_similarity_matrix(funcs)
+        before = matrix.copy()
+        refactor_index._max_similarities_excluding(  # ruff:ignore[private-member-access]
+            matrix, funcs, [], [], 2
+        )
+        assert np.array_equal(matrix, before)
+
+
+class TestFindViolationsMatchesPerPairCosine:
+    """``_find_matrix_violations`` must agree with a naive per-pair cosine sweep.
+
+    The check runs on one normalise-and-matmul instead of ~N^2/2 calls to
+    ``compute_cosine_similarity``; these tests pin the two to the same output.
+    """
+
+    @staticmethod
+    def make(count: int, dim: int, seed: int, *, missing: bool = False) -> list[FunctionInfo]:
+        """Build functions with random embeddings and planted near-duplicates.
+
+        Parameters
+        ----------
+        count : int
+            Number of functions to build.
+        dim : int
+            Embedding width.
+        seed : int
+            Seed for the random generator.
+        missing : bool
+            When True, every fifth function is left without an embedding.
+
+        Returns
+        -------
+        list[FunctionInfo]
+            The generated functions.
+        """
+        rng = np.random.default_rng(seed)
+        funcs: list[FunctionInfo] = []
+        for i in range(count):
+            vec = [float(v) for v in rng.standard_normal(dim)]
+            previous = funcs[-1].embedding if funcs else None
+            if i % 4 == 3 and previous is not None:
+                # A planted near-duplicate, so the thresholds actually fire.
+                vec = [
+                    v + float(n)
+                    for v, n in zip(previous, rng.standard_normal(dim) * 0.01, strict=True)
+                ]
+            funcs.append(
+                FunctionInfo(
+                    name=f"f{i}",
+                    file=f"mod{i % 3}.py",
+                    start_line=i * 10,
+                    end_line=i * 10 + 8,
+                    loc=8,
+                    hash=f"h{i}",
+                    text="class C:" if i % 5 == 0 else "def f():",
+                    embedding=None if missing and i % 5 == 4 else vec,
+                )
+            )
+        return funcs
+
+    @staticmethod
+    def reference(
+        functions: list[FunctionInfo],
+        threshold_pair: float,
+        threshold_neighbor: float,
+        proximity: int,
+    ) -> tuple[list[str], list[str]]:
+        """Score every pair one at a time, the way the check used to.
+
+        Parameters
+        ----------
+        functions : list[FunctionInfo]
+            Functions under comparison.
+        threshold_pair : float
+            Similarity at or above which a pair violation is recorded.
+        threshold_neighbor : float
+            Similarity at or above which a function counts as a neighbor.
+        proximity : int
+            Max source lines between a class and a nearby function.
+
+        Returns
+        -------
+        tuple[list[str], list[str]]
+            Tuple of (pair violation messages, neighbor violation messages).
+        """
+        pair_violations: list[str] = []
+        neighbor_violations: list[str] = []
+        for i, func_a in enumerate(functions):
+            if func_a.embedding is None:
+                continue
+            entries: list[tuple[str, str, int, float]] = []
+            for j, func_b in enumerate(functions):
+                if i >= j or func_b.embedding is None:
+                    continue
+                if is_excluded_pair(func_a, func_b, [], [], proximity):
+                    continue
+                score = compute_cosine_similarity(func_a.embedding, func_b.embedding)
+                if score >= threshold_pair:
+                    pair_violations.append(
+                        similarity_checks._format_pair_violation(  # ruff:ignore[private-member-access]
+                            func_a, func_b, score
+                        )
+                    )
+                if score >= threshold_neighbor:
+                    entries.append((func_b.file, func_b.name, func_b.start_line, score))
+            if len(entries) >= 2:
+                neighbor_violations.append(
+                    similarity_checks._format_neighbor_violation(  # ruff:ignore[private-member-access]
+                        func_a, entries
+                    )
+                )
+        return pair_violations, neighbor_violations
+
+    @staticmethod
+    @pytest.mark.parametrize("missing", [False, True])
+    @pytest.mark.parametrize(("threshold_pair", "threshold_neighbor"), [(0.9, 0.8), (0.3, 0.2)])
+    @pytest.mark.parametrize("proximity", [0, 1])
+    def test_matches_reference(
+        *,
+        missing: bool,
+        threshold_pair: float,
+        threshold_neighbor: float,
+        proximity: int,
+    ) -> None:
+        """Matrix path and per-pair sweep produce identical violations."""
+        cls = TestFindViolationsMatchesPerPairCosine
+        funcs = cls.make(40, 16, seed=7, missing=missing)
+        expected = cls.reference(funcs, threshold_pair, threshold_neighbor, proximity)
+        actual = similarity_checks._find_matrix_violations(  # ruff:ignore[private-member-access]
+            funcs,
+            compute_similarity_matrix(funcs),
+            threshold_pair,
+            threshold_neighbor,
+            class_function_proximity=proximity,
+        )
+        assert actual == expected
+
+    @staticmethod
+    @pytest.mark.parametrize("count", [0, 1])
+    def test_degenerate_inputs(count: int) -> None:
+        """Zero or one function yields no violations and no exception."""
+        cls = TestFindViolationsMatchesPerPairCosine
+        funcs = cls.make(count, 8, seed=3)
+        assert similarity_checks._find_matrix_violations(  # ruff:ignore[private-member-access]
+            funcs, compute_similarity_matrix(funcs), 0.1, 0.1
+        ) == ([], [])
+
+    @staticmethod
+    def test_pca_width_embeddings_with_a_missing_one() -> None:
+        """A missing embedding pads to the real width, not a fixed 3072."""
+        cls = TestFindViolationsMatchesPerPairCosine
+        funcs = cls.make(6, 5, seed=11, missing=True)
+        assert any(f.embedding is None for f in funcs)
+        matrix = compute_similarity_matrix(funcs)
+        assert matrix.shape == (6, 6)
+
+
 class TestSimilarityConfiguration:
     """Tests for plumbing ``similarity.json`` configuration through checks."""
 
@@ -1482,7 +1768,7 @@ class TestSimilarityConfiguration:
             captured["refactor_index_top_n"] = refactor_index_top_n
 
         monkeypatch.setattr(similarity_checks, "fit_pca", fake_fit_pca)
-        monkeypatch.setattr(similarity_checks, "_find_violations", lambda *_: (["pair"], []))
+        monkeypatch.setattr(similarity_checks, "_find_matrix_violations", lambda *_: (["pair"], []))
         monkeypatch.setattr(similarity_checks, "_report_violations", fake_report_violations)
 
         functions = [

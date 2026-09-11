@@ -10,7 +10,7 @@ from __future__ import annotations
 import ast
 import contextlib
 import importlib
-from typing import TYPE_CHECKING, TypedDict, cast
+from typing import TYPE_CHECKING, TypedDict
 
 import pytest
 
@@ -18,24 +18,23 @@ if TYPE_CHECKING:
     from collections.abc import Callable, Iterator
     from pathlib import Path
 
-from pykissembed.baselines_engine import BaselineEnvelope, locked_envelope, save_envelope
+from pykissembed.baselines_engine import (
+    BaselineEnvelope,
+    locked_envelope,
+    read_float,
+    read_float_map,
+    read_int,
+    read_int_map,
+    save_envelope,
+)
 from pykissembed.config import get_config
 from pykissembed.paths import iter_py_files as _iter_py_files
 from pykissembed.paths import warn_non_utf8
 from pykissembed.wrapper_analysis import (
-    _decorator_name,
+    decorator_name,
     find_wrapper_candidates,
     parse_source_files,
 )
-
-
-class _BaselineConfig(TypedDict, total=False):
-    """Subset of ``[tool.pykissembed]`` that the complexity check uses."""
-
-    cc_threshold: int
-    cog_threshold: int
-    mi_threshold: float
-    max_missing_docstrings: int
 
 
 class _DefaultConfig(TypedDict):
@@ -92,7 +91,7 @@ def _load_callable(module_name: str, attribute: str) -> Callable[..., object] | 
     value = getattr(module, attribute, None)
     if not callable(value):
         return None
-    return cast("Callable[..., object]", value)
+    return value
 
 
 def _extract_items_with_docstrings(
@@ -154,7 +153,7 @@ def _decorator_tail(decorator: ast.expr) -> str | None:
     """
     if not isinstance(decorator, ast.Name | ast.Attribute):
         return None
-    name = _decorator_name(decorator)
+    name = decorator_name(decorator)
     return None if name is None else name.rsplit(".", maxsplit=1)[-1]
 
 
@@ -200,9 +199,8 @@ def _get_cc(file_path: Path) -> list[tuple[str, int, int]]:
         return []
     if not isinstance(raw_blocks_raw, list):
         return []
-    raw_blocks = cast("list[object]", raw_blocks_raw)
     out: list[tuple[str, int, int]] = []
-    for block in raw_blocks:
+    for block in raw_blocks_raw:
         name = getattr(block, "name", None)
         lineno = getattr(block, "lineno", None)
         complexity = getattr(block, "complexity", None)
@@ -227,7 +225,7 @@ def _get_cog(file_path: Path) -> list[tuple[str, int, int]]:
         # import avoids its cost for test runs that never touch cognitive
         # complexity (e.g. -m complexity without the COG check selected).
         from complexipy import (  # ruff:ignore[import-outside-top-level]
-            file_complexity as _fc,  # type: ignore[import-untyped]
+            file_complexity as _fc,
         )
     except ImportError:
         return []
@@ -237,9 +235,8 @@ def _get_cog(file_path: Path) -> list[tuple[str, int, int]]:
         return []
     if not hasattr(result, "functions"):
         return []
-    fn_list = cast("list[object]", result.functions)
     out: list[tuple[str, int, int]] = []
-    for f in fn_list:
+    for f in result.functions:
         name = getattr(f, "name", None)
         line = getattr(f, "line_start", None)
         complexity = getattr(f, "complexity", None)
@@ -403,8 +400,11 @@ def _locked_envelope() -> Iterator[tuple[Path, BaselineEnvelope]]:
     config = get_config()
     path = config.baseline_path / "complexity.json"
     with locked_envelope(path, kind="complexity") as envelope:
+        # _DEFAULT_CONFIG values are int/float, both JsonValue members; the
+        # TypedDict's .items() widens them to object, so re-narrow before storing.
         for key, default in _DEFAULT_CONFIG.items():
-            envelope.data.setdefault(key, default)
+            if isinstance(default, (int, float)):
+                _ = envelope.data.setdefault(key, default)
         yield path, envelope
 
 
@@ -418,11 +418,10 @@ class TestDocstringCoverage:
         if not pykissembed_paths:
             pytest.skip("No [tool.pykissembed] paths configured")
         with _locked_envelope() as (baseline_file, envelope):
-            config_data = cast("_BaselineConfig", envelope.data)
-            max_missing_default = config_data.get(
-                "max_missing_docstrings", _DEFAULT_CONFIG["max_missing_docstrings"]
+            max_missing_default = read_int(
+                envelope.data, "max_missing_docstrings", _DEFAULT_CONFIG["max_missing_docstrings"]
             )
-            per_dir_baseline = cast("dict[str, int]", envelope.data.get("per_dir", {}))
+            per_dir_baseline = read_int_map(envelope.data, "per_dir")
 
             all_missing: dict[str, list[str]] = {}
             violations: list[str] = []
@@ -468,7 +467,7 @@ class TestLineCount:
         if not pykissembed_paths:
             pytest.skip("No [tool.pykissembed] paths configured")
         with _locked_envelope() as (baseline_file, envelope):
-            line_baselines = cast("dict[str, int]", envelope.data.get("line_baselines", {}))
+            line_baselines = read_int_map(envelope.data, "line_baselines")
             violations: list[str] = []
             current_counts: dict[str, int] = {}
             for base_dir in pykissembed_paths:
@@ -508,15 +507,12 @@ class TestCyclomaticComplexity:
         if not pykissembed_paths:
             pytest.skip("No [tool.pykissembed] paths configured")
         with _locked_envelope() as (baseline_file, envelope):
-            config_data = cast("_BaselineConfig", envelope.data)
-            cc_threshold = config_data.get(
-                "cc_threshold", _DEFAULT_CONFIG["cc_threshold"]
+            cc_threshold = read_int(envelope.data, "cc_threshold", _DEFAULT_CONFIG["cc_threshold"])
+            cog_threshold = read_int(
+                envelope.data, "cog_threshold", _DEFAULT_CONFIG["cog_threshold"]
             )
-            cog_threshold = config_data.get(
-                "cog_threshold", _DEFAULT_CONFIG["cog_threshold"]
-            )
-            cc_baselines = cast("dict[str, int]", envelope.data.get("cc_baselines", {}))
-            cog_baselines = cast("dict[str, int]", envelope.data.get("cog_baselines", {}))
+            cc_baselines = read_int_map(envelope.data, "cc_baselines")
+            cog_baselines = read_int_map(envelope.data, "cog_baselines")
             cc_violations: list[str] = []
             cog_violations: list[str] = []
             current_cc: dict[str, int] = {}
@@ -617,10 +613,10 @@ class TestMaintainabilityIndex:
         if not pykissembed_paths:
             pytest.skip("No [tool.pykissembed] paths configured")
         with _locked_envelope() as (baseline_file, envelope):
-            threshold = cast("_BaselineConfig", envelope.data).get(
-                "mi_threshold", _DEFAULT_CONFIG["mi_threshold"]
+            threshold = read_float(
+                envelope.data, "mi_threshold", _DEFAULT_CONFIG["mi_threshold"]
             )
-            mi_baselines = cast("dict[str, float]", envelope.data.get("mi_baselines", {}))
+            mi_baselines = read_float_map(envelope.data, "mi_baselines")
             violations: list[str] = []
             current_mi: dict[str, float] = {}
             for base_dir in pykissembed_paths:

@@ -7,18 +7,18 @@ from __future__ import annotations
 
 import ast
 from dataclasses import dataclass
-from typing import TYPE_CHECKING, cast
+from typing import TYPE_CHECKING
 
 import pytest
-from radon.raw import analyze  # type: ignore[import-untyped]
+from radon.raw import analyze
 
-from pykissembed.baselines_engine import locked_envelope, save_envelope
+from pykissembed.baselines_engine import locked_envelope, read_float, save_envelope
 from pykissembed.config import get_config
 from pykissembed.paths import iter_py_files as _iter_py_files
 from pykissembed.paths import warn_non_utf8
 
 if TYPE_CHECKING:
-    from collections.abc import Iterator
+    from collections.abc import Iterator, Mapping
     from pathlib import Path
 
 DEFAULT_MIN_DENSITY = 5.0
@@ -170,6 +170,36 @@ def _file_stats(file_path: Path) -> CommentStats:
     return _comment_density_from_source(source)
 
 
+def _read_per_file_bounds(data: Mapping[str, object]) -> dict[str, dict[str, float]]:
+    """Read the per-file density bounds, dropping malformed entries.
+
+    Parameters
+    ----------
+    data
+        Baseline payload holding the ``per_file`` sub-map.
+
+    Returns
+    -------
+    dict[str, dict[str, float]]
+        File path -> bound name -> value, for well-formed entries only.
+    """
+    raw = data.get("per_file")
+    if not isinstance(raw, dict):
+        return {}
+    bounds: dict[str, dict[str, float]] = {}
+    for path_key, entry in raw.items():
+        if not isinstance(path_key, str) or not isinstance(entry, dict):
+            continue
+        bounds[path_key] = {
+            bound: float(number)
+            for bound, number in entry.items()
+            if isinstance(bound, str)
+            and isinstance(number, (int, float))
+            and not isinstance(number, bool)
+        }
+    return bounds
+
+
 def _iter_density_files(base_dir: Path, consumer_tests: Path) -> Iterator[Path]:
     """Yield density candidates outside the consumer's root tests directory.
 
@@ -206,15 +236,15 @@ class TestCommentDensity:
         config = get_config()
         baseline_file = config.baseline_path / "comment_density.json"
         with locked_envelope(baseline_file, kind="density") as envelope:
-            min_density = float(envelope.data.get("min_density", DEFAULT_MIN_DENSITY))
-            max_density = float(envelope.data.get("max_density", DEFAULT_MAX_DENSITY))
-            aggregate_min_density = float(
-                envelope.data.get("aggregate_min_density", DEFAULT_MIN_DENSITY),
+            min_density = read_float(envelope.data, "min_density", DEFAULT_MIN_DENSITY)
+            max_density = read_float(envelope.data, "max_density", DEFAULT_MAX_DENSITY)
+            aggregate_min_density = read_float(
+                envelope.data, "aggregate_min_density", DEFAULT_MIN_DENSITY
             )
-            aggregate_max_density = float(
-                envelope.data.get("aggregate_max_density", DEFAULT_MAX_DENSITY),
+            aggregate_max_density = read_float(
+                envelope.data, "aggregate_max_density", DEFAULT_MAX_DENSITY
             )
-            per_file = cast("dict[str, dict[str, float]]", envelope.data.get("per_file", {}))
+            per_file = _read_per_file_bounds(envelope.data)
 
             violations: list[str] = []
             current: dict[str, float] = {}

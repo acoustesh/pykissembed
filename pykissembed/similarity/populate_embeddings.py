@@ -28,9 +28,9 @@ import pytest
 from pykissembed.config import get_config as _get_config
 from pykissembed.paths import resolve_paths as _resolve_paths
 from pykissembed.similarity.ast_helpers import (
-    _collapse_scan_directories,
-    _extract_function_infos_from_directories,
+    collapse_scan_directories,
     extract_all_function_infos,
+    extract_function_infos_from_directories,
 )
 from pykissembed.similarity.constants import (
     JINA_CODE2CODE_PASSAGE,
@@ -61,7 +61,7 @@ type Baselines = dict[str, object]
 type PopulateFn = Callable[[Baselines, list[FunctionInfo]], int]
 
 
-class _PopulationError(RuntimeError):
+class PopulationError(RuntimeError):
     """Raised when an explicit cache-population request cannot be completed."""
 
 
@@ -592,7 +592,7 @@ def _populate_combined_scoped(
             "pykissembed populate-embeddings --provider <name>",
         )
 
-    REGISTRY.rebuild_combined(baselines)
+    _ = REGISTRY.rebuild_combined(baselines)
     combined = _get_embedding_cache(baselines, REGISTRY.combined.cache_key)
     if previous_combined is not None:
         replacement_hashes = replace_text_hashes or set()
@@ -639,7 +639,7 @@ def _synchronize_scanned_function_hashes(
     before current functions are inserted.
     """
     root = _get_config().root.resolve()
-    scopes = _collapse_scan_directories(directories)
+    scopes = collapse_scan_directories(directories)
     function_hashes = _get_function_hashes(baselines)
     current_keys = {f"{func.file}:{func.name}:{func.start_line}" for func in functions}
     for key in list(function_hashes):
@@ -674,7 +674,7 @@ def _scoped_text_hashes(baselines: Baselines, directories: list[_Path]) -> set[s
         Text hashes exclusive to the selected directories.
     """
     root = _get_config().root.resolve()
-    scopes = _collapse_scan_directories(directories)
+    scopes = collapse_scan_directories(directories)
     scoped: set[str] = set()
     unscoped: set[str] = set()
     for key, entry in _get_function_hashes(baselines).items():
@@ -751,7 +751,7 @@ def _require_canonical_provider(provider: str) -> None:
 
     Raises
     ------
-    _PopulationError
+    PopulationError
         If *provider* is local, ambiguous, or unknown.
     """
     if provider in {*_ALL_PROVIDERS, "all"}:
@@ -762,7 +762,7 @@ def _require_canonical_provider(provider: str) -> None:
             "'openai-text', 'openai-ast', 'gemini-text', or 'gemini-ast'. "
             "Existing local JSONL caches are left untouched."
         )
-        raise _PopulationError(msg)
+        raise PopulationError(msg)
     family = provider.partition("-")[0]
     if provider == family and family in _PROVIDER_CREDENTIALS:
         env_var, _ = _PROVIDER_CREDENTIALS[family]
@@ -772,10 +772,10 @@ def _require_canonical_provider(provider: str) -> None:
             f"Provider {provider!r} is ambiguous. Choose {text_variant!r} or "
             f"{ast_variant!r}; both use {env_var}."
         )
-        raise _PopulationError(msg)
+        raise PopulationError(msg)
     choices = ", ".join((*_ALL_PROVIDERS, "all"))
     msg = f"Unknown provider {provider!r}. Canonical choices: {choices}."
-    raise _PopulationError(msg)
+    raise PopulationError(msg)
 
 
 def _provider_cache_keys(provider: str) -> tuple[str, ...]:
@@ -905,7 +905,7 @@ def _populate_all(
 
     Raises
     ------
-    _PopulationError
+    PopulationError
         If caches are incomplete and no requested work could be completed.
     """
     total_new = 0
@@ -935,7 +935,7 @@ def _populate_all(
         _missing_for_provider(baselines, functions, provider) for provider in _ALL_PROVIDERS
     )
     if unresolved and any_missing and not performed:
-        raise _PopulationError(
+        raise PopulationError(
             "No requested cache work could be completed. " + "; ".join(unresolved),
         )
     return total_new, performed
@@ -951,7 +951,7 @@ def _resolve_scan_directories(paths: list[_Path] | None) -> list[_Path] | None:
 
     Raises
     ------
-    _PopulationError
+    PopulationError
         If an explicit path is missing or not a directory.
     """
     if paths is None:
@@ -959,14 +959,14 @@ def _resolve_scan_directories(paths: list[_Path] | None) -> list[_Path] | None:
     resolved = [path.resolve() for path in paths]
     invalid = [path for path in resolved if not path.is_dir()]
     if invalid:
-        raise _PopulationError(
+        raise PopulationError(
             "Embedding scan paths must be existing directories: "
             + ", ".join(str(path) for path in invalid),
         )
-    return _collapse_scan_directories(resolved)
+    return collapse_scan_directories(resolved)
 
 
-def _populate_embeddings(
+def populate_provider_embeddings(
     provider: str = "all",
     *,
     paths: list[_Path] | None = None,
@@ -985,7 +985,7 @@ def _populate_embeddings(
 
     Raises
     ------
-    _PopulationError
+    PopulationError
         If the provider or paths are invalid, credentials are unavailable for
         a selected incomplete provider, or population leaves it incomplete.
     """
@@ -996,7 +996,7 @@ def _populate_embeddings(
     functions = (
         extract_all_function_infos(min_loc=1)
         if directories is None
-        else _extract_function_infos_from_directories(directories, min_loc=1)
+        else extract_function_infos_from_directories(directories, min_loc=1)
     )
     print(f"Found {len(functions)} functions in codebase")  # ruff:ignore[print]
 
@@ -1029,7 +1029,7 @@ def _populate_embeddings(
         if member_gaps:
             details = ", ".join(f"{name}: {count}" for name, count in member_gaps.items())
             msg = f"Cannot rebuild combined; member caches are incomplete: {details}"
-            raise _PopulationError(msg)
+            raise PopulationError(msg)
         total_new = _populate_combined_scoped(
             baselines,
             functions,
@@ -1039,7 +1039,7 @@ def _populate_embeddings(
     else:
         total_new, error = _attempt_network_provider(provider, baselines, functions)
         if error:
-            raise _PopulationError(error)
+            raise PopulationError(error)
         performed = total_new > 0
 
     if total_new > 0 or hashes_changed or performed:
@@ -1058,7 +1058,7 @@ def populate_embeddings(provider: str = "all") -> None:
     This compatibility wrapper retains the original Python API. Use the public
     CLI to select explicit scan paths or inspect caches without network calls.
     """
-    _populate_embeddings(provider)
+    populate_provider_embeddings(provider)
 
 
 def main() -> None:
@@ -1068,19 +1068,19 @@ def main() -> None:
         formatter_class=argparse.RawDescriptionHelpFormatter,
         epilog=__doc__,
     )
-    parser.add_argument(
+    _ = parser.add_argument(
         "--provider",
         required=True,
         help="Canonical provider variant to populate, or 'all'",
     )
-    parser.add_argument(
+    _ = parser.add_argument(
         "--path",
         action="append",
         type=_Path,
         dest="paths",
         help="Directory to scan; repeat for multiple paths",
     )
-    parser.add_argument(
+    _ = parser.add_argument(
         "--cached-only",
         action="store_true",
         help="Inspect cache coverage without API calls or writes",
@@ -1088,8 +1088,8 @@ def main() -> None:
     args = parser.parse_args()
 
     try:
-        _populate_embeddings(args.provider, paths=args.paths, cached_only=args.cached_only)
-    except _PopulationError as exc:
+        populate_provider_embeddings(args.provider, paths=args.paths, cached_only=args.cached_only)
+    except PopulationError as exc:
         parser.error(str(exc))
     except KeyboardInterrupt:
         sys.exit(1)

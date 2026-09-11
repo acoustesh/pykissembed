@@ -9,6 +9,7 @@ from __future__ import annotations
 
 import warnings
 from importlib import metadata
+from typing import override
 
 from pykissembed.providers.base import Provider
 
@@ -92,15 +93,34 @@ class ProviderRegistry:
         return self._providers.get(name)
 
     def __contains__(self, name: object) -> bool:
-        """Return whether a provider is registered under string *name*."""
+        """Return whether a provider is registered under string *name*.
+
+        Returns
+        -------
+        bool
+            True when *name* is a string naming a registered provider.
+        """
         return isinstance(name, str) and name in self._providers
 
     def __len__(self) -> int:
-        """Return the number of registered providers."""
+        """Return the number of registered providers.
+
+        Returns
+        -------
+        int
+            Count of registered providers.
+        """
         return len(self._providers)
 
+    @override
     def __repr__(self) -> str:
-        """Return a summary listing registered provider names."""
+        """Return a summary listing registered provider names.
+
+        Returns
+        -------
+        str
+            Debug representation naming every registered provider.
+        """
         names = ", ".join(sorted(self._providers))
         return f"<ProviderRegistry providers={names!r}>"
 
@@ -146,7 +166,7 @@ def get(name: str) -> Provider | None:
     # is falsy, which doubles as the "discovery hasn't run yet" check
     # without a separate boolean flag to keep in sync.
     if not REGISTRY:
-        discover_all()
+        _ = discover_all()
     return REGISTRY.get(name)
 
 

@@ -6,7 +6,7 @@ Ported from ``mega-scrapper/tests/similarity/refactor_index.py``.
 from __future__ import annotations
 
 import operator
-from typing import TYPE_CHECKING, TypedDict, cast
+from typing import TYPE_CHECKING, TypedDict
 
 import numpy as np
 import numpy.typing as npt
@@ -58,9 +58,8 @@ def _as_str_object_mapping(value: object) -> Mapping[str, object]:
     """
     if not isinstance(value, dict):
         return {}
-    raw_dict = cast("dict[object, object]", value)
     typed: dict[str, object] = {}
-    for key, item in raw_dict.items():
+    for key, item in value.items():
         if not isinstance(key, str):
             msg = "mapping keys must be strings"
             raise TypeError(msg)
@@ -135,10 +134,9 @@ def _parse_cached_embeddings(embeddings_obj: object) -> dict[str, list[float]]:
     for key, value in embeddings_map.items():
         if not isinstance(value, list):
             continue
-        raw_values = cast("list[object]", value)
         parsed_vec: list[float] = []
         valid = True
-        for item in raw_values:
+        for item in value:
             if not isinstance(item, int | float):
                 valid = False
                 break
@@ -164,6 +162,11 @@ def compute_similarity_matrix(functions: list[FunctionInfo]) -> Float32Array:
     Float32Array
         Cosine similarity matrix with diagonal zeroed out.
     """
+    # Width comes from the first real embedding, not a fixed constant: PCA
+    # rewrites these vectors to n_components before the gate runs, so a
+    # hardcoded dimension makes the stack ragged when one function lacks an
+    # embedding.
+    dim = next((len(f.embedding) for f in functions if f.embedding is not None), 0)
     embeddings: list[list[float]] = []
     for func in functions:
         if func.embedding is not None:
@@ -174,9 +177,13 @@ def compute_similarity_matrix(functions: list[FunctionInfo]) -> Float32Array:
             # index the result by the same position without a separate
             # remapping — a missing embedding just contributes zero
             # similarity to every pair instead of shifting later indices.
-            embeddings.append([0.0] * 3072)  # text-embedding-3-large dimension
+            embeddings.append([0.0] * dim)
 
-    emb_matrix = np.array(embeddings, dtype=np.float32)
+    emb_matrix = (
+        np.array(embeddings, dtype=np.float32)
+        if embeddings
+        else np.zeros((0, dim), dtype=np.float32)
+    )
 
     # Normalize rows
     norms = np.linalg.norm(emb_matrix, axis=1, keepdims=True).astype(np.float32)
@@ -253,46 +260,66 @@ def compute_refactor_indices(
     return 0.25 * cc_values + 0.15 * cog_values + 0.6 * similarity_indices
 
 
-def _zero_excluded_similarities(
+def _max_similarities_excluding(
     similarity_matrix: Float32Array,
     functions: list[FunctionInfo],
     excluded_file_pairs: list[list[str]],
     excluded_function_pairs: list[list[str]],
     class_function_proximity: int,
-) -> None:
-    """Zero similarity-matrix entries for structurally excluded pairs in place.
+) -> Float64Array:
+    """Per-function maximum similarity, ignoring structurally excluded pairs.
 
     Mirrors the pair exclusions applied during violation detection so a method
     is not surfaced as a refactor priority merely because its ``MaxSim`` is
     inflated by the class that contains it.
 
+    Only each row's maximum feeds the refactor index, so this walks a row from
+    its highest score down and stops at the first pair that survives exclusion,
+    rather than testing every pair in the matrix. That is a handful of
+    ``is_excluded_pair`` calls per function instead of one per pair — the same
+    result, because zeroing a cell can only matter when that cell would have
+    been the row's maximum.
+
     Parameters
     ----------
     similarity_matrix : Float32Array
-        Matrix modified in place.
+        Square symmetric similarity matrix with a zeroed diagonal; not modified.
     functions : list[FunctionInfo]
         Functions indexing the rows/columns of the matrix.
     excluded_file_pairs : list[list[str]]
-        File pairs whose similarities are zeroed.
+        File pairs whose similarities are ignored.
     excluded_function_pairs : list[list[str]]
-        Function pairs whose similarities are zeroed.
+        Function pairs whose similarities are ignored.
     class_function_proximity : int
         Max source lines allowed between a class and a nearby function
         when applying proximity exclusions.
+
+    Returns
+    -------
+    Float64Array
+        Array of maximum similarity values per function.
     """
+    maxima = np.zeros(len(functions), dtype=np.float64)
     for i, func_a in enumerate(functions):
-        # Only the upper triangle is walked; each excluded pair zeros both the
-        # (i, j) and (j, i) cells to keep the matrix symmetric.
-        for j in range(i + 1, len(functions)):
-            if is_excluded_pair(
+        row = similarity_matrix[i].copy()
+        while True:
+            j = int(np.argmax(row))
+            score = float(row[j])
+            # The diagonal is zeroed, so a row never peaks below 0.0; reaching
+            # that floor means no excluded-free pair scores above it.
+            if score <= 0.0:
+                break
+            if not is_excluded_pair(
                 func_a,
                 functions[j],
                 excluded_file_pairs,
                 excluded_function_pairs,
                 class_function_proximity,
             ):
-                similarity_matrix[i, j] = np.float32(0.0)
-                similarity_matrix[j, i] = np.float32(0.0)
+                maxima[i] = score
+                break
+            row[j] = np.float32(0.0)
+    return maxima
 
 
 def get_refactor_priority_message(
@@ -342,14 +369,13 @@ def get_refactor_priority_message(
         return None
 
     similarity_matrix: Float32Array = compute_similarity_matrix(functions)
-    _zero_excluded_similarities(
+    max_sims: Float64Array = _max_similarities_excluding(
         similarity_matrix,
         functions,
         excluded_file_pairs or [],
         excluded_function_pairs or [],
         class_function_proximity,
     )
-    max_sims: Float64Array = compute_max_similarities(similarity_matrix)
     similarity_indices: Float64Array = compute_similarity_indices(max_sims)
 
     cc_values = np.zeros(len(functions), dtype=np.float32)

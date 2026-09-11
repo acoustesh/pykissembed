@@ -5,7 +5,7 @@ Ported from ``mega-scrapper/tests/similarity/file_split.py``.
 
 from __future__ import annotations
 
-from typing import TYPE_CHECKING, cast
+from typing import TYPE_CHECKING
 
 from pykissembed.similarity.ast_helpers import extract_function_infos_from_file
 from pykissembed.similarity.pca import cluster_functions_kmeans_with_pca, fit_pca
@@ -39,17 +39,20 @@ def _as_embeddings_cache(value: object) -> dict[str, list[float]]:
     # just that entry: a shape mismatch usually signals a stale/corrupted
     # baselines file, and partially trusting it risks silently pairing
     # embeddings from two incompatible schema versions.
-    raw = cast("dict[object, object]", value)
-    for key, vector in raw.items():
+    validated: dict[str, list[float]] = {}
+    for key, vector in value.items():
         if not isinstance(key, str):
             return {}
         if not isinstance(vector, list):
             return {}
-        vector_items = cast("list[object]", vector)
-        if not all(isinstance(item, int | float) for item in vector_items):
+        if not all(isinstance(item, int | float) for item in vector):
             return {}
+        # Build the coerced mapping rather than relabelling the input: JSON
+        # stores a whole-number component as int, so the declared list[float]
+        # would otherwise be untrue.
+        validated[key] = [float(item) for item in vector]
 
-    return cast("dict[str, list[float]]", raw)
+    return validated
 
 
 def _as_config(value: object) -> dict[str, object]:
@@ -69,8 +72,7 @@ def _as_config(value: object) -> dict[str, object]:
     """
     if not isinstance(value, dict):
         return {}
-    raw = cast("dict[object, object]", value)
-    return {key: entry for key, entry in raw.items() if isinstance(key, str)}
+    return {key: entry for key, entry in value.items() if isinstance(key, str)}
 
 
 def generate_file_split_proposal(file_path: Path, baselines: dict[str, object]) -> str | None:

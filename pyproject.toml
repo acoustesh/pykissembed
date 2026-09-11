@@ -85,6 +85,10 @@ include = ["pykissembed/schemas/*.json"]
 # Self-check: pykissembed dogfoods its own checks against its own source.
 [tool.pykissembed]
 paths = ["pykissembed"]
+# Populate missing/stale embeddings via the provider APIs instead of skipping
+# the similarity gate. The caches are keyed by content hash, so an edited
+# function misses its entry and is re-embedded on the next run.
+cached_only = false
 wrapper_exclude = ["pykissembed/similarity/populate_embeddings.py:get_provider_populator"]
 
 # The cloud extra references its sibling workspace package.

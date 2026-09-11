@@ -19,12 +19,17 @@ from __future__ import annotations
 import os
 import sys
 from pathlib import Path
+from typing import TYPE_CHECKING
 
 import pytest
 from _pytest.stash import StashKey
 
 from pykissembed.config import get_config
 from pykissembed.paths import resolve_paths
+
+if TYPE_CHECKING:
+    from pykissembed.similarity.pca import PCACacheEntry
+    from pykissembed.similarity.types import FunctionInfo
 
 # Modules inside pykissembed/checks/ that contain test classes/functions.
 # These are collected by the plugin and run in the consumer's pytest session.
@@ -145,7 +150,7 @@ def shared_baselines() -> dict[str, object]:
 @pytest.fixture(scope="session")
 def shared_functions(
     shared_baselines: dict[str, object],  # ruff:ignore[unused-function-argument] — fixture name is an external contract; requested only to sequence loading, not to read its value
-) -> list:
+) -> list[FunctionInfo]:
     """Session-scoped list of FunctionInfo objects extracted from workspace.
 
     Returns
@@ -162,12 +167,12 @@ def shared_functions(
 
 
 @pytest.fixture(scope="session")
-def pca_cache() -> dict[str, tuple]:
+def pca_cache() -> dict[str, PCACacheEntry]:
     """Session-scoped cache for fitted PCA models.
 
     Returns
     -------
-    dict[str, tuple]
+    dict[str, PCACacheEntry]
         An empty dictionary for caching PCA models.
     """
     return {}
@@ -242,7 +247,7 @@ def pytest_configure(config: pytest.Config) -> None:
             target_str = str(target)
             current_args = getattr(config, "args", [])
             if target_str not in current_args:
-                current_args.append(target_str)
+                _ = current_args.append(target_str)
 
 
 def _decide_injection(
@@ -577,7 +582,7 @@ def pytest_collect_file(file_path: Path, parent: pytest.Collector) -> pytest.Mod
         return None
     # Only collect if this file is inside pykissembed/checks/
     try:
-        file_path.relative_to(checks)
+        _ = file_path.relative_to(checks)
     except ValueError:
         return None
     # If the file was explicitly passed on the CLI (or injected into

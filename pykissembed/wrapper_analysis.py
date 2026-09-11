@@ -432,7 +432,7 @@ def _has_exempt_decorator(
         ``True`` when a decorator's full or terminal name is exempt.
     """
     for decorator in node.decorator_list:
-        name = _decorator_name(decorator)
+        name = decorator_name(decorator)
         if name is None:
             continue
         terminal_name = name.rsplit(".", maxsplit=1)[-1]
@@ -446,7 +446,7 @@ def _has_exempt_decorator(
     return False
 
 
-def _decorator_name(decorator: ast.expr) -> str | None:
+def decorator_name(decorator: ast.expr) -> str | None:
     """Return the syntactic dotted name for a decorator expression.
 
     Returns
@@ -457,12 +457,12 @@ def _decorator_name(decorator: ast.expr) -> str | None:
     # Parameterized decorators are calls, so recurse into their callee to
     # compare the same static dotted name used for unparameterized forms.
     if isinstance(decorator, ast.Call):
-        return _decorator_name(decorator.func)
+        return decorator_name(decorator.func)
     if isinstance(decorator, ast.Name):
         return decorator.id
     if not isinstance(decorator, ast.Attribute):
         return None
-    prefix = _decorator_name(decorator.value)
+    prefix = decorator_name(decorator.value)
     return f"{prefix}.{decorator.attr}" if prefix is not None else decorator.attr
 
 

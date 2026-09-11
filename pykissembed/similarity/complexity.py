@@ -8,10 +8,10 @@ scanning uses :func:`pykissembed.paths.resolve_paths` instead of hardcoded
 from __future__ import annotations
 
 from importlib import import_module
-from typing import TYPE_CHECKING, cast
+from typing import TYPE_CHECKING
 
 from pykissembed.config import get_config
-from pykissembed.paths import _should_skip, resolve_paths
+from pykissembed.paths import resolve_paths, should_skip
 
 if TYPE_CHECKING:
     from pathlib import Path
@@ -81,8 +81,7 @@ def _cc_complexities_from_source(source_code: str) -> list[tuple[str, int, int]]
         msg = "radon cc_visit must return a list"
         raise TypeError(msg)
 
-    blocks = cast("list[object]", blocks_raw)
-    return [_extract_block_tuple(block) for block in blocks]
+    return [_extract_block_tuple(block) for block in blocks_raw]
 
 
 def _get_complexities(
@@ -153,7 +152,7 @@ def _scan_complexity_directory(
     # that load_complexity_maps()'s single-directory fallback expects.
     glob_fn = directory.rglob if recursive else directory.glob
     for py_file in glob_fn("*.py"):
-        if py_file.name.startswith("__") or _should_skip(py_file):
+        if py_file.name.startswith("__") or should_skip(py_file):
             continue
         rel = py_file.relative_to(directory)
         key_prefix = f"{prefix}{rel}"

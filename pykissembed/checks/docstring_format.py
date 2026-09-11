@@ -10,11 +10,11 @@ import shutil
 import subprocess
 from dataclasses import dataclass
 from pathlib import Path
-from typing import cast
+from typing import override
 
 import pytest
 
-from pykissembed.baselines_engine import locked_envelope, save_envelope
+from pykissembed.baselines_engine import locked_envelope, read_int_map, save_envelope
 from pykissembed.config import get_config
 from pykissembed.paths import include_notebooks
 
@@ -29,6 +29,7 @@ class DocstringViolation:
     code: str
     message: str
 
+    @override
     def __str__(self) -> str:
         return f"{self.file}:{self.line}:{self.column} {self.code} {self.message}"
 
@@ -66,7 +67,7 @@ def _run_ruff_docstring_check(target_dir: Path, *, root: Path) -> list[Docstring
     if not result.stdout.strip():
         return []
     try:
-        parsed_obj = cast("object", json.loads(result.stdout))
+        parsed_obj: object = json.loads(result.stdout)
     except json.JSONDecodeError:
         return []
     # ruff's JSON schema isn't a stable contract this project controls, so
@@ -76,10 +77,9 @@ def _run_ruff_docstring_check(target_dir: Path, *, root: Path) -> list[Docstring
     if not isinstance(parsed_obj, list):
         return []
     violations: list[DocstringViolation] = []
-    for item_obj in cast("list[object]", parsed_obj):
-        if not isinstance(item_obj, dict):
+    for item in parsed_obj:
+        if not isinstance(item, dict):
             continue
-        item = cast("dict[str, object]", item_obj)
         filename = item.get("filename")
         location_obj = item.get("location")
         code = item.get("code")
@@ -91,9 +91,8 @@ def _run_ruff_docstring_check(target_dir: Path, *, root: Path) -> list[Docstring
             or not isinstance(message, str)
         ):
             continue
-        loc = cast("dict[str, object]", location_obj)
-        row_obj = loc.get("row")
-        col_obj = loc.get("column")
+        row_obj = location_obj.get("row")
+        col_obj = location_obj.get("column")
         if not isinstance(row_obj, int) or not isinstance(col_obj, int):
             continue
         try:
@@ -297,7 +296,7 @@ class TestDocstringFormat:
         config = get_config()
         baseline_file = config.baseline_path / "docstring_format.json"
         with locked_envelope(baseline_file, kind="docstring_format") as envelope:
-            per_file_baseline = cast("dict[str, int]", envelope.data.get("per_file", {}))
+            per_file_baseline = read_int_map(envelope.data, "per_file")
             all_violations = _collect_docstring_violations(pykissembed_paths)
             by_file = _group_violations_by_file(all_violations)
             current_counts, regressions, new_files = _classify_docstring_violations(

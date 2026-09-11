@@ -10,8 +10,10 @@ from pykissembed.baselines_engine import BaselineEnvelope, save_envelope
 from pykissembed.config import PyqtestConfig, load_config
 
 if TYPE_CHECKING:
-    from collections.abc import Callable
+    from collections.abc import Callable, Mapping
     from pathlib import Path
+
+    from pykissembed.baselines_engine import JsonValue
 
 
 @pytest.fixture(scope="session")
@@ -38,7 +40,7 @@ def baseline_factory(tmp_path: Path) -> Callable[..., Path]:
         writes a v1 envelope under ``tmp_path`` and returns its path.
     """
 
-    def _make(kind: str, data: dict[str, object], *, name: str = "baseline.json") -> Path:
+    def _make(kind: str, data: Mapping[str, JsonValue], *, name: str = "baseline.json") -> Path:
         path = tmp_path / name
         save_envelope(path, BaselineEnvelope(kind=kind, data=dict(data)))
         return path

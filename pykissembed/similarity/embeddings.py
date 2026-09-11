@@ -12,7 +12,7 @@ from __future__ import annotations
 import math as _math
 import os
 import time
-from typing import TYPE_CHECKING, TypeGuard, cast
+from typing import TYPE_CHECKING, TypeGuard
 
 import numpy as np
 
@@ -338,17 +338,20 @@ def _parse_voyage_embedding_item(
     if not isinstance(raw_embedding, list) or not raw_embedding:
         msg = f"Voyage API returned an invalid embedding for index {raw_index}"
         raise ValueError(msg)
-    components = cast("list[object]", raw_embedding)
-    if any(
-        isinstance(component, bool)
-        or not isinstance(component, (int, float))
-        or not _math.isfinite(component)
-        for component in components
-    ):
-        msg = f"Voyage API returned a non-numeric embedding for index {raw_index}"
-        raise ValueError(msg)
-    numeric_components = cast("list[int | float]", raw_embedding)
-    return raw_index, [float(component) for component in numeric_components]
+    # Validate and convert in one pass so the float() call sits inside the
+    # branch that proved the component numeric — a separate all()/any() check
+    # cannot carry that narrowing into a later comprehension.
+    components: list[float] = []
+    for component in raw_embedding:
+        if (
+            isinstance(component, bool)
+            or not isinstance(component, (int, float))
+            or not _math.isfinite(component)
+        ):
+            msg = f"Voyage API returned a non-numeric embedding for index {raw_index}"
+            raise ValueError(msg)
+        components.append(float(component))
+    return raw_index, components
 
 
 def _parse_voyage_response(payload: object, expected_count: int) -> list[list[float]]:
@@ -384,7 +387,7 @@ def _parse_voyage_response(payload: object, expected_count: int) -> list[list[fl
 
     indexed_embeddings = [
         _parse_voyage_embedding_item(item, expected_count)
-        for item in cast("list[object]", raw_data)
+        for item in raw_data
     ]
     embeddings_by_index = dict(indexed_embeddings)
     if len(embeddings_by_index) != expected_count:
@@ -865,7 +868,7 @@ def _is_float_embedding(value: object) -> TypeGuard[list[float]]:
     """
     if not isinstance(value, list):
         return False
-    return all(isinstance(component, float) for component in cast("list[object]", value))
+    return all(isinstance(component, float) for component in value)
 
 
 is_float_embedding = _is_float_embedding
@@ -886,7 +889,7 @@ def _is_str_object_dict(value: object) -> TypeGuard[dict[str, object]]:
     """
     if not isinstance(value, dict):
         return False
-    return all(isinstance(key, str) for key in cast("dict[object, object]", value))
+    return all(isinstance(key, str) for key in value)
 
 
 is_str_object_dict = _is_str_object_dict

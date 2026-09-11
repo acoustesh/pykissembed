@@ -51,7 +51,7 @@ def sync_vscode_settings(root: Path, *, force: bool) -> list[str]:
 
     if not settings_path.exists():
         vscode_dir.mkdir(exist_ok=True)
-        settings_path.write_text(_render_fresh_file())
+        _ = settings_path.write_text(_render_fresh_file())
         return [f"Added {key} to .vscode/settings.json." for key in _DESIRED_SETTINGS]
 
     text = settings_path.read_text()
@@ -87,7 +87,7 @@ def sync_vscode_settings(root: Path, *, force: bool) -> list[str]:
         suffix = " (--force)." if key in current and force else "."
         messages.append(f"{verb} {key} in .vscode/settings.json{suffix}")
 
-    settings_path.write_text(text)
+    _ = settings_path.write_text(text)
     return messages
 
 

@@ -50,7 +50,7 @@ _IGNORED_DIRS = frozenset(
 )
 
 
-def _should_skip(path: Path) -> bool:
+def should_skip(path: Path) -> bool:
     """Return True if *path* is inside an ignored directory.
 
     Parameters
@@ -93,7 +93,7 @@ def iter_py_files(base_dir: Path) -> Iterator[Path]:
         # docstring/complexity/similarity scoring.
         if py_file.name.startswith("__"):
             continue
-        if _should_skip(py_file):
+        if should_skip(py_file):
             continue
         yield py_file
 

@@ -426,7 +426,7 @@ class TestPopulateEmbeddingsMissingProvider:
             """Capture the populate arguments instead of touching caches."""
             calls.append((provider, paths, cached_only))
 
-        monkeypatch.setattr(populate_module, "_populate_embeddings", fake_populate)
+        monkeypatch.setattr(populate_module, "populate_provider_embeddings", fake_populate)
         result = runner.invoke(
             app,
             [

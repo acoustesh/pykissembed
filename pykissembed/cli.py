@@ -157,7 +157,7 @@ def ratchet_cmd(
             envelope["data"] = new_data
             with path.open("w", encoding="utf-8") as f:
                 json.dump(envelope, f, indent=2, sort_keys=True)
-                f.write("\n")
+                _ = f.write("\n")
             n_lowered += 1
             typer.echo(f"  ratcheted {path.name}")
     typer.echo(f"Done. {n_lowered} baseline file(s) lowered.")
@@ -188,16 +188,16 @@ def _compute_current_for(baseline_name: str) -> dict[str, Any]:
         # Lazy: avoids importing the checks module (and its pytest/ruff/
         # pyright invocation helpers) for CLI invocations that never ratchet.
         from pykissembed.checks.lint_typecheck import (  # ruff:ignore[import-outside-top-level]
-            _build_report,
-            _run_pyright,
-            _run_ruff,
+            build_report,
+            run_pyright,
+            run_ruff,
         )
 
         paths = get_config().resolved_paths()
         if not paths:
             return {}
         root = get_config().root
-        report = _build_report(_run_ruff(paths), _run_pyright(paths), root=root)
+        report = build_report(run_ruff(paths), run_pyright(paths), root=root)
         return {
             "per_file": {f: len(d["ruff"]) + len(d["pyright"]) for f, d in report["files"].items()}
         }
@@ -295,17 +295,17 @@ def populate_embeddings(
     # Lazy: cache population imports the numerical similarity subsystem and
     # optional cloud clients, which unrelated CLI commands do not need.
     from pykissembed.similarity.populate_embeddings import (  # ruff:ignore[import-outside-top-level]
-        _populate_embeddings,
-        _PopulationError,
+        PopulationError,
+        populate_provider_embeddings,
     )
 
     try:
-        _populate_embeddings(
+        populate_provider_embeddings(
             provider_name,
             paths=paths,
             cached_only=cached_only,
         )
-    except _PopulationError as exc:
+    except PopulationError as exc:
         typer.echo(str(exc))
         raise typer.Exit(1) from None
 
@@ -350,7 +350,7 @@ def type_review(
         typer.echo(f"\n=== {fp} ===")
         # S603: fixed 2-element argv (resolved pyright binary + a file path
         # already validated against the loaded report); no shell involved.
-        subprocess.call([pyright, fp])  # ruff:ignore[subprocess-without-shell-equals-true]
+        _ = subprocess.call([pyright, fp])  # ruff:ignore[subprocess-without-shell-equals-true]
 
 
 # ---------------------------------------------------------------------------
@@ -423,7 +423,7 @@ def init(
             )
         else:
             text = text.rstrip() + "\n" + block
-        pyproject.write_text(text)
+        _ = pyproject.write_text(text)
         typer.echo(f"Added [tool.pykissembed] to {pyproject} (paths={detected_paths}).")
 
     for message in sync_vscode_settings(config.root, force=force):
@@ -433,18 +433,19 @@ def init(
 def _auto_detect_paths(root: Path, pyproject_text: str) -> list[str]:
     """Auto-detect source directories from the project layout.
 
+    The first matching rule wins:
+
+    1. ``[tool.setuptools.packages.find]`` ``where`` field
+    2. ``[tool.hatch.build.targets.wheel]`` ``packages`` list
+    3. ``src/`` directory if it exists
+    4. ``.`` (current directory) as fallback
+
     Parameters
     ----------
     root : Path
         Project root containing ``pyproject.toml``.
     pyproject_text : str
         Raw text of ``pyproject.toml``.
-
-    Priority:
-    1. ``[tool.setuptools.packages.find]`` ``where`` field
-    2. ``[tool.hatch.build.targets.wheel]`` ``packages`` list
-    3. ``src/`` directory if it exists
-    4. ``.`` (current directory) as fallback
 
     Returns
     -------
