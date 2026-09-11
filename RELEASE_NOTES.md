@@ -1,4 +1,36 @@
-# v0.2.2 release notes (draft)
+# v0.2.3 release notes
+
+Changes since `v0.2.2`:
+
+- Fix GPU PCA for wide embedding matrices, including the combined provider.
+  When samples are fewer than features, use cuML `IncrementalPCA` with a single
+  batch containing every sample. Its reduced SVD avoids the feature-by-feature
+  covariance allocation while retaining centered PCA, the full variance
+  spectrum, and the existing variance-threshold component selection.
+- Preserve the existing PCA solver for square and tall GPU inputs and the
+  sklearn fallback for CPU inputs.
+- Add regression coverage for solver selection, explained variance, cached
+  models, unseen embeddings, rank-deficient data, and real GPU execution with
+  65,536 features.
+- Resolve five test-file Ruff diagnostics and update the README version example.
+
+The wide GPU solver's storage scales with samples times features plus samples
+squared. Large datasets still require memory for the input, SVD factors, and
+solver workspace, but no feature-squared covariance matrix is constructed.
+
+Validated on a 12 GB RTX 4070 with the full pykissembed combined cache
+(364 samples, 37,888 features) and Speechtext combined cache (815 samples,
+37,888 features). The 99% variance target selected 321 and 511 components,
+respectively, matching an independent float64 CPU Gram-matrix reference.
+Maximum cosine differences were below `1e-8`; both cache files were unchanged.
+GPU validation used the RAPIDS Python 3.12 environment with only Python 3.14
+exception syntax parenthesized in a temporary source copy.
+
+- [pykissembed 0.2.3](https://test.pypi.org/project/pykissembed/0.2.3/)
+- [pykissembed-cloud 0.2.3](https://test.pypi.org/project/pykissembed-cloud/0.2.3/)
+- [Full comparison](https://github.com/acoustesh/pykissembed/compare/v0.2.2...v0.2.3)
+
+# v0.2.2 release notes
 
 Published to TestPyPI on 2026-09-10 from commit `b055fe4`.
 Changes since `v0.2.1`:

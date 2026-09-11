@@ -303,6 +303,8 @@ def fit_pca(
 
     When *pca_cache* and *cache_key* are supplied the result is stored and
     returned from cache on subsequent calls with the same key.
+    GPU inputs with fewer samples than features use reduced SVD to avoid
+    allocating a feature-by-feature covariance matrix.
 
     Parameters
     ----------
@@ -351,7 +353,17 @@ def fit_pca(
     if is_gpu:
         cp = _load_cupy_module()
         all_embeddings_gpu = cp.asarray(all_embeddings)
-        raw_model = pca_class(n_components=max_components)
+        if n_samples < n_features:
+            # cuML PCA's auto/full solvers form a features-by-features
+            # covariance matrix. One IncrementalPCA batch instead performs
+            # exact reduced SVD, using O(samples*features + samples**2) storage.
+            # Keeping all components preserves variance-threshold selection.
+            cuml_decomp = import_module("cuml.decomposition")
+            raw_model = cuml_decomp.IncrementalPCA(
+                n_components=max_components, batch_size=n_samples
+            )
+        else:
+            raw_model = pca_class(n_components=max_components)
         estimator = _as_pca_estimator(raw_model, name="cuML PCA")
         _ = estimator.fit(all_embeddings_gpu)
         cumulative_variance = _to_numpy_from_cupy(
