@@ -51,6 +51,10 @@ _EXCLUDED_DIR_NAMES = frozenset({
 })
 _TYPE_IGNORE_PATTERN = re.compile(r"\btype\s*:\s*ignore\b", re.IGNORECASE)
 _NOQA_PATTERN = re.compile(r"\bnoqa\b", re.IGNORECASE)
+_RUFF_IGNORE_PATTERN = re.compile(r"\bruff\s*:\s*ignore\b", re.IGNORECASE)
+_PYRIGHT_IGNORE_PATTERN = re.compile(r"\bpyright\s*:\s*ignore\b", re.IGNORECASE)
+_TY_IGNORE_PATTERN = re.compile(r"\bty\s*:\s*ignore\b", re.IGNORECASE)
+_MYPY_IGNORE_PATTERN = re.compile(r"\bmypy\s*:\s*ignore-errors\b", re.IGNORECASE)
 _TYPING_MODULES = frozenset({"typing", "typing_extensions"})
 
 
@@ -114,6 +118,10 @@ def _comment_violations(source: str, relative_path: str) -> list[_Violation]:
         for pattern, kind in (
             (_TYPE_IGNORE_PATTERN, "type-ignore"),
             (_NOQA_PATTERN, "noqa"),
+            (_RUFF_IGNORE_PATTERN, "ruff-ignore"),
+            (_PYRIGHT_IGNORE_PATTERN, "pyright-ignore"),
+            (_TY_IGNORE_PATTERN, "ty-ignore"),
+            (_MYPY_IGNORE_PATTERN, "mypy-ignore-errors"),
         ):
             if pattern.search(token.string):
                 violations.append(
@@ -300,7 +308,7 @@ def test_no_suppressions_or_casts() -> None:
         for item in violations
     )
     pytest.fail(
-        "Suppression/cast gate failed. Remove every type-ignore directive, "
-        f"noqa directive, and typing cast from project Python:\n{details}",
+        "Suppression/cast gate failed. Remove every static-analysis ignore directive "
+        f"and typing cast from project Python:\n{details}",
         pytrace=False,
     )

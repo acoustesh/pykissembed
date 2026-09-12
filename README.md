@@ -92,7 +92,8 @@ population requires either `--allow-cloud-embeddings` or an explicit
 arguments are left untouched.
 
 The `no_suppressions.py` check is a strict, non-ratcheted gate. It scans every
-`.py` file below the consumer project root for `# type: ignore`, `# noqa`, and
+`.py` file below the consumer project root for `# type: ignore`, `# noqa`,
+checker-specific ignore directives (`ruff`, `pyright`, `ty`, and `mypy`), and
 calls to `typing.cast` or `typing_extensions.cast`. It excludes `tests` and
 common VCS, virtual-environment, dependency, build, and tool-cache directories.
 
@@ -385,7 +386,7 @@ Then:
 uv add "pykissembed[all]"
 uv lock --upgrade-package pykissembed --upgrade-package pykissembed-cloud
 uv sync
-uv run pykissembed --version    # should show 0.2.3
+uv run pykissembed --version    # should show 0.2.4
 ```
 
 After installing, configure a provider and run the suite. Missing embeddings

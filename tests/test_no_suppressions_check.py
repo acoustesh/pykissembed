@@ -51,6 +51,35 @@ def test_scan_finds_directives_and_typing_cast_aliases(
         assert expected in message
 
 
+def test_scan_finds_checker_specific_ignore_directives(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Checker-specific ignore comments are reported as suppressions."""
+    source = tmp_path / "module.py"
+    _ = source.write_text(
+        "FIRST = object()  # ruff: ignore[F841]\n"
+        "SECOND = object()  # pyright: ignore[reportAssignmentType]\n"
+        "THIRD = object()  # ty: ignore[invalid-assignment]\n"
+        "# mypy: ignore-errors\n",
+        encoding="utf-8",
+    )
+    config = PyqtestConfig(paths=["."], root=tmp_path)
+    monkeypatch.setattr(no_suppressions, "get_config", lambda: config)
+
+    with pytest.raises(pytest.fail.Exception) as exc_info:
+        no_suppressions.test_no_suppressions_or_casts()
+
+    message = str(exc_info.value)
+    for expected in (
+        "module.py:1:19: ruff-ignore",
+        "module.py:2:20: pyright-ignore",
+        "module.py:3:19: ty-ignore",
+        "module.py:4:1: mypy-ignore-errors",
+    ):
+        assert expected in message
+
+
 def test_scan_ignores_strings_docstrings_and_unrelated_casts(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
@@ -58,14 +87,14 @@ def test_scan_ignores_strings_docstrings_and_unrelated_casts(
     """Directive-like text and non-typing cast functions do not trigger findings."""
     source = tmp_path / "clean.py"
     source.write_text(
-        '"""Examples: # noqa, # type: ignore, and cast(str, value)."""\n'
+        '"""Examples: # noqa, # type: ignore, # pyright: ignore, and cast(...)."""\n'
         "from project_helpers import cast as project_cast\n"
         "\n"
         "def cast(value: object) -> object:\n"
         '    """Return a project-specific converted value."""\n'
         "    return value\n"
         "\n"
-        'TEXT = "# noqa and # type: ignore"\n'
+        'TEXT = "# noqa, # type: ignore, # ruff: ignore, and # ty: ignore"\n'
         "FIRST = cast(TEXT)\n"
         "SECOND = project_cast(TEXT)\n",
         encoding="utf-8",

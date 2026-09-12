@@ -1,3 +1,22 @@
+# v0.2.4 release notes
+
+Changes since `v0.2.3`:
+
+- Extend the strict no-suppressions gate to detect checker-specific ignore
+  directives for Ruff, Pyright, ty, and mypy.
+- Preserve token-aware scanning so directive-like text in strings and
+  docstrings remains allowed.
+- Report checker-specific violation kinds and clarify the gate's failure
+  message and documentation.
+
+The stricter scan can expose existing `# ruff:ignore[...]`,
+`# pyright: ignore[...]`, `# ty: ignore[...]`, and
+`# mypy: ignore-errors` comments that earlier versions did not report.
+
+- [pykissembed 0.2.4](https://test.pypi.org/project/pykissembed/0.2.4/)
+- [pykissembed-cloud 0.2.4](https://test.pypi.org/project/pykissembed-cloud/0.2.4/)
+- [Full comparison](https://github.com/acoustesh/pykissembed/compare/v0.2.3...v0.2.4)
+
 # v0.2.3 release notes
 
 Changes since `v0.2.2`:
