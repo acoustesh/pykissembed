@@ -1,3 +1,21 @@
+# v0.2.5 release notes
+
+Changes since `v0.2.4`:
+
+- **Behavior change:** `cached_only` now defaults to `false`. Similarity
+  checks populate missing embeddings through every configured provider's API
+  while tests run. Pass `--cached-only` or set `cached_only = true` in
+  `[tool.pykissembed]` to keep code-derived data off cloud providers.
+- Tighten type safety and error handling across checks, CLI, plugin, and
+  embedding/similarity modules.
+
+Projects that relied on the implicit cache-only default and have provider API
+keys configured will now make provider calls on their next test run.
+
+- [pykissembed 0.2.5](https://test.pypi.org/project/pykissembed/0.2.5/)
+- [pykissembed-cloud 0.2.5](https://test.pypi.org/project/pykissembed-cloud/0.2.5/)
+- [Full comparison](https://github.com/acoustesh/pykissembed/compare/v0.2.4...v0.2.5)
+
 # v0.2.4 release notes
 
 Changes since `v0.2.3`:
