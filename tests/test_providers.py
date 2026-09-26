@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from typing import TYPE_CHECKING, cast
+from typing import TYPE_CHECKING
 
 import pytest
 
@@ -72,7 +72,9 @@ class TestRegistry:
         REGISTRY.register(a)
         REGISTRY.register(b)
         assert REGISTRY.get("test") is b
-        assert cast("_TestProvider", REGISTRY.get("test")).schema_version == "2"
+        registered = REGISTRY.get("test")
+        assert isinstance(registered, _TestProvider)
+        assert registered.schema_version == "2"
 
     @staticmethod
     def test_discover_handles_broken_entry_point(
@@ -90,10 +92,14 @@ class TestRegistry:
 
         eps = [_BrokenEP()]
 
+        def entry_points(*, group: str | None = None) -> list[_BrokenEP]:
+            del group
+            return eps
+
         monkeypatch.setattr(
             reg_mod.metadata,
             "entry_points",
-            lambda group=None: eps,  # ruff:ignore[unused-lambda-argument] — must accept `group=` to match the real entry_points(group=...) call
+            entry_points,
         )
         with pytest.warns(RuntimeWarning, match="failed to load provider"):
             registry = reg_mod.discover_all()
@@ -120,10 +126,15 @@ class TestRegistry:
                 return self.value
 
         healthy = _TestProvider()
+
+        def entry_points(*, group: str | None = None) -> list[_EP]:
+            del group
+            return [_EP("broken", _BrokenProvider), _EP("healthy", healthy)]
+
         monkeypatch.setattr(
             reg_mod.metadata,
             "entry_points",
-            lambda group=None: [_EP("broken", _BrokenProvider), _EP("healthy", healthy)],  # ruff:ignore[unused-lambda-argument]
+            entry_points,
         )
 
         with pytest.warns(RuntimeWarning, match="constructor boom"):
@@ -151,7 +162,8 @@ class TestRegistry:
             max_tokens = 256
             batch_size = 32
 
-            def embed(self, _texts):  # type: ignore[no-untyped-def]
+            def embed(self, texts: Sequence[str]) -> list[list[float]]:
+                del texts
                 return []
 
             def is_configured(self) -> bool:
@@ -164,7 +176,8 @@ class TestRegistry:
             max_tokens = 512
             batch_size = 16
 
-            def embed(self, _texts):  # type: ignore[no-untyped-def]
+            def embed(self, texts: Sequence[str]) -> list[list[float]]:
+                del texts
                 return []
 
             def is_configured(self) -> bool:
@@ -185,16 +198,20 @@ class TestRegistry:
             _EP("custom", _StubProvider()),
         ]
 
+        def entry_points(*, group: str | None = None) -> list[_EP]:
+            del group
+            return eps
+
         REGISTRY.clear()
         monkeypatch.setattr(
             reg_mod.metadata,
             "entry_points",
-            lambda group=None: eps,  # ruff:ignore[unused-lambda-argument] — must accept `group=` to match the real entry_points(group=...) call
+            entry_points,
         )
         reg_mod.discover_all()
         winner = REGISTRY.get("custom")
-        assert winner is not None
-        assert cast("_OverrideProvider", winner).model_id == "override-model"
+        assert isinstance(winner, _OverrideProvider)
+        assert winner.model_id == "override-model"
         REGISTRY.clear()
 
 

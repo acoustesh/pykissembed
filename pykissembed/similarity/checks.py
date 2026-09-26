@@ -360,7 +360,7 @@ def run_provider_similarity_checks(
     *,
     baselines: Baselines,
     functions: list[FunctionInfo],
-    update_baselines: bool,  # ruff:ignore[unused-function-argument] — accepted for call-site symmetry with
+    update_baselines: bool,
     # cached_only; currently unused (embeddings are always auto-populated when not
     # cached_only, regardless of this flag).
     cached_only: bool,
@@ -396,6 +396,7 @@ def run_provider_similarity_checks(
     class_function_proximity: Maximum non-blank, non-comment source lines
         allowed between a class and a function in the same file.
     """
+    _ = update_baselines
     if len(functions) < _MIN_FUNCTIONS_TO_COMPARE:
         pytest.skip("Not enough functions to compare")
 
@@ -580,14 +581,14 @@ def run_jina_similarity_checks(
     *,
     baselines: Baselines,
     functions: list[FunctionInfo],
-    update_baselines: bool,  # ruff:ignore[unused-function-argument] — accepted for call-site symmetry with
+    update_baselines: bool,
     # run_provider_similarity_checks; embeddings are auto-populated when not cached_only.
     cached_only: bool,
     provider: ProviderEntry,
     threshold_pair: float,
     threshold_neighbor: float,
     load_complexity_maps_fn: Callable[[], tuple[dict[str, int], dict[str, int]]],
-    pca_cache: PcaCache | None = None,  # ruff:ignore[unused-function-argument] — Jina bypasses PCA (the
+    pca_cache: PcaCache | None = None,
     # asymmetric cross-score is not a single-vector cosine); accepted for symmetry.
     class_function_proximity: int = 0,
 ) -> None:
@@ -621,6 +622,7 @@ def run_jina_similarity_checks(
     class_function_proximity : int
         Max source lines allowed between a class and a nearby function pair.
     """
+    _ = update_baselines, pca_cache
     if len(functions) < _MIN_FUNCTIONS_TO_COMPARE:
         pytest.skip("Not enough functions to compare")
 

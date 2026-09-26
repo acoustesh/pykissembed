@@ -19,7 +19,7 @@ class PCAModel(Protocol):
     not that its signature matches.
     """
 
-    def transform(self, X: NDArray[np.floating]) -> NDArray[np.floating]:  # ruff:ignore[invalid-argument-name]
+    def transform(self, x: NDArray[np.floating]) -> NDArray[np.floating]:
         """Transform data using the fitted PCA model."""
         ...
 

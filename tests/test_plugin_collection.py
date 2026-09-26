@@ -418,7 +418,7 @@ class TestSubprocessCollection:
         env = {**os.environ, "PYTHONPATH": str(repo)}
         # S603: test-only argv uses sys.executable, pytest literals, and the
         # literal parameterized flags above; no shell is involved.
-        result = subprocess.run(  # ruff:ignore[subprocess-without-shell-equals-true]
+        result = subprocess.run(
             [
                 sys.executable,
                 "-m",
@@ -690,7 +690,7 @@ class TestSubprocessCollection:
         target = checks_dir / "docstring_format.py"
 
         # S603: fixed argv (sys.executable + literal flags + a path built above).
-        result = subprocess.run(  # ruff:ignore[subprocess-without-shell-equals-true]
+        result = subprocess.run(
             [
                 sys.executable,
                 "-m",

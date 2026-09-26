@@ -7,6 +7,7 @@ similarity.
 
 from __future__ import annotations
 
+import importlib
 from typing import TYPE_CHECKING
 
 import pytest
@@ -24,14 +25,15 @@ def test_providers_parallel(
     """Run all installed embedding providers in parallel against the codebase."""
     try:
         # Optional: pykissembed-cloud may not be installed.
-        from pykissembed.similarity.runner import (  # ruff:ignore[import-outside-top-level]
-            run_all_providers,  # type: ignore[attr-defined]
-        )
+        runner = importlib.import_module("pykissembed.similarity.runner")
     except ImportError:
         pytest.skip(
             "Similarity requires pykissembed-cloud.\n"
             "  pip install pykissembed-cloud  # cloud providers; API keys required",
         )
+    run_all_providers = getattr(runner, "run_all_providers", None)
+    if not callable(run_all_providers):
+        pytest.skip("Installed similarity runner has no run_all_providers entry point")
     if not pykissembed_paths:
         pytest.skip("No [tool.pykissembed] paths configured")
     run_all_providers(paths=pykissembed_paths, cached_only=cached_only)

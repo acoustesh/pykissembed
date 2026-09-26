@@ -12,6 +12,7 @@ from __future__ import annotations
 import math as _math
 import os
 import time
+from importlib import import_module
 from typing import TYPE_CHECKING, TypeGuard
 
 import numpy as np
@@ -59,6 +60,90 @@ _QWEN_MAX_BATCH_SIZE = 32  # qwen3-embedding-8b OpenRouter batch limit
 _JINA_MAX_BATCH_SIZE = 32  # larger jina.ai batches intermittently 400; 32 verified reliable
 
 
+class EmbeddingResponseError(TypeError, ValueError):
+    """Raised when an embedding response has an invalid runtime type."""
+
+
+def _require_callable(owner: object, attribute: str) -> Callable[..., object]:
+    """Return a dynamically loaded callable after validating its boundary.
+
+    Returns
+    -------
+    Callable[..., object]
+        The requested callable.
+
+    Raises
+    ------
+    TypeError
+        If *owner* does not expose a callable under *attribute*.
+    """
+    value = getattr(owner, attribute, None)
+    if not callable(value):
+        msg = f"{attribute} must be callable"
+        raise TypeError(msg)
+    return value
+
+
+def _require_exception_type(owner: object, attribute: str) -> type[Exception]:
+    """Return a dynamically loaded ordinary exception class.
+
+    Returns
+    -------
+    type[Exception]
+        The validated exception type.
+
+    Raises
+    ------
+    TypeError
+        If the attribute is not an ``Exception`` subclass.
+    """
+    value = getattr(owner, attribute, None)
+    if not isinstance(value, type) or not issubclass(value, Exception):
+        msg = f"{attribute} must be an Exception subclass"
+        raise TypeError(msg)
+    return value
+
+
+def _requests_api() -> tuple[Callable[..., object], type[Exception], type[Exception]]:
+    """Load the requests call and retry exception types lazily.
+
+    Returns
+    -------
+    tuple[Callable[..., object], type[Exception], type[Exception]]
+        ``(post, timeout_error, http_error)``.
+
+    Raises
+    ------
+    TypeError
+        If requests does not expose the expected runtime API.
+    """
+    requests_module = import_module("requests")
+    exceptions = getattr(requests_module, "exceptions", None)
+    if exceptions is None:
+        msg = "requests.exceptions is required"
+        raise TypeError(msg)
+    return (
+        _require_callable(requests_module, "post"),
+        _require_exception_type(exceptions, "Timeout"),
+        _require_exception_type(exceptions, "HTTPError"),
+    )
+
+
+def _response_json(response: object) -> object:
+    """Raise for an HTTP failure and return a response's decoded JSON.
+
+    Returns
+    -------
+    object
+        Untrusted decoded JSON for caller-side validation.
+
+    """
+    raise_for_status = _require_callable(response, "raise_for_status")
+    json_response = _require_callable(response, "json")
+    _ = raise_for_status()
+    return json_response()
+
+
 def _get_tiktoken_encoding() -> object:
     """Lazy-load tiktoken encoding.
 
@@ -73,11 +158,11 @@ def _get_tiktoken_encoding() -> object:
         If ``tiktoken`` is not installed.
     """
     try:
-        import tiktoken  # ruff:ignore[import-outside-top-level] — clearer lazy error
+        tiktoken_module = import_module("tiktoken")
     except ImportError as exc:
         msg = "tiktoken is required for token-aware truncation"
         raise RuntimeError(msg) from exc
-    return tiktoken.get_encoding("cl100k_base")
+    return _require_callable(tiktoken_module, "get_encoding")("cl100k_base")
 
 
 def _truncate_to_token_limit(text: str, max_tokens: int, encoder: object) -> str:
@@ -256,7 +341,7 @@ def _build_jina_caller(
     tuple[Callable[[list[str]], list[list[float]]], Callable[[Exception], bool]]
         ``(make_request, is_retryable)`` callables.
     """
-    import requests  # ruff:ignore[import-outside-top-level]
+    post, timeout_error, http_error = _requests_api()
 
     api_key = _require_api_key("JINA_API_KEY")
     headers = {"Authorization": f"Bearer {api_key}", "Content-Type": "application/json"}
@@ -284,18 +369,62 @@ def _build_jina_caller(
         }
         if task:
             payload["task"] = task
-        response = requests.post(JINA_API_URL, headers=headers, json=payload, timeout=timeout)
-        response.raise_for_status()
-        data = response.json()
-        if "data" not in data:
+        response = post(JINA_API_URL, headers=headers, json=payload, timeout=timeout)
+        data = _response_json(response)
+        if not _is_str_object_dict(data) or "data" not in data:
             msg = f"Unexpected API response: {data}"
             raise ValueError(msg)
-        return [item["embedding"] for item in data["data"]]
+        return _parse_unindexed_response(data)
 
     return (
         _jina_request,
-        lambda e: isinstance(e, (requests.exceptions.Timeout, requests.exceptions.HTTPError)),
+        lambda e: isinstance(e, (timeout_error, http_error)),
     )
+
+
+def _parse_unindexed_response(payload: object) -> list[list[float]]:
+    """Validate an embedding response whose items are already input-ordered.
+
+    Returns
+    -------
+    list[list[float]]
+        Validated embedding vectors in response order.
+
+    Raises
+    ------
+    EmbeddingResponseError
+        If the response envelope or vector container has an invalid type.
+    ValueError
+        If a vector contains a boolean, non-number, or non-finite component.
+    """
+    if not _is_str_object_dict(payload):
+        msg = "embedding API returned a non-object response"
+        raise EmbeddingResponseError(msg)
+    raw_data = payload.get("data")
+    if not isinstance(raw_data, list):
+        msg = "embedding API response does not contain a data array"
+        raise EmbeddingResponseError(msg)
+    embeddings: list[list[float]] = []
+    for item_index, item in enumerate(raw_data):
+        if not _is_str_object_dict(item):
+            msg = f"embedding API returned a non-object item at index {item_index}"
+            raise EmbeddingResponseError(msg)
+        raw_embedding = item.get("embedding")
+        if not isinstance(raw_embedding, list) or not raw_embedding:
+            msg = f"embedding API returned an invalid vector at index {item_index}"
+            raise EmbeddingResponseError(msg)
+        components: list[float] = []
+        for component in raw_embedding:
+            if (
+                isinstance(component, bool)
+                or not isinstance(component, (int, float))
+                or not _math.isfinite(component)
+            ):
+                msg = f"embedding API returned a non-numeric vector at index {item_index}"
+                raise ValueError(msg)
+            components.append(float(component))
+        embeddings.append(components)
+    return embeddings
 
 
 def _parse_voyage_embedding_item(
@@ -371,8 +500,10 @@ def _parse_voyage_response(payload: object, expected_count: int) -> list[list[fl
 
     Raises
     ------
+    EmbeddingResponseError
+        If the envelope does not contain an array where required.
     ValueError
-        If the envelope, item count, indices, or vectors are malformed.
+        If the item count, indices, or vectors are malformed.
     """
     if not _is_str_object_dict(payload):
         msg = "Voyage API returned a non-object response"
@@ -380,7 +511,7 @@ def _parse_voyage_response(payload: object, expected_count: int) -> list[list[fl
     raw_data = payload.get("data")
     if not isinstance(raw_data, list):
         msg = "Voyage API response does not contain a data array"
-        raise ValueError(msg)  # ruff:ignore[type-check-without-type-error] — remote value
+        raise EmbeddingResponseError(msg)
     if len(raw_data) != expected_count:
         msg = f"Voyage API returned {len(raw_data)} embeddings for {expected_count} inputs"
         raise ValueError(msg)
@@ -412,7 +543,7 @@ def _build_voyage_caller(
     tuple[Callable[[list[str]], list[list[float]]], Callable[[Exception], bool]]
         The validated request callable and transient-error classifier.
     """
-    import requests  # ruff:ignore[import-outside-top-level]
+    post, timeout_error, http_error = _requests_api()
 
     api_key = _require_api_key("VOYAGE_API_KEY")
     headers = {
@@ -428,7 +559,7 @@ def _build_voyage_caller(
         list[list[float]]
             Validated vectors ordered to match the input texts.
         """
-        response = requests.post(
+        response = post(
             _VOYAGE_API_URL,
             headers=headers,
             json={
@@ -438,8 +569,7 @@ def _build_voyage_caller(
             },
             timeout=timeout,
         )
-        response.raise_for_status()
-        return _parse_voyage_response(response.json(), len(truncated))
+        return _parse_voyage_response(_response_json(response), len(truncated))
 
     def _voyage_is_retryable(exc: Exception) -> bool:
         """Return whether a Voyage REST failure is transient.
@@ -449,11 +579,14 @@ def _build_voyage_caller(
         bool
             ``True`` for timeouts, HTTP 429, and HTTP 5xx failures.
         """
-        if isinstance(exc, requests.exceptions.Timeout):
+        if isinstance(exc, timeout_error):
             return True
-        if not isinstance(exc, requests.exceptions.HTTPError) or exc.response is None:
+        if not isinstance(exc, http_error):
             return False
-        status_code = exc.response.status_code
+        response = getattr(exc, "response", None)
+        status_code = getattr(response, "status_code", None)
+        if not isinstance(status_code, int):
+            return False
         return status_code == _HTTP_TOO_MANY_REQUESTS or (
             _HTTP_SERVER_ERROR_MIN <= status_code < _HTTP_SERVER_ERROR_MAX
         )
@@ -494,14 +627,17 @@ def _build_provider_caller(
     if provider == "gemini":
         # Optional cloud SDK: not a pykissembed core/cloud dependency, only
         # needed if the caller actually requests the gemini provider.
-        from google import genai  # ruff:ignore[import-outside-top-level]
-        from google.genai import types  # ruff:ignore[import-outside-top-level]
+        genai = import_module("google.genai")
+        types = import_module("google.genai.types")
 
         api_key = _load_api_key_from_env("GOOGLE_API_KEY")
-        gemini_client = genai.Client(
+        gemini_client = _require_callable(genai, "Client")(
             api_key=api_key,
-            http_options=types.HttpOptions(timeout=int(timeout * 1000)),
+            http_options=_require_callable(types, "HttpOptions")(timeout=int(timeout * 1000)),
         )
+        models = getattr(gemini_client, "models", None)
+        embed_content = _require_callable(models, "embed_content")
+        embed_content_config = _require_callable(types, "EmbedContentConfig")
 
         def _gemini_request(truncated: list[str]) -> list[list[float]]:
             """Send an embedding request to the Gemini API.
@@ -518,22 +654,34 @@ def _build_provider_caller(
 
             Raises
             ------
+            TypeError
+                If the API response contains malformed embedding data.
             ValueError
                 If the API response contains no embeddings.
             """
-            contents: list[types.ContentUnion] = [*truncated]
-            result = gemini_client.models.embed_content(
+            result = embed_content(
                 model=model,
-                contents=contents,
-                config=types.EmbedContentConfig(
+                contents=truncated,
+                config=embed_content_config(
                     task_type="SEMANTIC_SIMILARITY",
                     output_dimensionality=3072,
                 ),
             )
-            if result.embeddings is None:
+            embeddings = getattr(result, "embeddings", None)
+            if embeddings is None:
                 msg = "Gemini API returned no embeddings"
                 raise ValueError(msg)
-            return [list(emb.values or []) for emb in result.embeddings]
+            if not isinstance(embeddings, list):
+                msg = "Gemini API returned malformed embedding data"
+                raise TypeError(msg)
+            values: list[list[float]] = []
+            for embedding in embeddings:
+                components = getattr(embedding, "values", None)
+                if not _is_float_embedding(components):
+                    msg = "Gemini API returned an invalid embedding"
+                    raise ValueError(msg)
+                values.append(components)
+            return values
 
         def _gemini_is_retryable(exc: Exception) -> bool:
             """Determine whether a Gemini API error is retryable.
@@ -556,30 +704,53 @@ def _build_provider_caller(
     if provider == "openai":
         # Optional cloud SDK: not a pykissembed core dependency, only needed
         # if the caller actually requests the openai provider.
-        import openai  # ruff:ignore[import-outside-top-level]
+        openai = import_module("openai")
 
-        openai_client = openai.OpenAI(
+        openai_client = _require_callable(openai, "OpenAI")(
             api_key=_load_api_key_from_env("OPENAI_API_KEY"),
             timeout=timeout,
         )
+        embeddings_api = getattr(openai_client, "embeddings", None)
+        create_embeddings = _require_callable(embeddings_api, "create")
+        rate_limit_error = _require_exception_type(openai, "RateLimitError")
+        timeout_error = _require_exception_type(openai, "APITimeoutError")
+
+        def _openai_request(truncated: list[str]) -> list[list[float]]:
+            """Send an OpenAI request and validate its embedding vectors.
+
+            Returns
+            -------
+            list[list[float]]
+                Validated embedding vectors.
+
+            Raises
+            ------
+            TypeError
+                If the SDK response does not contain typed embedding vectors.
+            """
+            result = create_embeddings(input=truncated, model=model)
+            data = getattr(result, "data", None)
+            if not isinstance(data, list):
+                msg = "OpenAI API returned invalid embedding data"
+                raise TypeError(msg)
+            values: list[list[float]] = []
+            for item in data:
+                embedding = getattr(item, "embedding", None)
+                if not _is_float_embedding(embedding):
+                    msg = "OpenAI API returned an invalid embedding"
+                    raise TypeError(msg)
+                values.append(embedding)
+            return values
+
         return (
-            lambda t: [
-                item.embedding
-                for item in openai_client.embeddings.create(
-                    input=t,
-                    model=model,
-                ).data
-            ],
-            lambda e: isinstance(
-                e,
-                (openai.RateLimitError, openai.APITimeoutError),
-            ),
+            _openai_request,
+            lambda e: isinstance(e, (rate_limit_error, timeout_error)),
         )
 
     if provider in {"codestral", "qwen"}:
         # Optional cloud SDK: not a pykissembed core dependency, only needed
         # if the caller actually requests the codestral provider.
-        import requests  # ruff:ignore[import-outside-top-level]
+        post, timeout_error, http_error = _requests_api()
 
         api_key = _require_api_key("OPENROUTER_API_KEY")
         headers = {
@@ -608,29 +779,25 @@ def _build_provider_caller(
             ValueError
                 If the JSON response does not contain a ``data`` field.
             """
-            response = requests.post(
+            response = post(
                 OPENROUTER_API_URL,
                 headers=headers,
                 json={"model": model, "input": truncated},
                 timeout=timeout,
             )
-            response.raise_for_status()
-            data = response.json()
-            if "data" not in data:
+            data = _response_json(response)
+            if not _is_str_object_dict(data) or "data" not in data:
                 msg = f"Unexpected API response: {data}"
                 raise ValueError(msg)
-            return [
-                [float(component) for component in item["embedding"]]
-                for item in data["data"]
-            ]
+            return _parse_unindexed_response(data)
 
         return (
             _openrouter_request,
             lambda e: isinstance(
                 e,
                 (
-                    requests.exceptions.Timeout,
-                    requests.exceptions.HTTPError,
+                    timeout_error,
+                    http_error,
                 ),
             ),
         )

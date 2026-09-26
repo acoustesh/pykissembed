@@ -59,7 +59,7 @@ class ProviderRegistry:
                 # as import failures so one broken extension cannot abort all
                 # provider discovery.
                 instance = loaded() if isinstance(loaded, type) else loaded
-            except Exception as exc:  # ruff:ignore[blind-except]
+            except (AttributeError, ImportError, OSError, RuntimeError, TypeError, ValueError) as exc:
                 # A broken third-party entry point (bad install, incompatible
                 # version) must not crash discovery for every other provider.
                 warnings.warn(  # pragma: no cover — defensive

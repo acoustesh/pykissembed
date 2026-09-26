@@ -18,8 +18,9 @@ from __future__ import annotations
 
 import os
 import sys
+from importlib import import_module, util
 from pathlib import Path
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, TypeGuard
 
 import pytest
 from _pytest.stash import StashKey
@@ -28,6 +29,8 @@ from pykissembed.config import get_config
 from pykissembed.paths import resolve_paths
 
 if TYPE_CHECKING:
+    from collections.abc import Callable
+
     from pykissembed.similarity.pca import PCACacheEntry
     from pykissembed.similarity.types import FunctionInfo
 
@@ -46,6 +49,56 @@ _CHECK_MODULES = [
 # Used by :func:`pytest_collect_file` to decide whether a .py file inside
 # the installed pykissembed package is a check module.
 _CHECK_STEMS = frozenset(_CHECK_MODULES)
+
+
+def _load_callable(module_name: str, attribute: str) -> Callable[..., object]:
+    """Load and validate one callable from a lazily imported module.
+
+    Returns
+    -------
+    Callable[..., object]
+        The requested callable.
+
+    Raises
+    ------
+    TypeError
+        If the requested attribute is not callable.
+    """
+    module = import_module(module_name)
+    value = getattr(module, attribute, None)
+    if not callable(value):
+        msg = f"{module_name}.{attribute} must be callable"
+        raise TypeError(msg)
+    return value
+
+
+def _is_str_object_dict(value: object) -> TypeGuard[dict[str, object]]:
+    """Return whether *value* is a dictionary with string keys.
+
+    Returns
+    -------
+    bool
+        Whether the value has the required dictionary shape.
+    """
+    return isinstance(value, dict) and all(isinstance(key, str) for key in value)
+
+
+def _is_function_info(value: object) -> TypeGuard[FunctionInfo]:
+    """Validate the stable fields consumed from a lazily loaded function record.
+
+    Returns
+    -------
+    bool
+        Whether the object exposes the required typed record fields.
+    """
+    return (
+        isinstance(getattr(value, "name", None), str)
+        and isinstance(getattr(value, "file", None), str)
+        and isinstance(getattr(value, "start_line", None), int)
+        and isinstance(getattr(value, "end_line", None), int)
+        and isinstance(getattr(value, "loc", None), int)
+        and isinstance(getattr(value, "hash", None), str)
+    )
 
 
 def pytest_addoption(parser: pytest.Parser) -> None:
@@ -136,20 +189,28 @@ def shared_baselines() -> dict[str, object]:
     -------
     dict[str, object]
         The loaded baselines dictionary.
-    """
-    # Lazy: plugin.py loads unconditionally in every consumer's pytest
-    # session; avoid the NumPy-backed storage module's import cost
-    # for sessions that never touch similarity checks.
-    from pykissembed.similarity.storage import (  # ruff:ignore[import-outside-top-level]
-        load_minimal_baselines,
-    )
 
-    return load_minimal_baselines()
+    Raises
+    ------
+    TypeError
+        If the lazy storage boundary returns an invalid shape.
+    """
+    # Keep the NumPy-backed storage module out of sessions that never request
+    # similarity fixtures, while validating its untyped dynamic boundary.
+    load_minimal_baselines = _load_callable(
+        "pykissembed.similarity.storage",
+        "load_minimal_baselines",
+    )
+    baselines = load_minimal_baselines()
+    if not _is_str_object_dict(baselines):
+        msg = "load_minimal_baselines must return dict[str, object]"
+        raise TypeError(msg)
+    return baselines
 
 
 @pytest.fixture(scope="session")
 def shared_functions(
-    shared_baselines: dict[str, object],  # ruff:ignore[unused-function-argument] — fixture name is an external contract; requested only to sequence loading, not to read its value
+    shared_baselines: dict[str, object],
 ) -> list[FunctionInfo]:
     """Session-scoped list of FunctionInfo objects extracted from workspace.
 
@@ -157,13 +218,24 @@ def shared_functions(
     -------
     list[FunctionInfo]
         The extracted function info objects.
-    """
-    # Lazy: same rationale as shared_baselines above.
-    from pykissembed.similarity.ast_helpers import (  # ruff:ignore[import-outside-top-level]
-        extract_all_function_infos,
-    )
 
-    return extract_all_function_infos(min_loc=1)
+    Raises
+    ------
+    TypeError
+        If the lazy AST boundary returns an invalid shape.
+    """
+    # Requesting this fixture sequences baseline loading before extraction.
+    _ = shared_baselines
+    # Lazy: same rationale as shared_baselines above.
+    extract_all_function_infos = _load_callable(
+        "pykissembed.similarity.ast_helpers",
+        "extract_all_function_infos",
+    )
+    functions = extract_all_function_infos(min_loc=1)
+    if not isinstance(functions, list) or not all(_is_function_info(item) for item in functions):
+        msg = "extract_all_function_infos must return list[FunctionInfo]"
+        raise TypeError(msg)
+    return [item for item in functions if _is_function_info(item)]
 
 
 @pytest.fixture(scope="session")
@@ -520,19 +592,12 @@ def _checks_dir() -> Path | None:
         ``None`` if ``pykissembed.checks`` can't be imported or is a
         namespace package with no ``__file__``.
     """
-    try:
-        # Defensive: unlike the other lazy imports in this file, this one
-        # guards against a corrupted/partial install rather than perf —
-        # plugin.py loads unconditionally for every consumer's pytest
-        # session, so a broken checks subpackage must degrade to "no
-        # auto-collection" rather than crash the whole plugin.
-        import pykissembed.checks as checks_pkg  # ruff:ignore[import-outside-top-level]
-    except ImportError:  # pragma: no cover — defensive
+    # Inspect the package spec without importing it: a partial installation
+    # must degrade to no auto-collection rather than crash every pytest run.
+    checks_spec = util.find_spec("pykissembed.checks")
+    if checks_spec is None or checks_spec.origin is None:  # pragma: no cover — defensive
         return None
-    # checks_pkg.__file__ is .../pykissembed/checks/__init__.py
-    if checks_pkg.__file__ is None:  # namespace package
-        return None
-    return Path(checks_pkg.__file__).parent
+    return Path(checks_spec.origin).parent
 
 
 # Session-scoped dedup guard for non-init check files.

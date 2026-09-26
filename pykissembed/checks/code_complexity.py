@@ -30,6 +30,7 @@ from pykissembed.baselines_engine import (
 from pykissembed.config import get_config
 from pykissembed.paths import iter_py_files as _iter_py_files
 from pykissembed.paths import warn_non_utf8
+from pykissembed.similarity.complexity import AnalyzerError, call_analyzer
 from pykissembed.wrapper_analysis import (
     decorator_name,
     find_wrapper_candidates,
@@ -64,7 +65,7 @@ _DEFAULT_CONFIG: _DefaultConfig = {
 
 
 # radon/complexipy ship no type stubs, so their entry points are loaded
-# through this single dynamic boundary (import_module + getattr + cast)
+# through this single dynamic boundary (import_module + callable validation)
 # instead of a top-level `from radon.complexity import cc_visit` — that
 # keeps the untyped surface confined to one place instead of leaking
 # `Any` through every call site.
@@ -220,23 +221,20 @@ def _get_cog(file_path: Path) -> list[tuple[str, int, int]]:
         complexipy isn't installed, its analysis raises, or the result
         has no ``functions`` attribute.
     """
-    try:
-        # Lazy: complexipy is a compiled (Rust) analyzer; deferring the
-        # import avoids its cost for test runs that never touch cognitive
-        # complexity (e.g. -m complexity without the COG check selected).
-        from complexipy import (  # ruff:ignore[import-outside-top-level]
-            file_complexity as _fc,
-        )
-    except ImportError:
+    # Lazy: complexipy is a compiled analyzer; defer loading for runs that
+    # never select the cognitive-complexity check.
+    file_complexity = _load_callable("complexipy", "file_complexity")
+    if file_complexity is None:
         return []
     try:
-        result = _fc(str(file_path))
-    except Exception:  # ruff:ignore[blind-except] — pragma: no cover — third-party analyzer; any failure on arbitrary user source degrades to "no cognitive-complexity data" rather than crashing the whole check
+        result = call_analyzer(file_complexity, str(file_path))
+    except AnalyzerError:  # pragma: no cover — third-party analyzer boundary
         return []
-    if not hasattr(result, "functions"):
+    functions = getattr(result, "functions", None)
+    if not isinstance(functions, list):
         return []
     out: list[tuple[str, int, int]] = []
-    for f in result.functions:
+    for f in functions:
         name = getattr(f, "name", None)
         line = getattr(f, "line_start", None)
         complexity = getattr(f, "complexity", None)
@@ -264,8 +262,8 @@ def _get_mi(file_path: Path) -> float:
         warn_non_utf8(file_path, exc)
         return 0.0
     try:
-        score = mi_visit_fn(source, multi=False)
-    except Exception:  # ruff:ignore[blind-except] — third-party analyzer; any failure on arbitrary user source degrades to "no MI data" rather than crashing the whole check
+        score = call_analyzer(mi_visit_fn, source, multi=False)
+    except AnalyzerError:
         return 0.0
     if isinstance(score, (int, float)):
         return float(score)

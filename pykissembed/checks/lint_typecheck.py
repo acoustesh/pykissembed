@@ -151,7 +151,7 @@ def run_ruff(paths: list[Path]) -> list[Mapping[str, object]]:
     try:
         # S603: fixed argv (resolved ruff binary + literal flags + configured
         # directory paths); no shell involved.
-        result = subprocess.run(  # ruff:ignore[subprocess-without-shell-equals-true]
+        result = subprocess.run(
             cmd, capture_output=True, text=True, check=False, timeout=120
         )
     except OSError, subprocess.TimeoutExpired:
@@ -189,7 +189,7 @@ def run_pyright(paths: list[Path]) -> list[Mapping[str, object]]:
     try:
         # S603: fixed argv (resolved pyright binary + literal flags +
         # configured directory paths); no shell involved.
-        result = subprocess.run(  # ruff:ignore[subprocess-without-shell-equals-true]
+        result = subprocess.run(
             cmd, capture_output=True, text=True, check=False, timeout=120
         )
     except OSError, subprocess.TimeoutExpired:

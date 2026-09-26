@@ -41,6 +41,8 @@ from pykissembed.similarity.jina_similarity import build_symmetrized_matrix
 from pykissembed.similarity.populate_embeddings import (
     _JINA_TEXT_CFG,
     _PROVIDER_MAP,
+    _JinaCfg,
+    _ProviderCfg,
     PopulationError,
     _get_embedding_cache,
     _jina_texts,
@@ -1124,11 +1126,19 @@ class TestPopulateEmbeddingsCommand:
         module = importlib.import_module("pykissembed.similarity.populate_embeddings")
         captured: list[str] = []
 
-        def capture_provider(_baselines, _functions, cfg) -> int:  # type: ignore[no-untyped-def]
+        def capture_provider(
+            _baselines: dict[str, object],
+            _functions: list[FunctionInfo],
+            cfg: _ProviderCfg,
+        ) -> int:
             captured.append(cfg.provider)
             return 0
 
-        def capture_jina(_baselines, _functions, _cfg) -> int:  # type: ignore[no-untyped-def]
+        def capture_jina(
+            _baselines: dict[str, object],
+            _functions: list[FunctionInfo],
+            _cfg: _JinaCfg,
+        ) -> int:
             captured.append("jina")
             return 0
 

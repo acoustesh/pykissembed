@@ -65,6 +65,44 @@ class PopulationError(RuntimeError):
     """Raised when an explicit cache-population request cannot be completed."""
 
 
+class _ProviderRequestError(RuntimeError):
+    """Normalized failure from a third-party embedding transport."""
+
+
+def _emit(message: str) -> None:
+    """Write one status line to standard output."""
+    _ = sys.stdout.write(f"{message}\n")
+
+
+def _request_embeddings(
+    texts: list[str],
+    *,
+    provider: str,
+    task: str = "",
+) -> list[list[float]]:
+    """Fetch embeddings and normalize undocumented provider exceptions.
+
+    Returns
+    -------
+    list[list[float]]
+        Embedding vectors returned by the selected provider.
+
+    Raises
+    ------
+    ModuleNotFoundError
+        If the selected provider's optional dependency is not installed.
+    _ProviderRequestError
+        If the provider transport or API raises another ordinary exception.
+    """
+    try:
+        return get_embeddings_batch(texts, provider=provider, task=task)
+    except ModuleNotFoundError:
+        raise
+    except Exception as exc:
+        msg = str(exc) or f"{provider} embedding request failed"
+        raise _ProviderRequestError(msg) from exc
+
+
 class _FunctionHashEntry(TypedDict):
     """Represents a function hash entry."""
 
@@ -229,16 +267,16 @@ def _populate_provider(
         min_length=20,
     )
     if not api_key:
-        print(f"{cfg.env_var} not set or invalid, skipping {cfg.label}")  # ruff:ignore[print]
+        _emit(f"{cfg.env_var} not set or invalid, skipping {cfg.label}")
         return 0
 
     hash_attr = "text_hash" if cfg.use_text else "hash"
     uncached = _find_uncached(baselines, functions, cfg.cache_key, hash_attr)
     if not uncached:
-        print(f"{cfg.label}: all functions already cached")  # ruff:ignore[print]
+        _emit(f"{cfg.label}: all functions already cached")
         return 0
 
-    print(f"{cfg.label}: fetching embeddings for {len(uncached)} functions...")  # ruff:ignore[print]
+    _emit(f"{cfg.label}: fetching embeddings for {len(uncached)} functions...")
     try:
         text_attr = "text_for_embedding" if cfg.use_text else "ast_text"
         texts = [getattr(f, text_attr) for f in uncached]
@@ -249,29 +287,29 @@ def _populate_provider(
             batch_size = 50  # Gemini free tier: 100 requests/minute, use 50 to be safe
             for i in range(0, len(texts), batch_size):
                 batch_texts = texts[i : i + batch_size]
-                batch_embeddings = get_embeddings_batch(batch_texts, provider=cfg.provider)
+                batch_embeddings = _request_embeddings(batch_texts, provider=cfg.provider)
                 embeddings.extend(batch_embeddings)
                 # Add delay between batches to respect rate limits
                 if i + batch_size < len(texts):
                     time.sleep(1.5)  # 1.5 second delay between batches
         else:
-            embeddings = get_embeddings_batch(texts, provider=cfg.provider)
+            embeddings = _request_embeddings(texts, provider=cfg.provider)
 
         new_embeddings = {
             getattr(func, hash_attr): emb for func, emb in zip(uncached, embeddings, strict=True)
         }
         merge_embedding_caches(baselines, {cfg.cache_key: new_embeddings})
-        print(f"{cfg.label}: cached {len(uncached)} new embeddings")  # ruff:ignore[print]
+        _emit(f"{cfg.label}: cached {len(uncached)} new embeddings")
         return len(uncached)
     except ModuleNotFoundError as e:
-        print(  # ruff:ignore[print]
+        _emit(
             f"{cfg.label}: skipping — '{e.name}' is not installed "
             "(install 'pykissembed[cloud]' to enable cloud population)",
         )
         return 0
-    except Exception as e:  # ruff:ignore[blind-except] — external API boundary: network/auth/rate-limit
+    except _ProviderRequestError as e:
         # failures for one provider must not abort populating the rest.
-        print(f"{cfg.label}: failed to fetch embeddings: {e}")  # ruff:ignore[print]
+        _emit(f"{cfg.label}: failed to fetch embeddings: {e}")
         return 0
 
 
@@ -318,7 +356,7 @@ def _populate_jina(baselines: Baselines, functions: list[FunctionInfo], cfg: _Ji
     """
     api_key = load_api_key_from_env("JINA_API_KEY", invalid_prefixes=("your_",), min_length=20)
     if not api_key:
-        print(f"JINA_API_KEY not set or invalid, skipping {cfg.label}")  # ruff:ignore[print]
+        _emit(f"JINA_API_KEY not set or invalid, skipping {cfg.label}")
         return 0
 
     hash_attr = "text_hash" if cfg.use_text else "hash"
@@ -331,14 +369,14 @@ def _populate_jina(baselines: Baselines, functions: list[FunctionInfo], cfg: _Ji
         or passage_cache.get(getattr(func, hash_attr)) is None
     ]
     if not uncached:
-        print(f"{cfg.label}: all functions already cached")  # ruff:ignore[print]
+        _emit(f"{cfg.label}: all functions already cached")
         return 0
 
-    print(f"{cfg.label}: fetching embeddings for {len(uncached)} functions...")  # ruff:ignore[print]
+    _emit(f"{cfg.label}: fetching embeddings for {len(uncached)} functions...")
     try:
         query_texts, passage_texts = _jina_texts(uncached, cfg)
-        query_embs = get_embeddings_batch(query_texts, provider="jina", task=cfg.query_task)
-        passage_embs = get_embeddings_batch(passage_texts, provider="jina", task=cfg.passage_task)
+        query_embs = _request_embeddings(query_texts, provider="jina", task=cfg.query_task)
+        passage_embs = _request_embeddings(passage_texts, provider="jina", task=cfg.passage_task)
         query_updates: dict[str, list[float]] = {}
         passage_updates: dict[str, list[float]] = {}
         for func, query_emb, passage_emb in zip(uncached, query_embs, passage_embs, strict=True):
@@ -352,17 +390,17 @@ def _populate_jina(baselines: Baselines, functions: list[FunctionInfo], cfg: _Ji
                 cfg.passage_cache_key: passage_updates,
             },
         )
-        print(f"{cfg.label}: cached {len(uncached)} new embeddings")  # ruff:ignore[print]
+        _emit(f"{cfg.label}: cached {len(uncached)} new embeddings")
         return len(uncached)
     except ModuleNotFoundError as e:
-        print(  # ruff:ignore[print]
+        _emit(
             f"{cfg.label}: skipping — '{e.name}' is not installed "
             "(install 'pykissembed[cloud]' to enable cloud population)",
         )
         return 0
-    except Exception as e:  # ruff:ignore[blind-except] — external API boundary: network/auth/rate-limit
+    except _ProviderRequestError as e:
         # failures for one provider must not abort populating the rest.
-        print(f"{cfg.label}: failed to fetch embeddings: {e}")  # ruff:ignore[print]
+        _emit(f"{cfg.label}: failed to fetch embeddings: {e}")
         return 0
 
 
@@ -848,7 +886,7 @@ def _attempt_network_provider(
     """
     missing_before = _missing_for_provider(baselines, functions, provider)
     if not missing_before:
-        print(f"{provider}: all scanned functions already cached")  # ruff:ignore[print]
+        _emit(f"{provider}: all scanned functions already cached")
         return 0, None
     missing_credential = _configured_credential(provider)
     if missing_credential:
@@ -868,15 +906,15 @@ def _inspect_caches(
 ) -> None:
     """Print cache gaps without mutating or persisting *baselines*."""
     selected = _ALL_PROVIDERS if provider == "all" else (provider,)
-    print("--cached-only: inspection only; no API calls or cache writes")  # ruff:ignore[print]
+    _emit("--cached-only: inspection only; no API calls or cache writes")
     for name in selected:
         missing = _missing_for_provider(baselines, functions, name)
-        print(  # ruff:ignore[print]
+        _emit(
             f"{name}: {missing} of {len(functions)} scanned functions missing",
         )
         if name == "combined":
             for member, count in _combined_member_gaps(baselines, functions).items():
-                print(f"  member {member}: {count} missing")  # ruff:ignore[print]
+                _emit(f"  member {member}: {count} missing")
 
 
 def _populate_all(
@@ -917,7 +955,7 @@ def _populate_all(
         performed = performed or new_count > 0
         if error:
             unresolved.append(error)
-            print(f"Skipping {error}")  # ruff:ignore[print]
+            _emit(f"Skipping {error}")
 
     member_gaps = _combined_member_gaps(baselines, functions)
     if member_gaps:
@@ -991,14 +1029,14 @@ def populate_provider_embeddings(
     """
     _require_canonical_provider(provider)
     directories = _resolve_scan_directories(paths)
-    print("Loading baselines and extracting functions...")  # ruff:ignore[print]
+    _emit("Loading baselines and extracting functions...")
     baselines = load_baselines()
     functions = (
         extract_all_function_infos(min_loc=1)
         if directories is None
         else extract_function_infos_from_directories(directories, min_loc=1)
     )
-    print(f"Found {len(functions)} functions in codebase")  # ruff:ignore[print]
+    _emit(f"Found {len(functions)} functions in codebase")
 
     if cached_only:
         _inspect_caches(provider, baselines, functions)
@@ -1043,13 +1081,13 @@ def populate_provider_embeddings(
         performed = total_new > 0
 
     if total_new > 0 or hashes_changed or performed:
-        print(  # ruff:ignore[print]
+        _emit(
             f"\nSaving cache state ({total_new} provider result(s))...",
         )
         save_baselines(baselines)
-        print("Done!")  # ruff:ignore[print]
+        _emit("Done!")
     else:
-        print("\nNo cache changes to save.")  # ruff:ignore[print]
+        _emit("\nNo cache changes to save.")
 
 
 def populate_embeddings(provider: str = "all") -> None:

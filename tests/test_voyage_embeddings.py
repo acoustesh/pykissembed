@@ -2,13 +2,15 @@
 
 from __future__ import annotations
 
-from typing import cast
-
 import pytest
 import requests
 
 from pykissembed.similarity import embeddings
 from pykissembed.similarity.constants import VOYAGE_CODE_MODEL
+from pykissembed.similarity.embeddings import (
+    _build_provider_caller,
+    _parse_voyage_response,
+)
 
 pytestmark = pytest.mark.usefixtures("_voyage_key")
 
@@ -85,7 +87,7 @@ def test_voyage_request_uses_official_rest_contract_and_input_order(
         return _Response(_success_payload(["first", "second"]))
 
     monkeypatch.setattr(requests, "post", fake_post)
-    make_request, _is_retryable = embeddings._build_provider_caller(  # ruff:ignore[private-member-access]
+    make_request, _is_retryable = _build_provider_caller(
         "voyage",
         VOYAGE_CODE_MODEL,
         17.5,
@@ -133,7 +135,7 @@ def test_voyage_request_uses_official_rest_contract_and_input_order(
 def test_voyage_response_rejects_malformed_payloads(payload: object, message: str) -> None:
     """Malformed envelopes, indices, and vectors fail before reaching the cache."""
     with pytest.raises(ValueError, match=message):
-        embeddings._parse_voyage_response(payload, 1)  # ruff:ignore[private-member-access]
+        _parse_voyage_response(payload, 1)
 
 
 def test_voyage_response_rejects_duplicate_indices() -> None:
@@ -146,7 +148,7 @@ def test_voyage_response_rejects_duplicate_indices() -> None:
     }
 
     with pytest.raises(ValueError, match="duplicate embedding indices"):
-        embeddings._parse_voyage_response(payload, 2)  # ruff:ignore[private-member-access]
+        _parse_voyage_response(payload, 2)
 
 
 def test_voyage_response_rejects_inconsistent_vector_dimensions() -> None:
@@ -159,7 +161,7 @@ def test_voyage_response_rejects_inconsistent_vector_dimensions() -> None:
     }
 
     with pytest.raises(ValueError, match="inconsistent dimensions"):
-        embeddings._parse_voyage_response(payload, 2)  # ruff:ignore[private-member-access]
+        _parse_voyage_response(payload, 2)
 
 
 @pytest.mark.parametrize("status_code", [429, 500, 503])
@@ -261,8 +263,9 @@ def test_voyage_preserves_existing_batch_size(
         del headers, timeout
         texts = json["input"]
         assert isinstance(texts, list)
+        assert all(isinstance(text, str) for text in texts)
         batch_sizes.append(len(texts))
-        return _Response(_success_payload(cast("list[str]", texts)))
+        return _Response(_success_payload([text for text in texts if isinstance(text, str)]))
 
     monkeypatch.setattr(requests, "post", fake_post)
     texts = [f"text-{index}" for index in range(129)]

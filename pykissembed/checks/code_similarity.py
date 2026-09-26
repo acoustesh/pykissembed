@@ -283,14 +283,6 @@ def test_providers_parallel(
     pca_cache : SimilarityPcaCache
         Session-scoped PCA model cache.
 
-    Raises
-    ------
-    SystemExit
-        Propagated if a provider raises ``SystemExit``.
-    GeneratorExit
-        Propagated if a provider raises ``GeneratorExit``.
-    KeyboardInterrupt
-        Propagated if a provider raises ``KeyboardInterrupt``.
     """
     if not shared_functions:
         pytest.skip("No [tool.pykissembed] paths configured")
@@ -315,19 +307,16 @@ def test_providers_parallel(
         futures = {executor.submit(_run_one, p): p for p in _PARALLEL_PROVIDERS}
         for future in as_completed(futures):
             provider = futures[future]
-            try:
-                future.result()
-            except pytest.skip.Exception as exc:
+            exc = future.exception()
+            if exc is None:
+                continue
+            if isinstance(exc, pytest.skip.Exception):
                 skips[provider.label] = str(exc)
-            # Unparenthesized multi-exception `except` (PEP 758, Python 3.14+)
-            # — equivalent to `except (KeyboardInterrupt, SystemExit,
-            # GeneratorExit):`. Looks like a Python 2 typo at a glance but is
-            # valid modern syntax; this project targets py314+.
-            except KeyboardInterrupt, SystemExit, GeneratorExit:
-                raise
-            except BaseException as exc:  # ruff:ignore[blind-except] — deliberately broad: aggregates every
-                # provider's failure (network, API, assertion) so one provider's error doesn't
-                # hide the others'; process-exit signals are already re-raised above.
+            elif isinstance(exc, (KeyboardInterrupt, SystemExit, GeneratorExit)):
+                raise exc
+            else:
+                # Future.exception() exposes every provider failure without a
+                # blind exception handler; process-exit signals are re-raised.
                 errors[provider.label] = exc
 
     if errors:

@@ -14,7 +14,36 @@ from pykissembed.config import get_config
 from pykissembed.paths import resolve_paths, should_skip
 
 if TYPE_CHECKING:
+    from collections.abc import Callable
     from pathlib import Path
+
+
+class AnalyzerError(RuntimeError):
+    """Normalized failure raised by an untyped complexity analyzer."""
+
+
+def call_analyzer(
+    analyzer: Callable[..., object],
+    *args: object,
+    **kwargs: object,
+) -> object:
+    """Call an untyped analyzer and normalize its undocumented failures.
+
+    Returns
+    -------
+    object
+        The analyzer's untrusted return value, for caller-side validation.
+
+    Raises
+    ------
+    AnalyzerError
+        If the third-party analyzer raises an ordinary exception.
+    """
+    try:
+        return analyzer(*args, **kwargs)
+    except Exception as exc:
+        msg = f"{getattr(analyzer, '__name__', 'analyzer')} failed"
+        raise AnalyzerError(msg) from exc
 
 
 def _extract_block_tuple(block: object) -> tuple[str, int, int]:
@@ -102,6 +131,11 @@ def _get_complexities(
     -------
     list[tuple[str, int, int]]
         List of ``(function_name, start_line, complexity)`` tuples.
+
+    Raises
+    ------
+    TypeError
+        If complexipy exposes an invalid API or result shape.
     """
     if metric == "cc":
         try:
@@ -109,17 +143,36 @@ def _get_complexities(
         except SyntaxError:
             return []
 
-    # cognitive
-    # Lazy: complexipy is a compiled (Rust) analyzer; deferring the import
-    # avoids its cost for callers that only need cyclomatic complexity.
-    from complexipy import file_complexity  # ruff:ignore[import-outside-top-level]
+    # Lazy: complexipy is a compiled analyzer; defer loading for callers that
+    # only need cyclomatic complexity. Validate the untyped module boundary.
+    complexity_module = import_module("complexipy")
+    file_complexity = getattr(complexity_module, "file_complexity", None)
+    if not callable(file_complexity):
+        msg = "complexipy.file_complexity must be callable"
+        raise TypeError(msg)
 
     try:
-        result = file_complexity(str(file_path))
-    except Exception:  # ruff:ignore[blind-except] — third-party analyzer; any failure on arbitrary
-        # user source degrades to "no cognitive-complexity data" rather than crashing.
+        result = call_analyzer(file_complexity, str(file_path))
+    except AnalyzerError:
+        # Invalid user source degrades to no cognitive-complexity data.
         return []
-    return [(f.name, f.line_start, f.complexity) for f in result.functions]
+    functions = getattr(result, "functions", None)
+    if not isinstance(functions, list):
+        msg = "complexipy result.functions must be a list"
+        raise TypeError(msg)
+    values: list[tuple[str, int, int]] = []
+    for function in functions:
+        name = getattr(function, "name", None)
+        line_start = getattr(function, "line_start", None)
+        complexity = getattr(function, "complexity", None)
+        if not isinstance(name, str) or not isinstance(line_start, int):
+            msg = "complexipy function name and line_start must be typed"
+            raise TypeError(msg)
+        if not isinstance(complexity, int):
+            msg = "complexipy function complexity must be int"
+            raise TypeError(msg)
+        values.append((name, line_start, complexity))
+    return values
 
 
 def _scan_complexity_directory(

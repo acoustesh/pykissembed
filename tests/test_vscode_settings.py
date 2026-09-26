@@ -22,11 +22,22 @@ def _tolerant_load(text: str) -> dict[str, object]:
     -------
     dict[str, object]
         Parsed settings data.
+
+    Raises
+    ------
+    ValueError
+        If the parsed settings are not an object with string keys.
     """
     no_line_comments = re.sub(r"//[^\n]*", "", text)
     no_block_comments = re.sub(r"/\*.*?\*/", "", no_line_comments, flags=re.DOTALL)
     no_trailing_commas = re.sub(r",(\s*[}\]])", r"\1", no_block_comments)
-    return json.loads(no_trailing_commas)  # type: ignore[no-any-return]
+    parsed: object = json.loads(no_trailing_commas)
+    if not isinstance(parsed, dict) or not all(
+        isinstance(key, str) for key in parsed
+    ):
+        msg = "VS Code settings must be a JSON object with string keys"
+        raise ValueError(msg)
+    return {key: value for key, value in parsed.items() if isinstance(key, str)}
 
 
 class TestCreatesFile:

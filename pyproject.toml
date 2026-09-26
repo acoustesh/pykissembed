@@ -180,6 +180,10 @@ ignore = [
 [tool.ruff.lint.pydocstyle]
 convention = "numpy"
 
+[tool.ruff.lint.flake8-type-checking]
+# Typer resolves command annotations at runtime to construct Click parameters.
+runtime-evaluated-decorators = ["typer.Typer.callback", "typer.Typer.command"]
+
 [tool.ruff.lint.per-file-ignores]
 # S404 (suspicious-subprocess-import, preview-only) — test helpers legitimately
 # `import subprocess` to shell out and exercise the CLI end-to-end.
@@ -192,6 +196,15 @@ convention = "numpy"
 # _similarity_backend import ...`'s bare-name resolution — see git history.
 "tests/**" = ["missing-type-function-argument", "missing-return-type-undocumented-public-function", "missing-return-type-private-function", "assert", "magic-value-comparison", "suspicious-subprocess-import", "implicit-namespace-package", "import-private-name", "no-self-use"]
 "pykissembed/tests/fixtures/**" = ["ALL"]
+# S603 (subprocess-without-shell-equals-true) — approved for these exact files:
+# each call passes an argv sequence to a known executable without invoking a shell.
+"pykissembed/cli.py" = ["subprocess-without-shell-equals-true"]
+"pykissembed/checks/docstring_format.py" = ["subprocess-without-shell-equals-true"]
+"pykissembed/checks/lint_typecheck.py" = ["subprocess-without-shell-equals-true"]
+"tests/fixtures/sample_repo/tests/docstring_format.py" = ["subprocess-without-shell-equals-true"]
+"tests/fixtures/sample_repo/tests/lint_typecheck.py" = ["subprocess-without-shell-equals-true"]
+"tests/test_install_extras.py" = ["subprocess-without-shell-equals-true"]
+"tests/test_plugin_collection.py" = ["subprocess-without-shell-equals-true"]
 
 [tool.pyright]
 include = ["pykissembed", "tests"]

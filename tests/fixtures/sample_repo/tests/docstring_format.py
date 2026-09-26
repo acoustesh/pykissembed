@@ -9,14 +9,14 @@ import json
 import shutil
 import subprocess
 from dataclasses import dataclass
-from typing import TYPE_CHECKING, cast
+from typing import TYPE_CHECKING
 
 import pytest
 
 if TYPE_CHECKING:
     from pathlib import Path
 
-from pykissembed.baselines_engine import load_envelope, save_envelope
+from pykissembed.baselines_engine import load_envelope, read_int_map, save_envelope
 from pykissembed.config import get_config
 
 
@@ -48,7 +48,7 @@ def _run_ruff_docstring_check(target_dir: Path) -> list[DocstringViolation]:
     if ruff is None:
         return []
     # S603: fixed argv (resolved ruff binary + literal flags + a configured directory).
-    result = subprocess.run(  # ruff:ignore[subprocess-without-shell-equals-true]
+    result = subprocess.run(
         [ruff, "check", str(target_dir), "--select=D", "--output-format=json"],
         capture_output=True,
         text=True,
@@ -57,20 +57,19 @@ def _run_ruff_docstring_check(target_dir: Path) -> list[DocstringViolation]:
     if not result.stdout.strip():
         return []
     try:
-        parsed_obj = cast("object", json.loads(result.stdout))
+        parsed_obj: object = json.loads(result.stdout)
     except json.JSONDecodeError:
         return []
     if not isinstance(parsed_obj, list):
         return []
     violations: list[DocstringViolation] = []
-    for item_obj in cast("list[object]", parsed_obj):
+    for item_obj in parsed_obj:
         if not isinstance(item_obj, dict):
             continue
-        item = cast("dict[str, object]", item_obj)
-        filename = item.get("filename")
-        location_obj = item.get("location")
-        code = item.get("code")
-        message = item.get("message")
+        filename = item_obj.get("filename")
+        location_obj = item_obj.get("location")
+        code = item_obj.get("code")
+        message = item_obj.get("message")
         if (
             not isinstance(filename, str)
             or not isinstance(location_obj, dict)
@@ -78,9 +77,8 @@ def _run_ruff_docstring_check(target_dir: Path) -> list[DocstringViolation]:
             or not isinstance(message, str)
         ):
             continue
-        loc = cast("dict[str, object]", location_obj)
-        row_obj = loc.get("row")
-        col_obj = loc.get("column")
+        row_obj = location_obj.get("row")
+        col_obj = location_obj.get("column")
         if not isinstance(row_obj, int) or not isinstance(col_obj, int):
             continue
         violations.append(
@@ -111,7 +109,7 @@ class TestDocstringFormat:
         config = get_config()
         baseline_file = config.baseline_path / "docstring_format.json"
         envelope = load_envelope(baseline_file, kind="docstring_format")
-        per_file_baseline = cast("dict[str, int]", envelope.data.get("per_file", {}))
+        per_file_baseline = read_int_map(envelope.data, "per_file")
 
         all_violations: list[DocstringViolation] = []
         for path in pykissembed_paths:

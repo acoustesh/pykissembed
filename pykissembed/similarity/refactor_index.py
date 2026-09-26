@@ -11,11 +11,14 @@ from typing import TYPE_CHECKING, TypedDict
 import numpy as np
 import numpy.typing as npt
 
+from pykissembed.similarity.ast_helpers import extract_all_function_infos
+from pykissembed.similarity.complexity import load_all_complexity_maps
 from pykissembed.similarity.constants import (
     DEFAULT_REFACTOR_INDEX_THRESHOLD,
     DEFAULT_REFACTOR_INDEX_TOP_N,
 )
 from pykissembed.similarity.exclusions import is_excluded_pair
+from pykissembed.similarity.storage import load_baselines
 
 if TYPE_CHECKING:
     from collections.abc import Mapping
@@ -453,19 +456,6 @@ def get_refactor_priority_message_for_complexity() -> str:
         Refactoring priority message, or empty string if unavailable.
     """
     try:
-        # Lazy: this helper is only invoked when a complexity check has
-        # already failed, so avoid the ast_helpers/complexity/storage import
-        # cost on the (common) happy path where nothing fails.
-        from pykissembed.similarity.ast_helpers import (  # ruff:ignore[import-outside-top-level]
-            extract_all_function_infos,
-        )
-        from pykissembed.similarity.complexity import (  # ruff:ignore[import-outside-top-level]
-            load_all_complexity_maps,
-        )
-        from pykissembed.similarity.storage import (  # ruff:ignore[import-outside-top-level]
-            load_baselines,
-        )
-
         baselines = _as_str_object_mapping(load_baselines())
         config = _parse_refactor_config(baselines.get("config"))
         min_loc = config["min_loc_for_similarity"]
@@ -493,8 +483,8 @@ def get_refactor_priority_message_for_complexity() -> str:
             threshold=threshold,
             top_n=top_n,
         )
-    except Exception:  # ruff:ignore[blind-except] — best-effort supplementary message; any
-        # failure here must not mask the underlying complexity-check failure.
+    except (ImportError, KeyError, OSError, RuntimeError, TypeError, ValueError):
+        # Boundary failures here must not mask the underlying complexity failure.
         return ""
     else:
         return msg or ""

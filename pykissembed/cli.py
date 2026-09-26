@@ -19,10 +19,9 @@ import shutil
 import subprocess
 import sys
 import tomllib
-from pathlib import (
-    Path,  # ruff:ignore[typing-only-standard-library-import] — Typer resolves annotations at runtime via reflection
-)
-from typing import Any
+from importlib import import_module
+from pathlib import Path
+from typing import Annotated, Any
 
 import typer
 from rich.console import Console
@@ -30,7 +29,9 @@ from rich.table import Table
 
 from pykissembed import __version__
 from pykissembed.baselines_engine import ratchet
+from pykissembed.checks.lint_typecheck import build_report, run_pyright, run_ruff
 from pykissembed.config import get_config, load_config
+from pykissembed.providers.registry import discover_all
 from pykissembed.vscode_settings import sync_vscode_settings
 
 app = typer.Typer(
@@ -46,15 +47,13 @@ console = Console()
 def _main_callback(
     ctx: typer.Context,
     *,
-    # FBT001/FBT003: Typer's `Option(default, *param_decls, ...)` signature
-    # requires the default positionally when param_decls follow it; the
-    # parameter itself is keyword-only so Typer's own keyword-based
-    # invocation (never positional) is unaffected.
-    version: bool = typer.Option(
-        False,  # ruff:ignore[boolean-positional-value-in-call]
+    version: Annotated[
+        bool,
+        typer.Option(
         "--version",
         help="Show pykissembed version and exit.",
-    ),
+        ),
+    ] = False,
 ) -> None:
     """Print the pykissembed version and exit if --version is passed.
 
@@ -74,11 +73,10 @@ def _main_callback(
 
 @app.command()
 def check(
-    # B008: Typer requires the `Argument(...)`/`Option(...)` call in the
-    # default itself — that's how it discovers CLI parameter metadata.
-    pytest_args: list[str] | None = typer.Argument(  # ruff:ignore[function-call-in-default-argument]
-        None, help="Extra args forwarded to pytest."
-    ),
+    pytest_args: Annotated[
+        list[str] | None,
+        typer.Argument(help="Extra args forwarded to pytest."),
+    ] = None,
 ) -> None:
     """Run the same gate that ``pytest`` runs (lint + type + complexity + ...).
 
@@ -105,16 +103,15 @@ def check(
     # S603: fixed argv list (sys.executable + literal flags + the CLI's own
     # forwarded args); this command's entire purpose is to forward args to
     # pytest, so there is no narrower "trusted" input to require.
-    raise typer.Exit(subprocess.call(cmd))  # ruff:ignore[subprocess-without-shell-equals-true]
+    raise typer.Exit(subprocess.call(cmd))
 
 
 @app.command(name="ratchet")
 def ratchet_cmd(
-    baseline_dir: Path | None = typer.Option(  # ruff:ignore[function-call-in-default-argument] — Typer requires the call in the default
-        None,
-        "--baseline-dir",
-        help="Override the configured baseline directory.",
-    ),
+    baseline_dir: Annotated[
+        Path | None,
+        typer.Option("--baseline-dir", help="Override the configured baseline directory."),
+    ] = None,
 ) -> None:
     """Lower baselines where current diagnostics are lower; refuse to raise.
 
@@ -144,7 +141,7 @@ def ratchet_cmd(
         except NotImplementedError:
             typer.echo(f"  skip {path.name}: no current-diagnostics computer implemented")
             continue
-        except Exception as exc:  # ruff:ignore[blind-except] — per-file resilience: one bad baseline shouldn't abort the whole ratchet run
+        except (OSError, RuntimeError, TypeError, ValueError) as exc:
             typer.echo(f"  skip {path.name}: {exc}")
             continue
         with path.open(encoding="utf-8") as f:
@@ -185,14 +182,6 @@ def _compute_current_for(baseline_name: str) -> dict[str, Any]:
         If no computer is implemented for *baseline_name*.
     """
     if baseline_name == "lint_typecheck.json":
-        # Lazy: avoids importing the checks module (and its pytest/ruff/
-        # pyright invocation helpers) for CLI invocations that never ratchet.
-        from pykissembed.checks.lint_typecheck import (  # ruff:ignore[import-outside-top-level]
-            build_report,
-            run_pyright,
-            run_ruff,
-        )
-
         paths = get_config().resolved_paths()
         if not paths:
             return {}
@@ -221,10 +210,6 @@ def providers_list() -> None:
     typer.Exit
         If no providers are installed.
     """
-    # Lazy: discovery imports entry-point providers and their optional cloud
-    # clients. Avoid that cost for every CLI invocation.
-    from pykissembed.providers.registry import discover_all  # ruff:ignore[import-outside-top-level]
-
     registry = discover_all()
     if not registry.all():
         typer.echo("No providers installed. Try: pip install 'pykissembed[cloud]'")
@@ -238,7 +223,7 @@ def providers_list() -> None:
     for provider in registry.all():
         try:
             configured = provider.is_configured()
-        except Exception:  # ruff:ignore[blind-except] — is_configured() implementations are third-party; any failure means "not configured"
+        except (OSError, RuntimeError, TypeError, ValueError):
             configured = False
         table.add_row(
             provider.name,
@@ -265,15 +250,15 @@ def populate_embeddings(
         "--provider",
         help="Canonical provider variant (for example, openai-text or openai-ast).",
     ),
-    paths: list[Path] | None = typer.Option(  # ruff:ignore[function-call-in-default-argument] — Typer requires the call in the default
-        None, "--path", help="Directories to scan (default: configured source paths)."
-    ),
+    paths: Annotated[
+        list[Path] | None,
+        typer.Option("--path", help="Directories to scan (default: configured source paths)."),
+    ] = None,
     *,
-    cached_only: bool = typer.Option(
-        False,  # ruff:ignore[boolean-positional-value-in-call] — Typer's Option(default, *param_decls) requires this positional
-        "--cached-only",
-        help="Skip API calls; only read cache.",
-    ),
+    cached_only: Annotated[
+        bool,
+        typer.Option("--cached-only", help="Skip API calls; only read cache."),
+    ] = False,
 ) -> None:
     """Populate or inspect compressed per-function embedding caches.
 
@@ -288,24 +273,35 @@ def populate_embeddings(
 
     Raises
     ------
+    TypeError
+        If the lazily loaded population module does not expose its documented API.
     typer.Exit
         If the provider name is invalid or the requested cloud provider cannot
         populate its missing cache entries.
     """
-    # Lazy: cache population imports the numerical similarity subsystem and
-    # optional cloud clients, which unrelated CLI commands do not need.
-    from pykissembed.similarity.populate_embeddings import (  # ruff:ignore[import-outside-top-level]
-        PopulationError,
-        populate_provider_embeddings,
+    # Keep the numerical similarity subsystem lazy for unrelated CLI commands,
+    # but validate both objects obtained through the dynamic module boundary.
+    population_module = import_module("pykissembed.similarity.populate_embeddings")
+    populate_provider_embeddings = getattr(
+        population_module,
+        "populate_provider_embeddings",
+        None,
     )
+    population_error = getattr(population_module, "PopulationError", None)
+    if not callable(populate_provider_embeddings):
+        msg = "populate_provider_embeddings must be callable"
+        raise TypeError(msg)
+    if not isinstance(population_error, type) or not issubclass(population_error, Exception):
+        msg = "PopulationError must be an exception type"
+        raise TypeError(msg)
 
     try:
-        populate_provider_embeddings(
+        _ = populate_provider_embeddings(
             provider_name,
             paths=paths,
             cached_only=cached_only,
         )
-    except PopulationError as exc:
+    except population_error as exc:
         typer.echo(str(exc))
         raise typer.Exit(1) from None
 
@@ -317,9 +313,10 @@ def populate_embeddings(
 
 @app.command()
 def type_review(
-    report: Path = typer.Option(  # ruff:ignore[function-call-in-default-argument] — Typer requires the call in the default
-        ..., "--json", help="Path to a lint_typecheck_report.json produced by the lint gate."
-    ),
+    report: Annotated[
+        Path,
+        typer.Option("--json", help="Path to a lint_typecheck_report.json produced by the lint gate."),
+    ],
 ) -> None:
     """Iterate type-fix-only the files mentioned in *report*.
 
@@ -350,7 +347,7 @@ def type_review(
         typer.echo(f"\n=== {fp} ===")
         # S603: fixed 2-element argv (resolved pyright binary + a file path
         # already validated against the loaded report); no shell involved.
-        _ = subprocess.call([pyright, fp])  # ruff:ignore[subprocess-without-shell-equals-true]
+        _ = subprocess.call([pyright, fp])
 
 
 # ---------------------------------------------------------------------------
@@ -361,14 +358,16 @@ def type_review(
 @app.command()
 def init(
     *,
-    force: bool = typer.Option(
-        False,  # ruff:ignore[boolean-positional-value-in-call] — Typer's Option(default, *param_decls) requires this positional
-        "--force",
-        help=(
-            "Overwrite an existing [tool.pykissembed] block and any "
-            "conflicting .vscode/settings.json pytest values."
+    force: Annotated[
+        bool,
+        typer.Option(
+            "--force",
+            help=(
+                "Overwrite an existing [tool.pykissembed] block and any "
+                "conflicting .vscode/settings.json pytest values."
+            ),
         ),
-    ),
+    ] = False,
 ) -> None:
     """Scaffold ``[tool.pykissembed]`` in ``pyproject.toml`` and sync VS Code pytest settings.
 

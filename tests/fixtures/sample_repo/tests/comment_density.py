@@ -7,16 +7,16 @@ from __future__ import annotations
 
 import ast
 from dataclasses import dataclass
-from typing import TYPE_CHECKING, cast
+from typing import TYPE_CHECKING
 
 import pytest
-from radon.raw import analyze  # type: ignore[import-untyped]
+from radon.raw import analyze
 
 from pykissembed.baselines_engine import load_envelope, save_envelope
 from pykissembed.config import get_config
 
 if TYPE_CHECKING:
-    from collections.abc import Iterator
+    from collections.abc import Iterator, Mapping
     from pathlib import Path
 
 
@@ -123,6 +123,24 @@ def _file_stats(file_path: Path) -> CommentStats:
     return _comment_density_from_source(file_path.read_text(encoding="utf-8"))
 
 
+def _read_per_file_bounds(data: Mapping[str, object]) -> dict[str, dict[str, float]]:
+    raw = data.get("per_file")
+    if not isinstance(raw, dict):
+        return {}
+    bounds: dict[str, dict[str, float]] = {}
+    for path_key, entry in raw.items():
+        if not isinstance(path_key, str) or not isinstance(entry, dict):
+            continue
+        bounds[path_key] = {
+            bound: float(number)
+            for bound, number in entry.items()
+            if isinstance(bound, str)
+            and isinstance(number, (int, float))
+            and not isinstance(number, bool)
+        }
+    return bounds
+
+
 class TestCommentDensity:
     """Tests for comment density."""
 
@@ -142,7 +160,7 @@ class TestCommentDensity:
 
         min_density = float(envelope.data.get("min_density", DEFAULT_MIN_DENSITY))
         max_density = float(envelope.data.get("max_density", DEFAULT_MAX_DENSITY))
-        per_file = cast("dict[str, dict[str, float]]", envelope.data.get("per_file", {}))
+        per_file = _read_per_file_bounds(envelope.data)
 
         violations: list[str] = []
         current: dict[str, float] = {}

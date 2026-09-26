@@ -9,29 +9,25 @@ from __future__ import annotations
 
 import ast
 import importlib
-from typing import TYPE_CHECKING, TypedDict, cast
+from typing import TYPE_CHECKING
 
 import pytest
 
 from pykissembed.baselines_engine import (
     BaselineEnvelope,
     load_envelope,
+    read_float,
+    read_float_map,
+    read_int,
+    read_int_map,
     save_envelope,
 )
 from pykissembed.config import get_config
+from pykissembed.similarity.complexity import AnalyzerError, call_analyzer
 
 if TYPE_CHECKING:
     from collections.abc import Callable, Iterator
     from pathlib import Path
-
-
-class _BaselineConfig(TypedDict, total=False):
-    """Subset of ``[tool.pykissembed]`` that the complexity check uses."""
-
-    cc_threshold: int
-    cog_threshold: int
-    mi_threshold: int
-    max_missing_docstrings: int
 
 
 # ---------------------------------------------------------------------------
@@ -148,22 +144,28 @@ def _get_cog(file_path: Path) -> list[tuple[str, int, int]]:
         complexipy isn't installed, its analysis raises, or the result
         has no ``functions`` attribute.
     """
-    try:
-        # Lazy: complexipy is a compiled (Rust) analyzer; deferring the
-        # import avoids its cost for test runs that never touch cognitive
-        # complexity (e.g. -m complexity without the COG check selected).
-        from complexipy import (  # ruff:ignore[import-outside-top-level]
-            file_complexity,  # type: ignore[import-untyped]
-        )
-    except ImportError:
+    file_complexity = _load_callable("complexipy", "file_complexity")
+    if file_complexity is None:
         return []
     try:
-        result = file_complexity(str(file_path))
-    except Exception:  # ruff:ignore[blind-except] — pragma: no cover — third-party analyzer; any failure on arbitrary user source degrades to "no cognitive-complexity data" rather than crashing the whole check
+        result = call_analyzer(file_complexity, str(file_path))
+    except AnalyzerError:
         return []
-    if not hasattr(result, "functions"):
+    functions = getattr(result, "functions", None)
+    if not isinstance(functions, list):
         return []
-    return [(f.name, f.line_start, f.complexity) for f in result.functions]
+    output: list[tuple[str, int, int]] = []
+    for function in functions:
+        name = getattr(function, "name", None)
+        line_start = getattr(function, "line_start", None)
+        complexity = getattr(function, "complexity", None)
+        if (
+            isinstance(name, str)
+            and isinstance(line_start, int)
+            and isinstance(complexity, int)
+        ):
+            output.append((name, line_start, complexity))
+    return output
 
 
 def _get_mi(file_path: Path) -> float:
@@ -181,8 +183,8 @@ def _get_mi(file_path: Path) -> float:
         return 0.0
     source = file_path.read_text(encoding="utf-8")
     try:
-        score = mi_visit_fn(source, multi=False)
-    except Exception:  # ruff:ignore[blind-except] — third-party analyzer; any failure on arbitrary user source degrades to "no MI data" rather than crashing the whole check
+        score = call_analyzer(mi_visit_fn, source, multi=False)
+    except AnalyzerError:
         return 0.0
     if isinstance(score, (int, float)):
         return float(score)
@@ -210,9 +212,8 @@ class TestDocstringCoverage:
         if not pykissembed_paths:
             pytest.skip("No [tool.pykissembed] paths configured")
         baseline_file, envelope = _load_envelope()
-        config_data = cast("_BaselineConfig", envelope.data)
-        max_missing_default = config_data.get("max_missing_docstrings", 0)
-        per_dir_baseline = cast("dict[str, int]", envelope.data.get("per_dir", {}))
+        max_missing_default = read_int(envelope.data, "max_missing_docstrings", 0)
+        per_dir_baseline = read_int_map(envelope.data, "per_dir")
 
         all_missing: dict[str, list[str]] = {}
         violations: list[str] = []
@@ -257,7 +258,7 @@ class TestLineCount:
         if not pykissembed_paths:
             pytest.skip("No [tool.pykissembed] paths configured")
         baseline_file, envelope = _load_envelope()
-        line_baselines = cast("dict[str, int]", envelope.data.get("line_baselines", {}))
+        line_baselines = read_int_map(envelope.data, "line_baselines")
         violations: list[str] = []
         current_counts: dict[str, int] = {}
         for base_dir in pykissembed_paths:
@@ -291,8 +292,8 @@ class TestCyclomaticComplexity:
         if not pykissembed_paths:
             pytest.skip("No [tool.pykissembed] paths configured")
         baseline_file, envelope = _load_envelope()
-        threshold = cast("_BaselineConfig", envelope.data).get("cc_threshold", 15)
-        cc_baselines = cast("dict[str, int]", envelope.data.get("cc_baselines", {}))
+        threshold = read_int(envelope.data, "cc_threshold", 15)
+        cc_baselines = read_int_map(envelope.data, "cc_baselines")
         violations: list[str] = []
         current_cc: dict[str, int] = {}
         for base_dir in pykissembed_paths:
@@ -334,8 +335,8 @@ class TestCognitiveComplexity:
         if not pykissembed_paths:
             pytest.skip("No [tool.pykissembed] paths configured")
         baseline_file, envelope = _load_envelope()
-        threshold = cast("_BaselineConfig", envelope.data).get("cog_threshold", 15)
-        cog_baselines = cast("dict[str, int]", envelope.data.get("cog_baselines", {}))
+        threshold = read_int(envelope.data, "cog_threshold", 15)
+        cog_baselines = read_int_map(envelope.data, "cog_baselines")
         violations: list[str] = []
         current_cog: dict[str, int] = {}
         for base_dir in pykissembed_paths:
@@ -377,8 +378,8 @@ class TestMaintainabilityIndex:
         if not pykissembed_paths:
             pytest.skip("No [tool.pykissembed] paths configured")
         baseline_file, envelope = _load_envelope()
-        threshold = cast("_BaselineConfig", envelope.data).get("mi_threshold", 13.0)
-        mi_baselines = cast("dict[str, float]", envelope.data.get("mi_baselines", {}))
+        threshold = read_float(envelope.data, "mi_threshold", 13.0)
+        mi_baselines = read_float_map(envelope.data, "mi_baselines")
         violations: list[str] = []
         current_mi: dict[str, float] = {}
         for base_dir in pykissembed_paths:

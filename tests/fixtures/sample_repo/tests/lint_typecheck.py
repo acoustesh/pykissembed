@@ -13,15 +13,48 @@ import json
 import shutil
 import subprocess
 from pathlib import Path
-from typing import Any, cast
+from typing import TYPE_CHECKING, TypedDict
 
 import pytest
 
 from pykissembed.baselines_engine import (
     load_envelope,
+    read_int_map,
     save_envelope,
 )
 from pykissembed.config import get_config
+
+if TYPE_CHECKING:
+    from collections.abc import Mapping
+
+
+class _FileDiagnostics(TypedDict):
+    """Both tools' diagnostics for a single file."""
+
+    ruff: list[dict[str, object]]
+    pyright: list[dict[str, object]]
+
+
+class _Report(TypedDict):
+    """The per-file report persisted for ``pykissembed type-review --json``."""
+
+    files: dict[str, _FileDiagnostics]
+    summary: dict[str, int]
+
+
+def _text(record: Mapping[str, object], key: str) -> str:
+    value = record.get(key)
+    return value if isinstance(value, str) else ""
+
+
+def _number(record: Mapping[str, object], key: str) -> int:
+    value = record.get(key)
+    return value if isinstance(value, int) and not isinstance(value, bool) else 0
+
+
+def _nested(record: Mapping[str, object], key: str) -> Mapping[str, object]:
+    value = record.get(key)
+    return value if isinstance(value, dict) else {}
 
 
 def _resolve_tool(name: str) -> str:
@@ -37,12 +70,12 @@ def _resolve_tool(name: str) -> str:
     return shutil.which(name) or name  # pragma: no cover — defensive
 
 
-def _run_ruff(paths: list[Path]) -> list[dict[str, Any]]:
+def _run_ruff(paths: list[Path]) -> list[Mapping[str, object]]:
     """Run ``ruff check --output-format json`` and return parsed diagnostics.
 
     Returns
     -------
-    list[dict[str, Any]]
+    list[Mapping[str, object]]
         The parsed JSON diagnostics from ``ruff check``. Empty if the
         subprocess errors out or times out, ruff produces no stdout, or
         the parsed JSON isn't a list.
@@ -57,23 +90,25 @@ def _run_ruff(paths: list[Path]) -> list[dict[str, Any]]:
     ]
     try:
         # S603: fixed argv (resolved ruff binary + literal flags + configured paths).
-        result = subprocess.run(  # ruff:ignore[subprocess-without-shell-equals-true]
+        result = subprocess.run(
             cmd, capture_output=True, text=True, check=False, timeout=120
         )
     except OSError, subprocess.TimeoutExpired:
         return []
     if not result.stdout.strip():
         return []
-    parsed = cast("object", json.loads(result.stdout))
-    return list(cast("list[dict[str, Any]]", parsed)) if isinstance(parsed, list) else []
+    parsed: object = json.loads(result.stdout)
+    if not isinstance(parsed, list):
+        return []
+    return [item for item in parsed if isinstance(item, dict)]
 
 
-def _run_pyright(paths: list[Path]) -> list[dict[str, Any]]:
+def _run_pyright(paths: list[Path]) -> list[Mapping[str, object]]:
     """Run ``pyright --outputjson`` and return ``generalDiagnostics``.
 
     Returns
     -------
-    list[dict[str, Any]]
+    list[Mapping[str, object]]
         The ``generalDiagnostics`` list from pyright's JSON output.
         Empty if the subprocess errors out or times out, pyright
         produces no stdout, or the parsed JSON isn't a dict.
@@ -81,30 +116,33 @@ def _run_pyright(paths: list[Path]) -> list[dict[str, Any]]:
     cmd = [_resolve_tool("pyright"), "--outputjson", *[str(p) for p in paths]]
     try:
         # S603: fixed argv (resolved pyright binary + literal flags + configured paths).
-        result = subprocess.run(  # ruff:ignore[subprocess-without-shell-equals-true]
+        result = subprocess.run(
             cmd, capture_output=True, text=True, check=False, timeout=120
         )
     except OSError, subprocess.TimeoutExpired:
         return []
     if not result.stdout.strip():
         return []
-    parsed = cast("object", json.loads(result.stdout))
+    parsed: object = json.loads(result.stdout)
     if not isinstance(parsed, dict):
         return []
-    return list(cast("list[dict[str, Any]]", parsed.get("generalDiagnostics", [])))
+    diagnostics = parsed.get("generalDiagnostics", [])
+    if not isinstance(diagnostics, list):
+        return []
+    return [item for item in diagnostics if isinstance(item, dict)]
 
 
 def _build_report(
-    ruff_diags: list[dict[str, Any]],
-    pyright_diags: list[dict[str, Any]],
+    ruff_diags: list[Mapping[str, object]],
+    pyright_diags: list[Mapping[str, object]],
     *,
     root: Path,
-) -> dict[str, Any]:
+) -> _Report:
     """Aggregate diagnostics into a per-file JSON report.
 
     Returns
     -------
-    dict[str, Any]
+    _Report
         A dict with two keys: ``"files"`` mapping each file's path
         (relative to *root*, or the raw reported path if it isn't
         under *root*) to its ``"ruff"`` and ``"pyright"`` diagnostic
@@ -113,27 +151,27 @@ def _build_report(
         ``ruff_errors``, ``pyright_errors``, ``pyright_warnings``,
         ``pyright_information``, ``pyright_hints``, ``total``).
     """
-    files: dict[str, dict[str, list[dict[str, Any]]]] = {}
+    files: dict[str, _FileDiagnostics] = {}
     ruff_total = 0
     for d in ruff_diags:
-        fp = d.get("filename", "")
+        fp = _text(d, "filename")
         try:
             rel = str(Path(fp).resolve().relative_to(root))
         except ValueError:
             rel = str(fp)
-        loc = cast("dict[str, Any]", d.get("location", {}))
+        loc = _nested(d, "location")
         files.setdefault(rel, {"ruff": [], "pyright": []})["ruff"].append(
             {
-                "code": d.get("code", ""),
-                "message": d.get("message", ""),
-                "line": loc.get("row", 0),
-                "col": loc.get("column", 0),
+                "code": _text(d, "code"),
+                "message": _text(d, "message"),
+                "line": _number(loc, "row"),
+                "col": _number(loc, "column"),
             },
         )
         ruff_total += 1
     severity_counts = {"error": 0, "warning": 0, "information": 0, "hint": 0}
     for d in pyright_diags:
-        fp = d.get("file", "")
+        fp = _text(d, "file")
         try:
             rel = str(Path(fp).resolve().relative_to(root))
         except ValueError:
@@ -143,13 +181,13 @@ def _build_report(
             sev = {0: "error", 1: "warning", 2: "information"}.get(sev_raw, "information")
         else:
             sev = str(sev_raw).lower()
-        rng = cast("dict[str, Any]", d.get("range", {}).get("start", {}))
+        rng = _nested(_nested(d, "range"), "start")
         files.setdefault(rel, {"ruff": [], "pyright": []})["pyright"].append(
             {
-                "code": d.get("rule", ""),
-                "message": d.get("message", ""),
-                "line": rng.get("line", 0),
-                "col": rng.get("character", 0),
+                "code": _text(d, "rule"),
+                "message": _text(d, "message"),
+                "line": _number(rng, "line"),
+                "col": _number(rng, "character"),
                 "severity": sev,
             },
         )
@@ -203,7 +241,7 @@ def test_no_lint_or_type_errors(
         save_envelope(baseline_file, envelope)
         pytest.skip("Updated lint/typecheck baselines")
 
-    per_file_baseline = cast("dict[str, int]", envelope.data.get("per_file", {}))
+    per_file_baseline = read_int_map(envelope.data, "per_file")
     regressions: list[str] = []
     new_violations: list[str] = []
     for file_path, diags in report["files"].items():

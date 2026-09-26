@@ -8,7 +8,7 @@ of an OpenAI ``CreateEmbeddingResponse``.
 from __future__ import annotations
 
 from dataclasses import dataclass
-from typing import TYPE_CHECKING, Any
+from typing import TYPE_CHECKING
 
 import pytest
 from pykissembed.providers import Provider
@@ -123,14 +123,20 @@ class TestEmbed:
         """A small input is sent in one batch with the right model id."""
         monkeypatch.setenv("OPENROUTER_API_KEY", "sk-or-fake")
 
-        captured: dict[str, Any] = {}
+        captured: dict[str, object] = {}
 
         class _FakeEmbeddings:
             @staticmethod
-            def create(*, input: Sequence[str], model: str) -> Any:  # ruff:ignore[builtin-argument-shadowing]
-                captured["input"] = list(input)
+            def create(**kwargs: object) -> object:
+                request_input = kwargs.get("input")
+                model = kwargs.get("model")
+                assert set(kwargs) == {"input", "model"}
+                assert isinstance(request_input, list)
+                assert all(isinstance(text, str) for text in request_input)
+                assert isinstance(model, str)
+                captured["input"] = request_input
                 captured["model"] = model
-                return _FakeResponse([[0.1, 0.2, 0.3] for _ in input])
+                return _FakeResponse([[0.1, 0.2, 0.3] for _ in request_input])
 
         class _FakeClient:
             def __init__(self, *, base_url: str, api_key: str) -> None:
@@ -155,19 +161,22 @@ class TestEmbed:
         """Jina embeds against api.jina.ai with JINA_API_KEY and its extra_body."""
         monkeypatch.setenv("JINA_API_KEY", "jina-fake")
 
-        captured: dict[str, Any] = {}
+        captured: dict[str, object] = {}
 
         class _FakeEmbeddings:
             @staticmethod
-            def create(
-                *,
-                input: Sequence[str],  # ruff:ignore[builtin-argument-shadowing]
-                model: str,
-                extra_body: dict[str, Any],
-            ) -> Any:
+            def create(**kwargs: object) -> object:
+                request_input = kwargs.get("input")
+                model = kwargs.get("model")
+                extra_body = kwargs.get("extra_body")
+                assert set(kwargs) == {"input", "model", "extra_body"}
+                assert isinstance(request_input, list)
+                assert all(isinstance(text, str) for text in request_input)
+                assert isinstance(model, str)
+                assert isinstance(extra_body, dict)
                 captured["model"] = model
                 captured["extra_body"] = extra_body
-                return _FakeResponse([[0.5, 0.5] for _ in input])
+                return _FakeResponse([[0.5, 0.5] for _ in request_input])
 
         class _FakeClient:
             def __init__(self, *, base_url: str, api_key: str) -> None:
@@ -201,10 +210,14 @@ class TestEmbed:
         calls: list[Sequence[str]] = []
 
         class _FakeEmbeddings:
-            def create(self, *, input: Sequence[str], model: str) -> Any:  # ruff:ignore[builtin-argument-shadowing]
-                del model
-                calls.append(list(input))
-                return _FakeResponse([[0.0] for _ in input])
+            def create(self, **kwargs: object) -> object:
+                request_input = kwargs.get("input")
+                assert set(kwargs) == {"input", "model"}
+                assert isinstance(request_input, list)
+                assert all(isinstance(text, str) for text in request_input)
+                assert isinstance(kwargs.get("model"), str)
+                calls.append(request_input)
+                return _FakeResponse([[0.0] for _ in request_input])
 
         class _FakeClient:
             def __init__(self, *, base_url: str, api_key: str) -> None:
@@ -230,8 +243,10 @@ class TestEmbed:
         called = {"n": 0}
 
         class _FakeEmbeddings:
-            def create(self, *, input: Sequence[str], model: str) -> Any:  # ruff:ignore[builtin-argument-shadowing]
-                del model
+            def create(self, **kwargs: object) -> object:
+                assert set(kwargs) == {"input", "model"}
+                assert isinstance(kwargs.get("input"), list)
+                assert isinstance(kwargs.get("model"), str)
                 called["n"] += 1
                 return _FakeResponse([])
 
@@ -440,7 +455,8 @@ class TestDotenv:
         dotenv.write_text("OPENROUTER_API_KEY=initial", encoding="utf-8")
         calls = {"n": 0}
 
-        def _spy(start: Path | None = None) -> Path | None:  # ruff:ignore[unused-function-argument]
+        def _spy(start: Path | None = None) -> Path | None:
+            del start
             calls["n"] += 1
             return dotenv
 

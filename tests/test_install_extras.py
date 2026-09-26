@@ -92,7 +92,7 @@ def _build_wheels(destination: Path) -> None:
     """Build core and cloud wheels into *destination*."""
     destination.mkdir(parents=True, exist_ok=True)
     for source in (REPO_ROOT, REPO_ROOT / "pykissembed_cloud"):
-        subprocess.run(  # ruff:ignore[subprocess-without-shell-equals-true]
+        subprocess.run(
             [_require_uv(), "build", "--wheel", "--out-dir", str(destination), str(source)],
             cwd=REPO_ROOT,
             check=True,
@@ -169,7 +169,7 @@ def _run_metadata_probe(venv_python: Path) -> tuple[set[str], dict[str, str], se
         print("ACTIVE=" + ",".join(provider.name for provider in discover_all().all()))
         """,
     )
-    result = subprocess.run(  # ruff:ignore[subprocess-without-shell-equals-true]
+    result = subprocess.run(
         [str(venv_python), "-c", code],
         capture_output=True,
         text=True,
@@ -199,7 +199,7 @@ def _run_typecheck_probe(project: Path, venv_python: Path) -> None:
         ),
         encoding="utf-8",
     )
-    result = subprocess.run(  # ruff:ignore[subprocess-without-shell-equals-true]
+    result = subprocess.run(
         [str(venv_python), "-m", "pyright", "--outputjson", str(probe)],
         cwd=project,
         capture_output=True,
@@ -218,14 +218,14 @@ def test_isolated_install_is_cloud_only(tmp_path: Path, extra: str | None) -> No
     wheels = tmp_path / "wheels"
     _build_wheels(wheels)
     consumer = _make_consumer_project(tmp_path, wheels, extra)
-    subprocess.run(  # ruff:ignore[subprocess-without-shell-equals-true]
+    subprocess.run(
         [_require_uv(), "sync", "--no-dev"],
         cwd=consumer,
         check=True,
     )
 
     consumer_python = _consumer_python(consumer)
-    subprocess.run(  # ruff:ignore[subprocess-without-shell-equals-true]
+    subprocess.run(
         [_require_uv(), "pip", "check", "--python", str(consumer_python)],
         check=True,
     )
@@ -278,7 +278,7 @@ def test_isolated_install_exposes_inline_types(tmp_path: Path) -> None:
     wheels = tmp_path / "wheels"
     _build_wheels(wheels)
     consumer = _make_consumer_project(tmp_path, wheels, "cloud")
-    subprocess.run(  # ruff:ignore[subprocess-without-shell-equals-true]
+    subprocess.run(
         [_require_uv(), "sync", "--no-dev"],
         cwd=consumer,
         check=True,
@@ -296,7 +296,7 @@ def test_standalone_cloud_lock_is_current(tmp_path: Path) -> None:
         project,
         ignore=shutil.ignore_patterns(".coverage", ".pytest_cache", ".ruff_cache"),
     )
-    subprocess.run(  # ruff:ignore[subprocess-without-shell-equals-true]
+    subprocess.run(
         [_require_uv(), "lock", "--check"],
         cwd=project,
         check=True,
