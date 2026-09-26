@@ -248,11 +248,11 @@ class TestCachedOnly:
     """Tests for the cached_only config flag."""
 
     @staticmethod
-    def test_default_is_true(
+    def test_default_is_false(
         tmp_path: Path,
         monkeypatch: pytest.MonkeyPatch,
     ) -> None:
-        """Cloud population is opt-in when cached_only is omitted."""
+        """Cloud population is the default when cached_only is omitted."""
         (tmp_path / "pyproject.toml").write_text(
             dedent(
                 """
@@ -265,7 +265,7 @@ class TestCachedOnly:
         (tmp_path / "src").mkdir()
         monkeypatch.chdir(tmp_path)
         config = load_config()
-        assert config.cached_only is True
+        assert config.cached_only is False
 
     @staticmethod
     def test_explicit_true_is_loaded(

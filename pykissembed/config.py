@@ -37,8 +37,9 @@ class PyqtestConfig:
         Defaults to ``False`` — notebooks are typically exploratory.
     cached_only
         Whether similarity checks should use only cached embeddings. Defaults
-        to ``True`` so source-derived representations are never sent to cloud
-        providers without an explicit opt-in.
+        to ``False`` so missing embeddings are populated through every
+        configured provider's API; set ``True`` (or pass ``--cached-only``) to
+        keep source-derived representations off cloud providers.
     wrapper_max_call_sites
         Maximum project-wide static call-site count allowed for an exact
         pass-through wrapper. Defaults to ``1``.
@@ -56,7 +57,7 @@ class PyqtestConfig:
     baseline_dir: str = "tests/baselines"
     cache_dir: str = "tests/.pykissembed_cache"
     include_notebooks: bool = False
-    cached_only: bool = True
+    cached_only: bool = False
     wrapper_max_call_sites: int = 1
     wrapper_exclude: list[str] = field(default_factory=list)
     wrapper_exempt_decorators: list[str] = field(default_factory=list)
@@ -282,7 +283,7 @@ def load_config(start: Path | None = None) -> PyqtestConfig:
     cache_dir = str(section.get("cache_dir", "tests/.pykissembed_cache"))
     include_notebooks_raw = section.get("include_notebooks", False)
     include_notebooks = bool(include_notebooks_raw)
-    cached_only = _require_bool(section.get("cached_only", True), key="cached_only")
+    cached_only = _require_bool(section.get("cached_only", False), key="cached_only")
     wrapper_max_call_sites = _require_nonnegative_int(
         section.get("wrapper_max_call_sites", 1),
         key="wrapper_max_call_sites",
@@ -333,7 +334,7 @@ def _auto_detect(root: Path) -> PyqtestConfig:
         baseline_dir="tests/baselines",
         cache_dir="tests/.pykissembed_cache",
         include_notebooks=False,
-        cached_only=True,
+        cached_only=False,
         root=root,
     )
 

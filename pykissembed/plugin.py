@@ -154,9 +154,10 @@ def cached_only(request: pytest.FixtureRequest) -> bool:
     Returns
     -------
     bool
-        ``True`` when ``--cached-only`` was passed or when configuration keeps
-        the default cache-only policy. ``--allow-cloud-embeddings`` overrides
-        configuration and returns ``False``.
+        ``True`` when ``--cached-only`` was passed or configuration sets
+        ``cached_only = true``; otherwise ``False`` (the default: populate
+        missing embeddings for all providers). ``--allow-cloud-embeddings``
+        overrides configuration and returns ``False``.
     """
     if request.config.getoption("--allow-cloud-embeddings"):
         return False

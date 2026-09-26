@@ -85,11 +85,10 @@ Pick one:
   nothing from pykissembed, so your own tests run untouched.
 
 `pykissembed init` configures VS Code's Test Explorer with `tests` and
-`--pykissembed-all`. New projects rely on the cache-only default, so missing
-embeddings are reported without transmitting code-derived data. Automatic
-population requires either `--allow-cloud-embeddings` or an explicit
-`cached_only = false` in `[tool.pykissembed]`; unrelated custom pytest
-arguments are left untouched.
+`--pykissembed-all`. By default, missing embeddings are populated for all
+providers through their APIs while tests run. To keep code-derived data local,
+pass `--cached-only` or set `cached_only = true` in `[tool.pykissembed]`;
+unrelated custom pytest arguments are left untouched.
 
 The `no_suppressions.py` check is a strict, non-ratcheted gate. It scans every
 `.py` file below the consumer project root for `# type: ignore`, `# noqa`,
@@ -147,7 +146,7 @@ The `[tool.pykissembed]` config reference:
 | `baseline_dir` | `"tests/baselines"` | Where committed JSON envelopes live |
 | `cache_dir` | `"tests/.pykissembed_cache"` | Deprecated compatibility setting; ignored by cloud caches |
 | `include_notebooks` | `false` | If true, run ruff/similarity against `.ipynb` files |
-| `cached_only` | `true` | If true, skip similarity checks with missing embeddings instead of calling providers |
+| `cached_only` | `false` | If true, skip similarity checks with missing embeddings instead of calling providers |
 | `wrapper_max_call_sites` | `1` | Maximum static call sites allowed for an exact pass-through wrapper |
 | `wrapper_exclude` | `[]` | Glob patterns for intentional wrappers (`relative/path.py:QualifiedName`) |
 | `wrapper_exempt_decorators` | `[]` | Glob patterns for decorators that mark intentional wrappers |
@@ -268,25 +267,24 @@ rm -i tests/.pykissembed_cache/local-*.jsonl
 ### Running similarity tests
 
 ```bash
-# Run against committed caches; missing provider caches skip with instructions
+# Populate missing embeddings for all providers, then run the checks
 pytest -m similarity
 
 # Use only cached embeddings — skip if any are missing (no API calls)
 pytest -m similarity --cached-only
 
-# Explicitly allow pytest to populate missing cloud embeddings
+# Override a `cached_only = true` config and populate missing cloud embeddings
 pytest -m similarity --allow-cloud-embeddings
 
-# Baseline updates remain cache-only unless cloud access is explicitly allowed
 pytest -m similarity --update-baselines
 ```
 
-Cache-only is the default. To make cloud auto-population an explicit persistent
-project choice, set:
+Auto-population for all providers is the default. To make cache-only a
+persistent project choice, set:
 
 ```toml
 [tool.pykissembed]
-cached_only = false
+cached_only = true
 ```
 
 `--cached-only` always prevents provider calls. Passing it together with

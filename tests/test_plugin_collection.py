@@ -382,14 +382,14 @@ class TestSubprocessCollection:
     @pytest.mark.parametrize(
         ("cached_only_setting", "pytest_args", "expected"),
         [
-            ("", [], "True"),
+            ("", [], "False"),
             ("cached_only = true\n", [], "True"),
             ("cached_only = false\n", [], "False"),
             ("", ["--cached-only"], "True"),
             ("", ["--allow-cloud-embeddings"], "False"),
         ],
         ids=[
-            "default-cache-only",
+            "default-allows-cloud",
             "toml-cache-only",
             "toml-allows-cloud",
             "cli-cache-only",
