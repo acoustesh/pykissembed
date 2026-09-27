@@ -7,6 +7,7 @@ from . import (
     code_similarity,
     comment_density,
     docstring_format,
+    jev_docstring_audit,
     lint_typecheck,
     no_suppressions,
 )
@@ -16,6 +17,7 @@ __all__ = [
     "code_similarity",
     "comment_density",
     "docstring_format",
+    "jev_docstring_audit",
     "lint_typecheck",
     "no_suppressions",
 ]

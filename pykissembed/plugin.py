@@ -41,6 +41,7 @@ _CHECK_MODULES = [
     "code_similarity",
     "comment_density",
     "docstring_format",
+    "jev_docstring_audit",
     "lint_typecheck",
     "no_suppressions",
 ]
@@ -286,6 +287,10 @@ def pytest_configure(config: pytest.Config) -> None:
     config.addinivalue_line(
         "markers",
         "docstring_format: NumPy docstring format (ruff D rules)",
+    )
+    config.addinivalue_line(
+        "markers",
+        "jev: Jev-judged docstring/comment quality (live OpenRouter decisions)",
     )
     config.addinivalue_line(
         "markers",
@@ -574,7 +579,7 @@ def _is_installed_check_path(path: str, checks_dir: Path) -> bool:
         return False
     try:
         resolved = Path(path).resolve()
-    except (OSError, ValueError):
+    except OSError, ValueError:
         return False
     return (
         resolved.is_file()

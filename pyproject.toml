@@ -115,6 +115,7 @@ markers = [
     "complexity: code complexity metrics (CC, COG, MI, line counts, docstrings)",
     "density: comment density checks",
     "docstring_format: NumPy docstring format (ruff D rules)",
+    "jev: Jev-judged docstring/comment quality (live OpenRouter decisions)",
     "similarity: embedding-based near-duplicate detection (requires cached embeddings)",
     "experimental: unstable APIs — refactor_index, file_split",
     "live: live network tests (skipped by default; opt in with -m live)",

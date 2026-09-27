@@ -1,0 +1,8 @@
+{
+    "data": {
+        "min_score": 4.0,
+        "test_min_score": 3.5
+    },
+    "kind": "jev_docstring_audit",
+    "schema_version": "1.0"
+}

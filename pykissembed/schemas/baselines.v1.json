@@ -4,7 +4,11 @@
   "title": "pykissembed baseline envelope v1",
   "description": "Versioned wrapper for all pykissembed baseline JSON files. The inner 'data' payload is shape-specific per 'kind'.",
   "type": "object",
-  "required": ["schema_version", "kind", "data"],
+  "required": [
+    "schema_version",
+    "kind",
+    "data"
+  ],
   "additionalProperties": false,
   "properties": {
     "schema_version": {
@@ -19,7 +23,8 @@
         "density",
         "docstring_format",
         "similarity",
-        "comment_density_config"
+        "comment_density_config",
+        "jev_docstring_audit"
       ]
     },
     "data": {
