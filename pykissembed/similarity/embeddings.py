@@ -516,10 +516,7 @@ def _parse_voyage_response(payload: object, expected_count: int) -> list[list[fl
         msg = f"Voyage API returned {len(raw_data)} embeddings for {expected_count} inputs"
         raise ValueError(msg)
 
-    indexed_embeddings = [
-        _parse_voyage_embedding_item(item, expected_count)
-        for item in raw_data
-    ]
+    indexed_embeddings = [_parse_voyage_embedding_item(item, expected_count) for item in raw_data]
     embeddings_by_index = dict(indexed_embeddings)
     if len(embeddings_by_index) != expected_count:
         msg = "Voyage API returned duplicate embedding indices"
@@ -635,8 +632,6 @@ def _build_provider_caller(
             api_key=api_key,
             http_options=_require_callable(types, "HttpOptions")(timeout=int(timeout * 1000)),
         )
-        models = getattr(gemini_client, "models", None)
-        embed_content = _require_callable(models, "embed_content")
         embed_content_config = _require_callable(types, "EmbedContentConfig")
 
         def _gemini_request(truncated: list[str]) -> list[list[float]]:
@@ -659,6 +654,12 @@ def _build_provider_caller(
             ValueError
                 If the API response contains no embeddings.
             """
+            # Resolve through the client on every call: the closure must keep
+            # the client alive, since genai.Client.__del__ closes the HTTP
+            # transport its ``models`` object shares.
+            embed_content = _require_callable(
+                getattr(gemini_client, "models", None), "embed_content"
+            )
             result = embed_content(
                 model=model,
                 contents=truncated,

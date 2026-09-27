@@ -205,7 +205,7 @@ def _scan_complexity_directory(
     # that load_complexity_maps()'s single-directory fallback expects.
     glob_fn = directory.rglob if recursive else directory.glob
     for py_file in glob_fn("*.py"):
-        if py_file.name.startswith("__") or should_skip(py_file):
+        if py_file.name.startswith("__") or should_skip(py_file, directory):
             continue
         rel = py_file.relative_to(directory)
         key_prefix = f"{prefix}{rel}"

@@ -25,52 +25,57 @@ _COMMON_DIRS = ("src", "scripts", "lib")
 # Directories that should never be scanned for Python source files.
 # These are either virtual environments, build artifacts, or dependency
 # caches that contain third-party code (which may include non-UTF-8 files).
-_IGNORED_DIRS = frozenset(
-    {
-        ".venv",
-        "venv",
-        ".env",
-        "env",
-        "__pycache__",
-        ".git",
-        ".hg",
-        ".svn",
-        "node_modules",
-        ".tox",
-        ".eggs",
-        ".mypy_cache",
-        ".pyright",
-        ".pytest_cache",
-        ".ruff_cache",
-        "build",
-        "dist",
-        ".pykissembed_cache",
-        "site-packages",
-    }
-)
+_IGNORED_DIRS = frozenset({
+    ".venv",
+    "venv",
+    ".env",
+    "env",
+    "__pycache__",
+    ".git",
+    ".hg",
+    ".svn",
+    "node_modules",
+    ".tox",
+    ".eggs",
+    ".mypy_cache",
+    ".pyright",
+    ".pytest_cache",
+    ".ruff_cache",
+    "build",
+    "dist",
+    ".pykissembed_cache",
+    "site-packages",
+})
 
 
-def should_skip(path: Path) -> bool:
-    """Return True if *path* is inside an ignored directory.
+def should_skip(path: Path, base: Path) -> bool:
+    """Return True if *path* is inside an ignored or hidden directory.
 
     Parameters
     ----------
     path : Path
-        File or directory path to check.
+        File path to check.
+    base : Path
+        Scan root containing *path*; only directories below it are checked,
+        so a project that itself lives under a hidden directory still scans.
 
     Returns
     -------
     bool
-        ``True`` if any component of *path* is in ``_IGNORED_DIRS``.
+        ``True`` if any directory between *base* and *path* is in
+        ``_IGNORED_DIRS`` or is hidden (e.g. ``.kilo/`` or ``.claude/``
+        agent worktrees holding full copies of the source tree).
     """
-    return any(part in _IGNORED_DIRS for part in path.parts)
+    return any(
+        part in _IGNORED_DIRS or part.startswith(".") for part in path.relative_to(base).parts[:-1]
+    )
 
 
 def iter_py_files(base_dir: Path) -> Iterator[Path]:
     """Yield every ``.py`` file under *base_dir* (recursive), skipping ignored dirs.
 
-    Skips files whose names start with ``__`` and any file inside a
-    directory listed in ``_IGNORED_DIRS`` (e.g. ``.venv/``,
+    Skips files whose names start with ``__`` and any file inside a hidden
+    directory or one listed in ``_IGNORED_DIRS`` (e.g. ``.venv/``,
     ``__pycache__/``, ``node_modules/``).
 
     Parameters
@@ -93,7 +98,7 @@ def iter_py_files(base_dir: Path) -> Iterator[Path]:
         # docstring/complexity/similarity scoring.
         if py_file.name.startswith("__"):
             continue
-        if should_skip(py_file):
+        if should_skip(py_file, base_dir):
             continue
         yield py_file
 

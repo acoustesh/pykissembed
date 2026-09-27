@@ -136,7 +136,9 @@ def _decorator_lines(
     # established embedding input rather than a source-normalization step.
     for decorator in node.decorator_list:
         if decorator.lineno < start_line:
-            decorator_lines.extend(lines[line_number - 1] for line_number in range(decorator.lineno, start_line))
+            decorator_lines.extend(
+                lines[line_number - 1] for line_number in range(decorator.lineno, start_line)
+            )
     return decorator_lines
 
 
@@ -408,7 +410,7 @@ def extract_function_infos(
         for p in glob_fn("*.py")
         if not p.name.startswith("__")
         and not any(p.name.startswith(ep) for ep in exclude_prefixes)
-        and not should_skip(p)
+        and not should_skip(p, directory)
         for fn in _extract_functions_from_source(
             p.read_text(encoding="utf-8"),
             p,

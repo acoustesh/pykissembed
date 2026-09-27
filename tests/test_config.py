@@ -332,3 +332,15 @@ class TestIterPyFiles:
         (tmp_path / "notebook.ipynb").write_text("{}", encoding="utf-8")
         files = sorted(p.name for p in iter_py_files(tmp_path))
         assert files == ["real_module.py"]
+
+    @staticmethod
+    def test_iter_py_files_skips_hidden_dirs_below_base(tmp_path: Path) -> None:
+        """Hidden dirs (e.g. agent worktrees) are skipped, but a hidden base is not."""
+        base = tmp_path / ".kilo" / "worktrees" / "wt"
+        (base / ".claude" / "worktrees" / "copy").mkdir(parents=True)
+        (base / "real_module.py").write_text("x = 1\n", encoding="utf-8")
+        (base / ".claude" / "worktrees" / "copy" / "real_module.py").write_text(
+            "x = 1\n",
+            encoding="utf-8",
+        )
+        assert [p.relative_to(base).as_posix() for p in iter_py_files(base)] == ["real_module.py"]

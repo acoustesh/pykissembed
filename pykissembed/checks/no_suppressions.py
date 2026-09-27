@@ -86,7 +86,7 @@ def _iter_project_py_files(root: Path) -> Iterator[Path]:
         relative = py_file.relative_to(root)
         # `[:-1]` drops the filename, so only *directory* components are matched
         # — a module named `tests.py` or `build.py` is still scanned.
-        if any(part in _EXCLUDED_DIR_NAMES for part in relative.parts[:-1]):
+        if any(part in _EXCLUDED_DIR_NAMES or part.startswith(".") for part in relative.parts[:-1]):
             continue
         if py_file.is_file():
             yield py_file
