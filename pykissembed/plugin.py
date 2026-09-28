@@ -267,7 +267,9 @@ def shared_functions(
     """
     # Requesting this fixture sequences baseline loading before extraction.
     _ = shared_baselines
-    # Lazy: same rationale as shared_baselines above.
+    # Import lazily: loading this module runs pykissembed.similarity's package
+    # __init__, which imports the NumPy-backed modules, so sessions that never
+    # request this fixture skip that cost.
     extract_all_function_infos = _load_callable(
         "pykissembed.similarity.ast_helpers",
         "extract_all_function_infos",
