@@ -12,11 +12,13 @@ from __future__ import annotations
 import math as _math
 import os
 import time
+from functools import partial as _partial
 from importlib import import_module
 from typing import TYPE_CHECKING, TypeGuard
 
 import numpy as np
 
+from pykissembed._http_retry import is_retryable_http_error as _is_retryable_http_error
 from pykissembed.config import get_config
 
 if TYPE_CHECKING:
@@ -35,9 +37,6 @@ from pykissembed.similarity.constants import (
 # Exponential backoff delays
 _RETRY_DELAYS = [1.0, 2.0, 4.0]
 _VOYAGE_API_URL = "https://api.voyageai.com/v1/embeddings"
-_HTTP_TOO_MANY_REQUESTS = 429
-_HTTP_SERVER_ERROR_MIN = 500
-_HTTP_SERVER_ERROR_MAX = 600
 
 # Maximum token limits per provider
 _OPENAI_MAX_TOKENS = 8191  # text-embedding-3-large limit is 8192
@@ -622,32 +621,10 @@ def _build_voyage_caller(
         )
         return _parse_voyage_response(_response_json(response), len(truncated))
 
-    def _voyage_is_retryable(exc: Exception) -> bool:
-        """Return whether a Voyage REST failure is transient.
-
-        Parameters
-        ----------
-        exc : Exception
-            The failure raised by the request callable.
-
-        Returns
-        -------
-        bool
-            ``True`` for timeouts, HTTP 429, and HTTP 5xx failures.
-        """
-        if isinstance(exc, timeout_error):
-            return True
-        if not isinstance(exc, http_error):
-            return False
-        response = getattr(exc, "response", None)
-        status_code = getattr(response, "status_code", None)
-        if not isinstance(status_code, int):
-            return False
-        return status_code == _HTTP_TOO_MANY_REQUESTS or (
-            _HTTP_SERVER_ERROR_MIN <= status_code < _HTTP_SERVER_ERROR_MAX
-        )
-
-    return (_voyage_request, _voyage_is_retryable)
+    return (
+        _voyage_request,
+        _partial(_is_retryable_http_error, timeout_error=timeout_error, http_error=http_error),
+    )
 
 
 def _build_openai_caller(

@@ -12,6 +12,7 @@ from dataclasses import dataclass
 from datetime import UTC, datetime
 from typing import TYPE_CHECKING
 
+from pykissembed._http_retry import is_retryable_http_error as _is_retryable_http_error
 from pykissembed.config import get_config
 from pykissembed.paths import iter_py_files as _iter_py_files
 from pykissembed.paths import warn_non_utf8
@@ -31,9 +32,6 @@ API_KEY_ENV = "OPENROUTER_API_KEY"
 REQUEST_TIMEOUT = 60.0
 RETRY_DELAYS = (1.0, 2.0, 4.0)
 MAX_STATE_CHARS = 12000
-_HTTP_TOO_MANY_REQUESTS = 429
-_HTTP_SERVER_ERROR_MIN = 500
-_HTTP_SERVER_ERROR_MAX = 600
 
 
 @dataclass(frozen=True, slots=True)
@@ -161,32 +159,6 @@ def _load_api_key() -> str | None:
 
 # Public re-export; see the note on extract_symbol_states above.
 load_api_key = _load_api_key
-
-
-def _is_retryable(exc: Exception, timeout_error: type[Exception]) -> bool:
-    """Return whether a Decisions API failure is worth retrying.
-
-    Parameters
-    ----------
-    exc : Exception
-        The caught failure.
-    timeout_error : type[Exception]
-        The ``requests`` timeout type.
-
-    Returns
-    -------
-    bool
-        ``True`` for timeouts, HTTP 429, and HTTP 5xx failures.
-    """
-    if isinstance(exc, timeout_error):
-        return True
-    response = getattr(exc, "response", None)
-    status_code = getattr(response, "status_code", None)
-    if not isinstance(status_code, int) or isinstance(status_code, bool):
-        return False
-    return status_code == _HTTP_TOO_MANY_REQUESTS or (
-        _HTTP_SERVER_ERROR_MIN <= status_code < _HTTP_SERVER_ERROR_MAX
-    )
 
 
 def parse_score(payload: object, question_id: str, n_levels: int) -> float | None:
@@ -377,7 +349,7 @@ def ask_jev(
                 conn.commit()
         except (OSError, ValueError, TypeError, AttributeError) as exc:
             # Retry only transport failures the original Jev audit retried.
-            if attempt < len(RETRY_DELAYS) and _is_retryable(exc, timeout_error):
+            if attempt < len(RETRY_DELAYS) and _is_retryable_http_error(exc, timeout_error):
                 time.sleep(RETRY_DELAYS[attempt])
                 continue
             return None

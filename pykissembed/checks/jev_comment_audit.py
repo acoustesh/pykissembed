@@ -20,9 +20,11 @@ from pykissembed.jev import (
     open_cache,
     parse_score,
 )
+from pykissembed.jev import SymbolState as _SymbolState
 
 if TYPE_CHECKING:
     from pathlib import Path
+    from sqlite3 import Connection
 
 BASELINE_FILENAME = "jev_comment_audit.json"
 DEFAULT_MIN_SCORE = 2.25
@@ -141,6 +143,51 @@ def _read_threshold(data: object) -> float:
     return max(0.0, min(float(len(_SCORE_LEVELS) - 1), value))
 
 
+def _grade_comments(
+    states: list[_SymbolState], min_score: float, api_key: str | None, conn: Connection
+) -> tuple[list[str], int]:
+    """Grade function comments and collect failures and missing grades.
+
+    Parameters
+    ----------
+    states : list[SymbolState]
+        Function and method source states to grade.
+    min_score : float
+        Strict lower bound for passing scores.
+    api_key : str | None
+        OpenRouter key, or ``None`` for cached responses only.
+    conn : Connection
+        Shared Jev response cache connection.
+
+    Returns
+    -------
+    tuple[list[str], int]
+        Failure descriptions and number of ungraded symbols.
+    """
+    failures: list[str] = []
+    ungraded = 0
+    for state in states:
+        score = ask_jev(
+            state,
+            _QUESTIONS,
+            parse=lambda payload: parse_score(payload, _QUESTION_ID, len(_SCORE_LEVELS)),
+            api_key=api_key,
+            conn=conn,
+        )
+        if score is None:
+            # Transport or cache misses are unknown grades, not failures.
+            ungraded += 1
+            continue
+        if score <= min_score:
+            nearest = min(len(_SCORE_LEVELS) - 1, max(0, round(score)))
+            failures.append(
+                f"{state.file_key}:{state.lineno} {state.symbol} — "
+                f"level {score:.2f}/4 (need >{min_score:g}): "
+                f"{_SCORE_LEVELS[nearest]}"
+            )
+    return failures, ungraded
+
+
 class TestJevCommentAudit:
     """Jev-judged inline comment quality on the 0-4 rubric."""
 
@@ -152,19 +199,19 @@ class TestJevCommentAudit:
         update_baselines: bool,
         cached_only: bool,
     ) -> None:
-        """Fail when a function or method's comment score does not exceed the bar.
+        """Audit inline comments with a strict 0-4 score boundary.
+
+        Functions and methods remain eligible even without docstrings because
+        their comments may still explain intent. Scores at the bar fail.
 
         Parameters
         ----------
         pykissembed_paths : list[Path]
-            Configured source directories from the ``pykissembed_paths`` fixture; the test skips
-            when empty.
+            Source directories scanned for function and method comments.
         update_baselines : bool
-            When true, save the baseline file with its default thresholds filled in and skip instead
-            of grading.
+            Save the default comment threshold, then skip grading.
         cached_only : bool
-            When true, never call the API: grade from cached responses only and leave cache misses
-            ungraded.
+            Use stored Jev decisions and count missing grades as ungraded.
         """
         if not pykissembed_paths:
             pytest.skip("No [tool.pykissembed] paths configured")
@@ -187,31 +234,8 @@ class TestJevCommentAudit:
             # for this audit, unlike the docstring audit's local level-one rule.
             if not states:
                 pytest.skip("No auditable functions or methods found")
-            failures: list[str] = []
-            ungraded = 0
             with closing(open_cache(config)) as conn:
-                for state in states:
-                    score = ask_jev(
-                        state,
-                        _QUESTIONS,
-                        parse=lambda payload: parse_score(
-                            payload, _QUESTION_ID, len(_SCORE_LEVELS)
-                        ),
-                        api_key=api_key,
-                        conn=conn,
-                    )
-                    if score is None:
-                        # Transport or cache misses are unknown grades, not
-                        # failures; disclose their count in the final result.
-                        ungraded += 1
-                        continue
-                    if score <= min_score:
-                        nearest = min(len(_SCORE_LEVELS) - 1, max(0, round(score)))
-                        failures.append(
-                            f"{state.file_key}:{state.lineno} {state.symbol} — "
-                            f"level {score:.2f}/4 (need >{min_score:g}): "
-                            f"{_SCORE_LEVELS[nearest]}"
-                        )
+                failures, ungraded = _grade_comments(states, min_score, api_key, conn)
             if failures:
                 pytest.fail(
                     "Jev comment audit: "

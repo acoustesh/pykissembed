@@ -43,6 +43,7 @@ from pykissembed.jev import (
 if TYPE_CHECKING:
     from collections.abc import Iterator
     from pathlib import Path
+    from sqlite3 import Connection
 
 BASELINE_FILENAME = "jev_docstring_audit.json"
 
@@ -409,6 +410,54 @@ def _format_symbol_failure(state: SymbolState, level: float, min_score: float) -
     )
 
 
+def _grade_docstrings(
+    states: list[SymbolState], baseline_data: object, api_key: str | None, conn: Connection
+) -> tuple[list[str], int, int]:
+    """Grade docstrings, assigning level one locally when they are absent.
+
+    Parameters
+    ----------
+    states : list[SymbolState]
+        Function and class source states to grade.
+    baseline_data : object
+        Baseline payload containing the library and test thresholds.
+    api_key : str | None
+        OpenRouter key, or ``None`` for cached responses only.
+    conn : Connection
+        Shared Jev response cache connection.
+
+    Returns
+    -------
+    tuple[list[str], int, int]
+        Failure descriptions, ungraded count, and graded count.
+    """
+    failures: list[str] = []
+    ungraded = 0
+    graded = 0
+    for state in states:
+        min_score = _min_score_for(state, baseline_data)
+        if not state.has_docstring:
+            # No docstring is level 1 by definition; never call the API.
+            level = _LEVEL_NO_DOCTRING
+        else:
+            level = ask_jev(
+                state,
+                _QUESTIONS,
+                parse=lambda payload: _shift(
+                    parse_score(payload, _SCORE_QUESTION_ID, len(_SCORE_LEVELS))
+                ),
+                api_key=api_key,
+                conn=conn,
+            )
+        if level is None:
+            ungraded += 1
+            continue
+        graded += 1
+        if not _evaluate_symbol(level, min_score):
+            failures.append(_format_symbol_failure(state, level, min_score))
+    return failures, ungraded, graded
+
+
 class TestJevDocstringAudit:
     """Jev-judged docstring quality on a 1-6 rubric (consumer check)."""
 
@@ -420,19 +469,19 @@ class TestJevDocstringAudit:
         update_baselines: bool,
         cached_only: bool,
     ) -> None:
-        """Fail when Jev grades a symbol's docstring below ``min_score``.
+        """Audit function and class docstrings against the 1-6 rubric.
+
+        An absent docstring receives level one locally. Documented symbols
+        use Jev grades, with a separate minimum for pytest-style classes.
 
         Parameters
         ----------
         pykissembed_paths : list[Path]
-            Configured source directories from the ``pykissembed_paths`` fixture; the test skips
-            when empty.
+            Source directories whose functions and classes are audited.
         update_baselines : bool
-            When true, save the baseline file with its default thresholds filled in and skip instead
-            of grading.
+            Save the default library and test docstring thresholds, then skip grading.
         cached_only : bool
-            When true, never call the API: grade from cached responses only and leave cache misses
-            ungraded.
+            Use stored Jev decisions without requesting grades for cache misses.
         """
         if not pykissembed_paths:
             pytest.skip("No [tool.pykissembed] paths configured")
@@ -449,31 +498,8 @@ class TestJevDocstringAudit:
                 states.extend(extract_symbol_states(base_dir, root=config.root))
             if not states:
                 pytest.skip("No auditable functions or classes found")
-            failures: list[str] = []
-            ungraded = 0
-            graded = 0
             with closing(open_cache(config)) as conn:
-                for state in states:
-                    min_score = _min_score_for(state, envelope.data)
-                    if not state.has_docstring:
-                        # No docstring is level 1 by definition; never call the API.
-                        level = _LEVEL_NO_DOCTRING
-                    else:
-                        level = ask_jev(
-                            state,
-                            _QUESTIONS,
-                            parse=lambda payload: _shift(
-                                parse_score(payload, _SCORE_QUESTION_ID, len(_SCORE_LEVELS))
-                            ),
-                            api_key=api_key,
-                            conn=conn,
-                        )
-                    if level is None:
-                        ungraded += 1
-                        continue
-                    graded += 1
-                    if not _evaluate_symbol(level, min_score):
-                        failures.append(_format_symbol_failure(state, level, min_score))
+                failures, ungraded, graded = _grade_docstrings(states, envelope.data, api_key, conn)
             if failures:
                 header = (
                     "Jev docstring audit: "

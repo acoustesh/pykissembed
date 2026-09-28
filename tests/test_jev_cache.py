@@ -91,6 +91,34 @@ def _row_count(conn: sqlite3.Connection) -> int:
     return int(row[0])
 
 
+@pytest.mark.parametrize(("status_code", "retry"), [(429, True), (503, True), (400, False)])
+def test_jev_retries_only_transient_http_failures(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    status_code: int,
+    *,
+    retry: bool,
+) -> None:
+    """A transient Decisions failure is retried before caching its valid reply."""
+    calls = 0
+
+    def post(_url: str, **_kwargs: object) -> _Response:
+        nonlocal calls
+        calls += 1
+        if calls == 1:
+            response = requests.Response()
+            response.status_code = status_code
+            raise requests.HTTPError(response=response)
+        return _Response({"answers": {"score": {"score": 1}}})
+
+    monkeypatch.setattr(requests, "post", post)
+    monkeypatch.setattr(jev.time, "sleep", lambda _seconds: None)
+    with closing(jev.open_cache(PyqtestConfig(root=tmp_path))) as conn:
+        assert _ask(conn, _state()) == (1 if retry else None)
+        assert _row_count(conn) == int(retry)
+    assert calls == (2 if retry else 1)
+
+
 def test_unchanged_state_hits_cache_and_source_or_comment_edits_miss(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
