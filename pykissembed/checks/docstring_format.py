@@ -31,6 +31,13 @@ class DocstringViolation:
 
     @override
     def __str__(self) -> str:
+        """Format the violation as a single report line.
+
+        Returns
+        -------
+        str
+            ``file:line:column code message``.
+        """
         return f"{self.file}:{self.line}:{self.column} {self.code} {self.message}"
 
 
@@ -290,7 +297,17 @@ class TestDocstringFormat:
         *,
         update_baselines: bool,
     ) -> None:
-        """Fail if any file has more docstring violations than its baseline."""
+        """Fail if any file has more docstring violations than its baseline.
+
+        Parameters
+        ----------
+        pykissembed_paths : list[Path]
+            Configured source directories from the ``pykissembed_paths`` fixture; the test skips
+            when empty.
+        update_baselines : bool
+            When true, write the current measurements to the baseline file and skip instead of
+            checking.
+        """
         if not pykissembed_paths:
             pytest.skip("No [tool.pykissembed] paths configured")
         config = get_config()

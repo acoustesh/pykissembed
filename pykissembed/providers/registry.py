@@ -84,6 +84,11 @@ class ProviderRegistry:
     def get(self, name: str) -> Provider | None:
         """Return the provider named *name* or ``None``.
 
+        Parameters
+        ----------
+        name : str
+            Registered provider name to look up.
+
         Returns
         -------
         Provider | None
@@ -94,6 +99,11 @@ class ProviderRegistry:
 
     def __contains__(self, name: object) -> bool:
         """Return whether a provider is registered under string *name*.
+
+        Parameters
+        ----------
+        name : object
+            Candidate key; non-strings yield ``False``.
 
         Returns
         -------
@@ -155,6 +165,11 @@ def discover_all() -> ProviderRegistry:
 def get(name: str) -> Provider | None:
     """Convenience helper: get a provider by name, registering built-ins on demand.
 
+    Parameters
+    ----------
+    name : str
+        Registered provider name to look up.
+
     Returns
     -------
     Provider | None
@@ -177,6 +192,13 @@ def cache_key(provider: Provider, content_hash: str) -> str:
 
     Including ``schema_version`` is mandatory — it prevents silent cache
     corruption when a provider's vector shape changes between releases.
+
+    Parameters
+    ----------
+    provider : Provider
+        Provider whose identity keys the cache entry.
+    content_hash : str
+        Content hash of the embedded text.
 
     Returns
     -------

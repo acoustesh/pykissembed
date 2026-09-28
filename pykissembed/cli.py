@@ -57,6 +57,13 @@ def _main_callback(
 ) -> None:
     """Print the pykissembed version and exit if --version is passed.
 
+    Parameters
+    ----------
+    ctx : typer.Context
+        Typer context for the top-level group.
+    version : bool
+        When true, print the version and exit instead of dispatching.
+
     Raises
     ------
     typer.Exit
@@ -92,6 +99,11 @@ def check(
     args (e.g. a marker or a specific check NodeId), forward them
     unchanged so their scoping is respected.
 
+    Parameters
+    ----------
+    pytest_args : list[str] | None
+        Extra pytest arguments to forward; defaults to ``--pykissembed-all``.
+
     Raises
     ------
     typer.Exit
@@ -121,6 +133,11 @@ def ratchet_cmd(
     captured at their current value.
 
     This is the recommended post-commit hook target.
+
+    Parameters
+    ----------
+    baseline_dir : Path | None
+        Directory overriding the configured baseline directory.
 
     Raises
     ------
@@ -318,10 +335,11 @@ def type_review(
         typer.Option("--json", help="Path to a lint_typecheck_report.json produced by the lint gate."),
     ],
 ) -> None:
-    """Iterate type-fix-only the files mentioned in *report*.
+    """Re-run ``pyright`` on each file that has pyright diagnostics in *report*.
 
-    For each file with pyright errors, runs ``pyright`` against just that
-    file so the developer can focus on the failing diagnostics.
+    For each file with a non-empty ``pyright`` list in the report, runs
+    ``pyright`` against just that file so the developer can focus on the
+    failing diagnostics. Pyright's own exit statuses are ignored.
 
     Parameters
     ----------
@@ -331,7 +349,8 @@ def type_review(
     Raises
     ------
     typer.Exit
-        If the report is missing or the subprocess completes.
+        With status 1 if the report is missing, or status 0 if no file has
+        pyright diagnostics. Otherwise the command returns normally.
     """
     if not report.exists():
         typer.echo(f"Report not found: {report}")
@@ -378,6 +397,11 @@ def init(
     ``.vscode/settings.json`` so VS Code's Test Explorer runs pykissembed's
     checks. Each step is idempotent and only needs ``--force`` to overwrite
     a value that already differs from pykissembed's own.
+
+    Parameters
+    ----------
+    force : bool
+        Overwrite an existing ``[tool.pykissembed]`` block and conflicting VS Code pytest values.
 
     Raises
     ------
@@ -461,6 +485,11 @@ def _auto_detect_paths(root: Path, pyproject_text: str) -> list[str]:
 def _parse_pyproject(pyproject_text: str) -> dict[str, object]:
     """Parse a ``pyproject.toml`` document, degrading invalid text to an empty table.
 
+    Parameters
+    ----------
+    pyproject_text : str
+        Full ``pyproject.toml`` text to parse.
+
     Returns
     -------
     dict[str, object]
@@ -475,6 +504,11 @@ def _parse_pyproject(pyproject_text: str) -> dict[str, object]:
 def _setuptools_source_paths(data: dict[str, object]) -> list[str]:
     """Return paths configured by setuptools package discovery.
 
+    Parameters
+    ----------
+    data : dict[str, object]
+        Parsed ``pyproject.toml`` table.
+
     Returns
     -------
     list[str]
@@ -488,6 +522,11 @@ def _setuptools_source_paths(data: dict[str, object]) -> list[str]:
 def _hatch_source_paths(data: dict[str, object]) -> list[str]:
     """Return distinct source roots configured in Hatch's wheel target.
 
+    Parameters
+    ----------
+    data : dict[str, object]
+        Parsed ``pyproject.toml`` table.
+
     Returns
     -------
     list[str]
@@ -499,6 +538,13 @@ def _hatch_source_paths(data: dict[str, object]) -> list[str]:
 
 def _toml_value(data: dict[str, object], *keys: str) -> object | None:
     """Return a nested TOML value without exposing intermediate tables.
+
+    Parameters
+    ----------
+    data : dict[str, object]
+        Parsed ``pyproject.toml`` table to walk.
+    *keys : str
+        Successive table keys leading to the value.
 
     Returns
     -------
@@ -516,6 +562,11 @@ def _toml_value(data: dict[str, object], *keys: str) -> object | None:
 def _path_values(value: object | None) -> list[str]:
     """Normalize a TOML path value to a non-empty list of strings.
 
+    Parameters
+    ----------
+    value : object | None
+        Raw TOML value that may be a path string or a list of paths.
+
     Returns
     -------
     list[str]
@@ -531,6 +582,11 @@ def _path_values(value: object | None) -> list[str]:
 def _package_roots(packages: object | None) -> list[str]:
     """Extract distinct leading directories from Hatch package paths.
 
+    Parameters
+    ----------
+    packages : object | None
+        Raw Hatch ``packages`` value.
+
     Returns
     -------
     list[str]
@@ -545,6 +601,11 @@ def _package_roots(packages: object | None) -> list[str]:
 
 def _default_source_paths(root: Path) -> list[str]:
     """Return the conventional source path when build configuration is absent.
+
+    Parameters
+    ----------
+    root : Path
+        Project root to look for a source directory in.
 
     Returns
     -------

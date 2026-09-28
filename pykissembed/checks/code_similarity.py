@@ -175,16 +175,16 @@ def _run_similarity_test(
     ----------
     provider : ProviderEntry
         The embedding provider to test.
-    update_baselines : bool
-        Whether to update baselines instead of checking.
-    cached_only : bool
-        If True, skip when embeddings are missing.
     shared_baselines : SharedBaselines
         Session-scoped baselines dict.
     shared_functions : list[FunctionInfo]
         Session-scoped list of extracted functions.
     pca_cache : SimilarityPcaCache
         Session-scoped PCA model cache.
+    update_baselines : bool
+        Whether to update baselines instead of checking.
+    cached_only : bool
+        If True, skip when embeddings are missing.
 
     Raises
     ------
@@ -288,6 +288,13 @@ def test_providers_parallel(
         pytest.skip("No [tool.pykissembed] paths configured")
 
     def _run_one(provider: ProviderEntry) -> None:
+        """Run the similarity test for one provider with the shared fixtures.
+
+        Parameters
+        ----------
+        provider : ProviderEntry
+            The embedding provider to test.
+        """
         _run_similarity_test(
             provider,
             shared_baselines,

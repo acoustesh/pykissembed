@@ -33,7 +33,17 @@ _MIN_FUNCTIONS_FOR_REFACTOR_INDEX = 2
 
 
 class _RefactorConfig(TypedDict):
-    """Configuration for refactoring index."""
+    """Configuration for refactoring index.
+
+    Attributes
+    ----------
+    min_loc_for_similarity : int
+        Minimum function length, in lines, for a function to be extracted.
+    refactor_index_threshold : float
+        Refactor-index score a function must exceed to be reported.
+    refactor_index_top_n : int
+        Maximum number of functions listed in the priority message.
+    """
 
     min_loc_for_similarity: int
     refactor_index_threshold: float

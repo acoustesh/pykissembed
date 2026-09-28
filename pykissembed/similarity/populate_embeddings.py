@@ -82,6 +82,15 @@ def _request_embeddings(
 ) -> list[list[float]]:
     """Fetch embeddings and normalize undocumented provider exceptions.
 
+    Parameters
+    ----------
+    texts : list[str]
+        Texts to embed in one batch.
+    provider : str
+        Canonical provider name selecting the transport.
+    task : str
+        Jina task code; empty for non-Jina providers.
+
     Returns
     -------
     list[list[float]]
@@ -117,6 +126,13 @@ def _get_embedding_cache(baselines: Baselines, cache_key: str) -> dict[str, list
     *baselines*, and returned, so later in-place writes by the caller persist.
     This deliberately mutates *baselines* and hands back the very object it
     holds rather than a defensive copy.
+
+    Parameters
+    ----------
+    baselines : Baselines
+        Mutable baselines mapping holding the cache.
+    cache_key : str
+        Key naming the provider cache to fetch.
 
     Returns
     -------
@@ -315,6 +331,13 @@ def _populate_provider(
 
 def _jina_texts(uncached: list[FunctionInfo], cfg: _JinaCfg) -> tuple[list[str], list[str]]:
     """Return the (query_texts, passage_texts) inputs for *uncached* under *cfg*.
+
+    Parameters
+    ----------
+    uncached : list[FunctionInfo]
+        Functions still missing Jina vectors.
+    cfg : _JinaCfg
+        Resolved Jina configuration for this variant.
 
     Returns
     -------
@@ -524,6 +547,11 @@ def cli_provider_name(cache_key: str) -> str:
     back onto their populate provider ("jina-text" / "jina-ast"); cosine keys
     are unaffected since they carry no query/passage suffix.
 
+    Parameters
+    ----------
+    cache_key : str
+        Persisted cache key, possibly a Jina query/passage key.
+
     Returns
     -------
     str
@@ -548,6 +576,15 @@ def _missing_for_cache(
     Inspection deliberately treats a missing or malformed cache as empty and
     never creates a replacement mapping in *baselines*.
 
+    Parameters
+    ----------
+    baselines : Baselines
+        Baselines mapping holding the provider cache.
+    functions : list[FunctionInfo]
+        Live functions that should be cached.
+    cache_key : str
+        Key naming the cache to inspect.
+
     Returns
     -------
     int
@@ -564,6 +601,13 @@ def _combined_member_gaps(
     functions: list[FunctionInfo],
 ) -> dict[str, int]:
     """Return missing counts for providers required by Combined.
+
+    Parameters
+    ----------
+    baselines : Baselines
+        Baselines mapping holding the member caches.
+    functions : list[FunctionInfo]
+        Live functions that should be cached.
 
     Returns
     -------
@@ -585,6 +629,13 @@ def _populate_combined(
     functions: list[FunctionInfo],
 ) -> int:
     """Rebuild all Combined embeddings from the member caches.
+
+    Parameters
+    ----------
+    baselines : Baselines
+        Baselines mapping holding the member caches.
+    functions : list[FunctionInfo]
+        Live functions that should be cached.
 
     Returns
     -------
@@ -609,6 +660,15 @@ def _populate_combined_scoped(
     consumer that has only ever populated embeddings through the test run).
     For an explicit partial-path scan, *replace_text_hashes* identifies the
     selected scope so unrelated Combined vectors survive the global rebuild.
+
+    Parameters
+    ----------
+    baselines : Baselines
+        Baselines mapping holding the member caches.
+    functions : list[FunctionInfo]
+        Live functions that should be cached.
+    replace_text_hashes : set[str] | None
+        Text hashes in the selected scope, or ``None`` to rebuild globally.
 
     Returns
     -------
@@ -675,6 +735,15 @@ def _synchronize_scanned_function_hashes(
     Entries outside the selected roots are preserved. Within a selected root,
     stale line identities and legacy alternate path spellings are removed
     before current functions are inserted.
+
+    Parameters
+    ----------
+    baselines : Baselines
+        Baselines mapping holding ``function_hashes``.
+    functions : list[FunctionInfo]
+        Live functions found by the scan.
+    directories : list[_Path]
+        Roots the scan covered.
     """
     root = _get_config().root.resolve()
     scopes = collapse_scan_directories(directories)
@@ -688,6 +757,16 @@ def _synchronize_scanned_function_hashes(
 
 def _function_key_is_in_scopes(key: str, root: _Path, scopes: list[_Path]) -> bool:
     """Return whether a stored function identity belongs to selected roots.
+
+    Parameters
+    ----------
+    key : str
+        Stored ``file:function:line`` identity to locate; a key that does not split into three parts
+        is never in scope.
+    root : _Path
+        Project root the key is relative to.
+    scopes : list[_Path]
+        Roots selected by this scan.
 
     Returns
     -------
@@ -705,6 +784,13 @@ def _function_key_is_in_scopes(key: str, root: _Path, scopes: list[_Path]) -> bo
 
 def _scoped_text_hashes(baselines: Baselines, directories: list[_Path]) -> set[str]:
     """Return scoped text hashes that no unscanned identity still references.
+
+    Parameters
+    ----------
+    baselines : Baselines
+        Baselines mapping holding ``function_hashes``.
+    directories : list[_Path]
+        Roots selected by this scan.
 
     Returns
     -------
@@ -745,6 +831,11 @@ _PROVIDER_MAP: dict[str, PopulateFn] = {
 
 def get_provider_populator(provider: str) -> PopulateFn | None:
     """Return provider populate function by canonical provider key.
+
+    Parameters
+    ----------
+    provider : str
+        Canonical provider name to look up.
 
     Returns
     -------
@@ -787,6 +878,11 @@ _PROVIDER_CREDENTIALS = {
 def _require_canonical_provider(provider: str) -> None:
     """Validate *provider* and raise an actionable error for legacy names.
 
+    Parameters
+    ----------
+    provider : str
+        Provider name to validate.
+
     Raises
     ------
     PopulationError
@@ -819,6 +915,11 @@ def _require_canonical_provider(provider: str) -> None:
 def _provider_cache_keys(provider: str) -> tuple[str, ...]:
     """Return the persisted cache keys inspected for a canonical provider.
 
+    Parameters
+    ----------
+    provider : str
+        Canonical provider name to resolve keys for.
+
     Returns
     -------
     tuple[str, ...]
@@ -838,6 +939,15 @@ def _missing_for_provider(
 ) -> int:
     """Return functions missing any cache member required by *provider*.
 
+    Parameters
+    ----------
+    baselines : Baselines
+        Baselines mapping holding the provider caches.
+    functions : list[FunctionInfo]
+        Live functions that should be cached.
+    provider : str
+        Canonical provider name whose members are required.
+
     Returns
     -------
     int
@@ -856,6 +966,11 @@ def _missing_for_provider(
 
 def _configured_credential(provider: str) -> str | None:
     """Return the environment variable name when *provider* lacks credentials.
+
+    Parameters
+    ----------
+    provider : str
+        Canonical provider name to check credentials for.
 
     Returns
     -------
@@ -878,6 +993,15 @@ def _attempt_network_provider(
     functions: list[FunctionInfo],
 ) -> tuple[int, str | None]:
     """Attempt one cloud provider and report any unresolved cache gap.
+
+    Parameters
+    ----------
+    provider : str
+        Canonical provider name to populate.
+    baselines : Baselines
+        Baselines mapping to populate in place.
+    functions : list[FunctionInfo]
+        Live functions that should be cached.
 
     Returns
     -------
@@ -904,7 +1028,17 @@ def _inspect_caches(
     baselines: Baselines,
     functions: list[FunctionInfo],
 ) -> None:
-    """Print cache gaps without mutating or persisting *baselines*."""
+    """Print cache gaps without mutating or persisting *baselines*.
+
+    Parameters
+    ----------
+    provider : str
+        Canonical provider name, or ``"all"``.
+    baselines : Baselines
+        Baselines mapping to inspect without mutating.
+    functions : list[FunctionInfo]
+        Live functions to count against.
+    """
     selected = _ALL_PROVIDERS if provider == "all" else (provider,)
     _emit("--cached-only: inspection only; no API calls or cache writes")
     for name in selected:
@@ -981,6 +1115,11 @@ def _populate_all(
 
 def _resolve_scan_directories(paths: list[_Path] | None) -> list[_Path] | None:
     """Resolve and validate explicit scan directories.
+
+    Parameters
+    ----------
+    paths : list[_Path] | None
+        Explicit scan roots, or ``None`` to fall back to configuration.
 
     Returns
     -------
@@ -1095,6 +1234,11 @@ def populate_embeddings(provider: str = "all") -> None:
 
     This compatibility wrapper retains the original Python API. Use the public
     CLI to select explicit scan paths or inspect caches without network calls.
+
+    Parameters
+    ----------
+    provider : str
+        Canonical provider name, or ``"all"`` for every provider.
     """
     populate_provider_embeddings(provider)
 

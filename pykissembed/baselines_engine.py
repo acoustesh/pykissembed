@@ -92,6 +92,11 @@ class BaselineEnvelope:
 def is_v1_envelope(value: object) -> TypeGuard[dict[str, Any]]:
     """Return ``True`` if *value* is a valid v1 envelope.
 
+    Parameters
+    ----------
+    value : object
+        Candidate value from untrusted JSON to validate.
+
     Returns
     -------
     bool

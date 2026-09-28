@@ -47,6 +47,11 @@ class Provider(Protocol):
     def embed(self, texts: Sequence[str]) -> list[list[float]]:
         """Compute embedding vectors for *texts*.
 
+        Parameters
+        ----------
+        texts : Sequence[str]
+            Texts to embed, in the order returned.
+
         Returns
         -------
         list[list[float]]
@@ -60,5 +65,10 @@ class Provider(Protocol):
 
         Cloud providers typically check for the relevant API key in the
         environment. Other implementations may use their own readiness check.
+
+        Returns
+        -------
+        bool
+            ``True`` when the provider is ready to embed right now.
         """
         ...

@@ -32,11 +32,28 @@ class _CupyArray(Protocol):
     """Minimal CuPy array protocol used at dynamic boundaries."""
 
     def get(self) -> npt.NDArray[np.floating[Any]]:
-        """Return host (NumPy) array."""
+        """Return host (NumPy) array.
+
+        Returns
+        -------
+        npt.NDArray[np.floating[Any]]
+            The array copied to host (NumPy) memory.
+        """
         ...
 
     def __getitem__(self, key: object) -> _CupyArray:
-        """Slice/index array."""
+        """Slice/index array.
+
+        Parameters
+        ----------
+        key : object
+            Index or slice expression.
+
+        Returns
+        -------
+        _CupyArray
+            The sliced or indexed sub-array.
+        """
         ...
 
 
@@ -47,11 +64,35 @@ class _CupyModule(Protocol):
     float32: type[np.float32]
 
     def asarray(self, a: npt.ArrayLike, dtype: object | None = None) -> object:
-        """Convert array-like input to CuPy array."""
+        """Convert array-like input to CuPy array.
+
+        Parameters
+        ----------
+        a : npt.ArrayLike
+            Array-like input to convert.
+        dtype : object | None, optional
+            Target dtype, or ``None`` (the default) to infer it from *a*.
+
+        Returns
+        -------
+        object
+            A CuPy array holding the converted input.
+        """
         ...
 
     def cumsum(self, a: object) -> _CupyArray:
-        """Compute cumulative sum."""
+        """Compute cumulative sum.
+
+        Parameters
+        ----------
+        a : object
+            Array to accumulate.
+
+        Returns
+        -------
+        _CupyArray
+            Cumulative sum of the input array.
+        """
         ...
 
 
@@ -66,11 +107,33 @@ class _PCAEstimator(Protocol):
     """
 
     def fit(self, x: object) -> object:
-        """Fit PCA model."""
+        """Fit PCA model.
+
+        Parameters
+        ----------
+        x : object
+            Embedding matrix to fit on.
+
+        Returns
+        -------
+        object
+            The fitted estimator itself, for chaining.
+        """
         ...
 
     def transform(self, x: object) -> object:
-        """Transform embeddings."""
+        """Transform embeddings.
+
+        Parameters
+        ----------
+        x : object
+            Embedding matrix to project.
+
+        Returns
+        -------
+        object
+            The embeddings projected onto the fitted components.
+        """
         ...
 
 
@@ -478,7 +541,18 @@ class _KMeansModel(Protocol):
     """The single k-means method this module calls."""
 
     def fit_predict(self, x: object) -> object:
-        """Fit the model and return a cluster label per sample."""
+        """Fit the model and return a cluster label per sample.
+
+        Parameters
+        ----------
+        x : object
+            Embedding matrix to fit on and cluster.
+
+        Returns
+        -------
+        object
+            One cluster label per sample.
+        """
         ...
 
 

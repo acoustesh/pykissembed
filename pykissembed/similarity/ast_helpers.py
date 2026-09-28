@@ -126,6 +126,15 @@ def _decorator_lines(
 ) -> list[str]:
     """Return source lines from each decorator through the definition line.
 
+    Parameters
+    ----------
+    node : ast.FunctionDef | ast.AsyncFunctionDef | ast.ClassDef
+        Definition whose decorators and def line should be collected.
+    lines : list[str]
+        All source lines of the file being scanned.
+    start_line : int
+        1-based line of the ``def``/``class`` keyword; decorator lines before it are collected.
+
     Returns
     -------
     list[str]
@@ -149,6 +158,15 @@ def _signature_lines(
 ) -> list[str]:
     """Return definition lines up to, but not including, the first body node.
 
+    Parameters
+    ----------
+    node : ast.FunctionDef | ast.AsyncFunctionDef | ast.ClassDef
+        Definition whose signature lines should be collected.
+    lines : list[str]
+        All source lines of the file being scanned.
+    start_line : int
+        1-based line where the definition starts.
+
     Returns
     -------
     list[str]
@@ -162,6 +180,15 @@ def _signature_lines(
 
 def _comment_lines(lines: list[str], start_line: int, end_line: int) -> list[str]:
     """Return tokenized comments, with text scanning for incomplete source.
+
+    Parameters
+    ----------
+    lines : list[str]
+        All source lines of the file being scanned.
+    start_line : int
+        1-based first line of the region to tokenize.
+    end_line : int
+        1-based last line of the region to tokenize.
 
     Returns
     -------
@@ -189,6 +216,15 @@ def _comment_lines(lines: list[str], start_line: int, end_line: int) -> list[str
 
 def _fallback_comment_lines(lines: list[str], start_line: int, end_line: int) -> list[str]:
     """Return lines containing ``#`` when tokenization cannot complete.
+
+    Parameters
+    ----------
+    lines : list[str]
+        All source lines of the file being scanned.
+    start_line : int
+        1-based first line of the region to scan.
+    end_line : int
+        1-based last line of the region to scan.
 
     Returns
     -------
@@ -424,6 +460,11 @@ def extract_function_infos(
 
 def collapse_scan_directories(directories: list[Path]) -> list[Path]:
     """Resolve, deduplicate, and collapse overlapping scan roots.
+
+    Parameters
+    ----------
+    directories : list[Path]
+        Scan roots to resolve and deduplicate.
 
     Returns
     -------

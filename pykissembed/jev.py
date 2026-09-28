@@ -53,6 +53,11 @@ class SymbolState:
 def _is_overload_stub(node: ast.FunctionDef | ast.AsyncFunctionDef) -> bool:
     """Return whether *node* carries a bare or dotted ``overload`` decorator.
 
+    Parameters
+    ----------
+    node : ast.FunctionDef | ast.AsyncFunctionDef
+        Function definition to inspect for an ``overload`` decorator.
+
     Returns
     -------
     bool
@@ -248,6 +253,11 @@ def parse_score(payload: object, question_id: str, n_levels: int) -> float | Non
 def state_payload(state: SymbolState) -> dict[str, str]:
     """Build the line-independent state sent to Jev.
 
+    Parameters
+    ----------
+    state : SymbolState
+        The symbol being graded.
+
     Returns
     -------
     dict[str, str]
@@ -266,6 +276,11 @@ def state_payload(state: SymbolState) -> dict[str, str]:
 def canonical_json(value: object) -> str:
     """Serialize a cache key without incidental spacing or key-order changes.
 
+    Parameters
+    ----------
+    value : object
+        Value to serialise into a stable cache key.
+
     Returns
     -------
     str
@@ -277,6 +292,11 @@ def canonical_json(value: object) -> str:
 
 def open_cache(config: PyqtestConfig) -> sqlite3.Connection:
     """Open the shared WAL-mode Jev response cache under the baseline directory.
+
+    Parameters
+    ----------
+    config : PyqtestConfig
+        Active config naming the baseline directory.
 
     Returns
     -------

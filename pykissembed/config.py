@@ -65,7 +65,13 @@ class PyqtestConfig:
 
     @property
     def baseline_path(self) -> Path:
-        """Absolute path to the committed baselines directory."""
+        """Absolute path to the committed baselines directory.
+
+        Returns
+        -------
+        Path
+            Absolute path to the committed baselines directory.
+        """
         return self.root / self.baseline_dir
 
     @property
@@ -74,6 +80,11 @@ class PyqtestConfig:
 
         The path is no longer used by the cloud similarity pipeline, but the
         property remains available for consumers written against v0.1.
+
+        Returns
+        -------
+        Path
+            Deprecated compatibility cache path.
         """
         return self.root / self.cache_dir
 
@@ -314,11 +325,18 @@ def load_config(start: Path | None = None) -> PyqtestConfig:
 def _auto_detect(root: Path) -> PyqtestConfig:
     """Auto-detect a project layout when no ``pyproject.toml`` is present.
 
+    Parameters
+    ----------
+    root : Path
+        Project root to auto-detect a layout for.
+
     Returns
     -------
     PyqtestConfig
-        A config with ``paths=["src"]`` if ``src/`` exists, else
-        ``paths=["."]`` (current directory).
+        A default config whose ``paths`` is ``["src"]`` if ``src/`` exists,
+        else ``["scripts"]`` if ``scripts/`` exists, else ``["."]`` if *root*
+        holds any top-level ``.py`` file, else ``["src"]``. ``mode`` comes
+        from ``PYKISSEMBED_MODE`` (default ``"ratchet"``).
     """
     if (root / "src").is_dir():
         paths = ["src"]

@@ -113,6 +113,11 @@ def _tolerant_parse(text: str) -> dict[str, object] | None:
     are applied to the original ``text`` via :func:`_patch_key` so that
     comments and formatting elsewhere in the file survive untouched.
 
+    Parameters
+    ----------
+    text : str
+        Raw ``settings.json`` text, possibly JSONC.
+
     Returns
     -------
     dict[str, object] | None
@@ -134,6 +139,15 @@ def _tolerant_parse(text: str) -> dict[str, object] | None:
 def _patch_key(text: str, key: str, value: object) -> str:
     """Replace an existing ``key``'s value, or insert ``key`` after the opening brace.
 
+    Parameters
+    ----------
+    text : str
+        Original ``settings.json`` text to edit.
+    key : str
+        Setting key to set.
+    value : object
+        JSON-serialisable value to assign.
+
     Returns
     -------
     str
@@ -154,6 +168,15 @@ def _patch_key(text: str, key: str, value: object) -> str:
 
 def _insert_key(text: str, key: str, value_text: str) -> str:
     """Insert a new ``key: value_text`` property right after the opening ``{``.
+
+    Parameters
+    ----------
+    text : str
+        Original ``settings.json`` text to edit.
+    key : str
+        Setting key to insert.
+    value_text : str
+        Already-serialised JSON text for the value.
 
     Returns
     -------
@@ -177,6 +200,11 @@ def _insert_key(text: str, key: str, value_text: str) -> str:
 
 def _detect_indent(text: str) -> str:
     """Infer the file's indentation unit from its first indented line.
+
+    Parameters
+    ----------
+    text : str
+        File text to infer the indentation unit from.
 
     Returns
     -------

@@ -311,7 +311,16 @@ def test_no_lint_or_type_errors(
     *,
     update_baselines: bool,
 ) -> None:
-    """All configured paths must pass ruff + pyright with zero diagnostics."""
+    """All configured paths must pass ruff + pyright with zero diagnostics.
+
+    Parameters
+    ----------
+    pykissembed_paths : list[Path]
+        Configured source directories from the ``pykissembed_paths`` fixture; the test skips when
+        empty.
+    update_baselines : bool
+        When true, write the current measurements to the baseline file and skip instead of checking.
+    """
     if not pykissembed_paths:
         pytest.skip("No [tool.pykissembed] paths configured")
 

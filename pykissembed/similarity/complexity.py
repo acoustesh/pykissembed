@@ -29,6 +29,15 @@ def call_analyzer(
 ) -> object:
     """Call an untyped analyzer and normalize its undocumented failures.
 
+    Parameters
+    ----------
+    analyzer : Callable[..., object]
+        Untyped third-party analyzer to call.
+    *args : object
+        Positional arguments forwarded to *analyzer*.
+    **kwargs : object
+        Keyword arguments forwarded to *analyzer*.
+
     Returns
     -------
     object
@@ -222,6 +231,11 @@ def load_complexity_maps(directory: Path | None = None) -> tuple[dict[str, int],
 
     Unlike :func:`load_all_complexity_maps`, this compatibility entry point
     performs a shallow scan and never aggregates multiple configured roots.
+
+    Parameters
+    ----------
+    directory : Path | None
+        Directory to scan; defaults to the first configured path.
 
     Returns
     -------

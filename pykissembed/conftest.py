@@ -33,6 +33,11 @@ def pykissembed_config() -> PyqtestConfig:
 def baseline_factory(tmp_path: Path) -> Callable[..., Path]:
     """Factory for writing a v1 envelope to a temp file.
 
+    Parameters
+    ----------
+    tmp_path : Path
+        Per-test temporary directory the factory writes envelopes under.
+
     Returns
     -------
     Callable[..., Path]
@@ -41,6 +46,22 @@ def baseline_factory(tmp_path: Path) -> Callable[..., Path]:
     """
 
     def _make(kind: str, data: Mapping[str, JsonValue], *, name: str = "baseline.json") -> Path:
+        """Write a v1 envelope under ``tmp_path`` and return its path.
+
+        Parameters
+        ----------
+        kind : str
+            Envelope ``kind`` value.
+        data : Mapping[str, JsonValue]
+            Envelope payload; copied into a new dict before saving.
+        name : str
+            File name to create under ``tmp_path``.
+
+        Returns
+        -------
+        Path
+            Path of the written baseline file.
+        """
         path = tmp_path / name
         save_envelope(path, BaselineEnvelope(kind=kind, data=dict(data)))
         return path

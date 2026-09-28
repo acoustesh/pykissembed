@@ -339,22 +339,46 @@ class ProviderEntry:
 
     @property
     def hash_field(self) -> str:
-        """FunctionInfo attribute name for the content hash."""
+        """FunctionInfo attribute name for the content hash.
+
+        Returns
+        -------
+        str
+            ``"text_hash"`` for text-hashed providers, otherwise ``"hash"``.
+        """
         return "text_hash" if self.hash_type == HashType.TEXT else "hash"
 
     @property
     def threshold_pair_key(self) -> str:
-        """Config key for pair similarity threshold override."""
+        """Config key for pair similarity threshold override.
+
+        Returns
+        -------
+        str
+            Config key for the pair-similarity threshold override.
+        """
         return f"{self.name}_similarity_threshold_pair"
 
     @property
     def threshold_neighbor_key(self) -> str:
-        """Config key for neighbor similarity threshold override."""
+        """Config key for neighbor similarity threshold override.
+
+        Returns
+        -------
+        str
+            Config key for the neighbor-similarity threshold override.
+        """
         return f"{self.name}_similarity_threshold_neighbor"
 
     @property
     def pca_variance_key(self) -> str:
-        """Config key for PCA variance threshold override."""
+        """Config key for PCA variance threshold override.
+
+        Returns
+        -------
+        str
+            Config key for the PCA explained-variance threshold.
+        """
         return f"{self.name}_pca_variance_threshold"
 
 
@@ -372,6 +396,19 @@ def _build_combined_row(
     function stays absent (rather than getting a partial/zero-padded vector)
     until the slowest provider catches up. The four Jina members are derived
     here from the raw query/passage vectors via :func:`jina_combined_members`.
+
+    Parameters
+    ----------
+    text_hash : str
+        Content hash identifying the function.
+    ast_hash : str
+        AST hash identifying the function.
+    text_caches : dict[str, dict[str, list[float]]]
+        Text-hash keyed cache for each cosine base provider.
+    ast_caches : dict[str, dict[str, list[float]]]
+        AST-hash keyed cache for each cosine base provider.
+    jina_caches : dict[str, dict[str, list[float]]]
+        Jina query and passage caches keyed by hash.
 
     Returns
     -------
@@ -438,8 +475,7 @@ class EmbeddingRegistry:
     Parameters
     ----------
     providers : list[ProviderEntry]
-        All provider entries: 10 cosine base + 4 standalone Jina query/passage
-        caches + 1 combined.
+        All provider entries to register, including the combined entry.
     combined_key : str
         The ``cache_key`` that identifies the combined provider.
     """
@@ -463,39 +499,81 @@ class EmbeddingRegistry:
 
     @property
     def providers(self) -> tuple[ProviderEntry, ...]:
-        """All registered providers (base + combined)."""
+        """All registered providers, in registration order.
+
+        Returns
+        -------
+        tuple[ProviderEntry, ...]
+            Every registered provider: base, standalone, and combined.
+        """
         return self._providers
 
     @property
     def base_providers(self) -> tuple[ProviderEntry, ...]:
-        """The single-vector cosine providers (non-combined, non-standalone)."""
+        """The single-vector cosine providers (non-combined, non-standalone).
+
+        Returns
+        -------
+        tuple[ProviderEntry, ...]
+            The single-vector cosine providers, excluding combined and standalone entries.
+        """
         return tuple(
             p for p in self._providers if p.cache_key != self._combined_key and not p.standalone
         )
 
     @property
     def standalone_providers(self) -> tuple[ProviderEntry, ...]:
-        """The standalone (Jina query/passage) cache entries."""
+        """The standalone (Jina query/passage) cache entries.
+
+        Returns
+        -------
+        tuple[ProviderEntry, ...]
+            The standalone Jina query/passage cache entries.
+        """
         return tuple(p for p in self._providers if p.standalone)
 
     @property
     def combined(self) -> ProviderEntry:
-        """The single combined provider entry."""
+        """The single combined provider entry.
+
+        Returns
+        -------
+        ProviderEntry
+            The single combined provider entry.
+        """
         return next(p for p in self._providers if p.cache_key == self._combined_key)
 
     @property
     def combined_dependencies(self) -> list[str]:
-        """Cache keys of the 10 cosine base providers needed to build combined."""
+        """Cache keys of the cosine base providers needed to build combined.
+
+        Returns
+        -------
+        list[str]
+            Cache keys of the cosine base providers combined is built from.
+        """
         return [p.cache_key for p in self.base_providers]
 
     @property
     def standalone_dependencies(self) -> list[str]:
-        """Cache keys of the raw Jina query/passage caches feeding combined."""
+        """Cache keys of the raw Jina query/passage caches feeding combined.
+
+        Returns
+        -------
+        list[str]
+            Cache keys of the raw Jina query/passage caches feeding combined.
+        """
         return [p.cache_key for p in self.standalone_providers]
 
     @property
     def files(self) -> dict[str, Path]:
-        """Mapping of ``cache_key`` -> ``file_path`` for every provider."""
+        """Mapping of ``cache_key`` -> ``file_path`` for every provider.
+
+        Returns
+        -------
+        dict[str, Path]
+            Mapping of each provider's ``cache_key`` to its baseline file path.
+        """
         return {p.cache_key: p.file_path for p in self._providers}
 
     def by_cache_key(self, cache_key: str) -> ProviderEntry:
@@ -522,13 +600,20 @@ class EmbeddingRegistry:
     ) -> list[tuple[ProviderEntry, set[str], dict[str, list[float]]]]:
         """Resolve each provider to its valid-hash set and live cache.
 
+        Parameters
+        ----------
+        baselines : dict[str, object]
+            Baselines mapping holding the caches.
+        providers : tuple[ProviderEntry, ...] | None
+            Providers to resolve; all registered ones when ``None`` or empty.
+
         Returns
         -------
         list[tuple[ProviderEntry, set[str], dict[str, list[float]]]]
             One tuple per provider in *providers* (or all registered
             providers if not given), pairing the provider with the
-            valid-hash set matching its ``hash_type`` and its live
-            on-disk cache dict.
+            valid-hash set matching its ``hash_type`` and its live cache
+            dict inside *baselines*.
         """
         valid_text, valid_ast, _ = get_valid_hashes(baselines)
         return [
@@ -547,7 +632,7 @@ class EmbeddingRegistry:
 
         Parameters
         ----------
-        baselines : dict
+        baselines : dict[str, object]
             The loaded baselines dict.
 
         Returns
@@ -555,7 +640,8 @@ class EmbeddingRegistry:
         dict[str, int]
             Keys include ``valid_text_hashes``, ``valid_ast_hashes``,
             ``<name>`` (cache size), and ``missing_<name>`` (missing count)
-            for each base provider, plus ``combined`` cache size.
+            for each base provider, plus the combined provider's cache size
+            under its ``name``.
         """
         valid_text, valid_ast, _ = get_valid_hashes(baselines)
         result: dict[str, int] = {
@@ -576,7 +662,7 @@ class EmbeddingRegistry:
 
         Parameters
         ----------
-        baselines : dict
+        baselines : dict[str, object]
             The loaded baselines dict.
 
         Returns
@@ -593,15 +679,17 @@ class EmbeddingRegistry:
         return stats
 
     def rebuild_combined(self, baselines: dict[str, object]) -> int:
-        """Rebuild combined embeddings from the 10 cosine base providers + Jina.
+        """Rebuild combined embeddings from the cosine base providers + Jina.
 
-        Modifies ``baselines[combined.cache_key]`` in place. The 10 cosine
-        members are joined with the four Jina Combined members (derived from the
-        raw query/passage caches) into a 14-way concatenation per function.
+        Replaces ``baselines[combined.cache_key]`` with a new cache. Every valid
+        text hash that maps to an AST hash gets a row from
+        :func:`_build_combined_row`, which joins the base-provider vectors with
+        the Jina members derived from the raw query/passage caches; functions
+        with any member missing are left out.
 
         Parameters
         ----------
-        baselines : dict
+        baselines : dict[str, object]
             The loaded baselines dict.
 
         Returns
@@ -1000,6 +1088,11 @@ def _save_baselines_unlocked(baselines: dict[str, object]) -> None:
     ``function_hashes`` (skipped when empty), and per-provider embedding
     caches (each written only when non-empty) — and writes each group to
     its own file atomically.
+
+    Parameters
+    ----------
+    baselines : dict[str, object]
+        Baselines mapping to persist.
     """
     baselines_path = baselines_file()
     baselines_path.parent.mkdir(parents=True, exist_ok=True)

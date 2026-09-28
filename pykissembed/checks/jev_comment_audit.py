@@ -119,6 +119,11 @@ _QUESTIONS: dict[str, dict[str, object]] = {
 def _read_threshold(data: object) -> float:
     """Read the strict minimum comment level, clamped to ``[0, 4]``.
 
+    Parameters
+    ----------
+    data : object
+        Baseline payload of untrusted shape.
+
     Returns
     -------
     float
@@ -147,7 +152,20 @@ class TestJevCommentAudit:
         update_baselines: bool,
         cached_only: bool,
     ) -> None:
-        """Fail when a function or method's comment score does not exceed the bar."""
+        """Fail when a function or method's comment score does not exceed the bar.
+
+        Parameters
+        ----------
+        pykissembed_paths : list[Path]
+            Configured source directories from the ``pykissembed_paths`` fixture; the test skips
+            when empty.
+        update_baselines : bool
+            When true, save the baseline file with its default thresholds filled in and skip instead
+            of grading.
+        cached_only : bool
+            When true, never call the API: grade from cached responses only and leave cache misses
+            ungraded.
+        """
         if not pykissembed_paths:
             pytest.skip("No [tool.pykissembed] paths configured")
         api_key = None if cached_only else _load_api_key()

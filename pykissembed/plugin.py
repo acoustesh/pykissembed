@@ -56,6 +56,13 @@ _CHECK_STEMS = frozenset(_CHECK_MODULES)
 def _load_callable(module_name: str, attribute: str) -> Callable[..., object]:
     """Load and validate one callable from a lazily imported module.
 
+    Parameters
+    ----------
+    module_name : str
+        Module to import the attribute from.
+    attribute : str
+        Attribute name expected to be callable.
+
     Returns
     -------
     Callable[..., object]
@@ -77,6 +84,11 @@ def _load_callable(module_name: str, attribute: str) -> Callable[..., object]:
 def _is_str_object_dict(value: object) -> TypeGuard[dict[str, object]]:
     """Return whether *value* is a dictionary with string keys.
 
+    Parameters
+    ----------
+    value : object
+        Untrusted value to narrow.
+
     Returns
     -------
     bool
@@ -87,6 +99,11 @@ def _is_str_object_dict(value: object) -> TypeGuard[dict[str, object]]:
 
 def _is_function_info(value: object) -> TypeGuard[FunctionInfo]:
     """Validate the stable fields consumed from a lazily loaded function record.
+
+    Parameters
+    ----------
+    value : object
+        Untrusted value to narrow to a function record.
 
     Returns
     -------
@@ -104,7 +121,13 @@ def _is_function_info(value: object) -> TypeGuard[FunctionInfo]:
 
 
 def pytest_addoption(parser: pytest.Parser) -> None:
-    """Add pykissembed's custom CLI options to pytest."""
+    """Add pykissembed's custom CLI options to pytest.
+
+    Parameters
+    ----------
+    parser : pytest.Parser
+        Parser to register the CLI options on.
+    """
     parser.addoption(
         "--update-baselines",
         action="store_true",
@@ -141,6 +164,11 @@ def pytest_addoption(parser: pytest.Parser) -> None:
 def update_baselines(request: pytest.FixtureRequest) -> bool:
     """Fixture returning the ``--update-baselines`` flag value.
 
+    Parameters
+    ----------
+    request : pytest.FixtureRequest
+        Active pytest request.
+
     Returns
     -------
     bool
@@ -152,6 +180,11 @@ def update_baselines(request: pytest.FixtureRequest) -> bool:
 @pytest.fixture
 def cached_only(request: pytest.FixtureRequest) -> bool:
     """Fixture returning the effective cache-only setting.
+
+    Parameters
+    ----------
+    request : pytest.FixtureRequest
+        Active pytest request.
 
     Returns
     -------
@@ -217,6 +250,11 @@ def shared_functions(
 ) -> list[FunctionInfo]:
     """Session-scoped list of FunctionInfo objects extracted from workspace.
 
+    Parameters
+    ----------
+    shared_baselines : dict[str, object]
+        Session-scoped baselines shared across similarity checks.
+
     Returns
     -------
     list[FunctionInfo]
@@ -263,6 +301,11 @@ def pytest_configure(config: pytest.Config) -> None:
     default, so :func:`pytest_collect_file` would never be called for
     those files. We append the checks directory to ``config.args`` here
     so pytest discovers and collects the check modules automatically.
+
+    Parameters
+    ----------
+    config : pytest.Config
+        Pytest configuration being initialised.
 
     Raises
     ------
@@ -637,6 +680,13 @@ def pytest_collect_file(file_path: Path, parent: pytest.Collector) -> pytest.Mod
     To avoid collecting the same test twice, we defer to the default hook
     for init paths by returning ``None`` when
     ``parent.session.isinitpath(file_path)`` is ``True``.
+
+    Parameters
+    ----------
+    file_path : Path
+        File pytest is considering for collection.
+    parent : pytest.Collector
+        Collector that requested the file.
 
     Returns
     -------

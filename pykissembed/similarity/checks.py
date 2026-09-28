@@ -805,6 +805,13 @@ def _extract_embedding_cache(baselines: Baselines, cache_key: str) -> dict[str, 
     snapshot is detached from *baselines*, callers may read or reshape it freely
     without disturbing the persisted baseline.
 
+    Parameters
+    ----------
+    baselines : Baselines
+        Mutable baselines mapping holding the cache.
+    cache_key : str
+        Key naming the provider cache to copy out.
+
     Returns
     -------
     dict[str, list[float]]

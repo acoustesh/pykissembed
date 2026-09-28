@@ -20,7 +20,18 @@ class PCAModel(Protocol):
     """
 
     def transform(self, x: NDArray[np.floating]) -> NDArray[np.floating]:
-        """Transform data using the fitted PCA model."""
+        """Transform data using the fitted PCA model.
+
+        Parameters
+        ----------
+        x : NDArray[np.floating]
+            Embedding matrix to project.
+
+        Returns
+        -------
+        NDArray[np.floating]
+            The embeddings projected onto the fitted components.
+        """
         ...
 
 

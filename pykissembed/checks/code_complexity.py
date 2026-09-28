@@ -100,6 +100,11 @@ def _extract_items_with_docstrings(
 ) -> list[tuple[str, int, bool, str]]:
     """Return ``[(name, line_no, has_docstring, kind), ...]`` for a file.
 
+    Parameters
+    ----------
+    file_path : Path
+        Python file to scan for definitions.
+
     Returns
     -------
     list[tuple[str, int, bool, str]]
@@ -136,6 +141,11 @@ def _extract_items_with_docstrings(
 def _is_overload_stub(node: ast.FunctionDef | ast.AsyncFunctionDef) -> bool:
     """Return whether *node* has a bare or dotted ``overload`` decorator.
 
+    Parameters
+    ----------
+    node : ast.FunctionDef | ast.AsyncFunctionDef
+        Function definition to inspect for an ``overload`` decorator.
+
     Returns
     -------
     bool
@@ -146,6 +156,11 @@ def _is_overload_stub(node: ast.FunctionDef | ast.AsyncFunctionDef) -> bool:
 
 def _decorator_tail(decorator: ast.expr) -> str | None:
     """Return the terminal static name of a non-call decorator.
+
+    Parameters
+    ----------
+    decorator : ast.expr
+        Decorator expression to take the terminal name of.
 
     Returns
     -------
@@ -177,6 +192,11 @@ def _get_line_count(file_path: Path) -> int:
 
 def _get_cc(file_path: Path) -> list[tuple[str, int, int]]:
     """Return ``[(name, lineno, cc), ...]`` using radon.
+
+    Parameters
+    ----------
+    file_path : Path
+        Python file to measure cyclomatic complexity for.
 
     Returns
     -------
@@ -213,6 +233,11 @@ def _get_cc(file_path: Path) -> list[tuple[str, int, int]]:
 def _get_cog(file_path: Path) -> list[tuple[str, int, int]]:
     """Return ``[(name, lineno, cognitive_complexity), ...]`` using complexipy.
 
+    Parameters
+    ----------
+    file_path : Path
+        Python file to measure cognitive complexity for.
+
     Returns
     -------
     list[tuple[str, int, int]]
@@ -245,6 +270,11 @@ def _get_cog(file_path: Path) -> list[tuple[str, int, int]]:
 
 def _get_mi(file_path: Path) -> float:
     """Return the Maintainability Index for *file_path* using radon.
+
+    Parameters
+    ----------
+    file_path : Path
+        Python file to compute the Maintainability Index of.
 
     Returns
     -------
@@ -412,7 +442,17 @@ class TestDocstringCoverage:
     @staticmethod
     @pytest.mark.complexity
     def test_docstring_coverage(pykissembed_paths: list[Path], *, update_baselines: bool) -> None:
-        """Fail if any directory has more missing docstrings than its baseline."""
+        """Fail if any directory has more missing docstrings than its baseline.
+
+        Parameters
+        ----------
+        pykissembed_paths : list[Path]
+            Configured source directories from the ``pykissembed_paths`` fixture; the test skips
+            when empty.
+        update_baselines : bool
+            When true, write the current measurements to the baseline file and skip instead of
+            checking.
+        """
         if not pykissembed_paths:
             pytest.skip("No [tool.pykissembed] paths configured")
         with _locked_envelope() as (baseline_file, envelope):
@@ -461,7 +501,17 @@ class TestLineCount:
     @staticmethod
     @pytest.mark.complexity
     def test_file_line_counts(pykissembed_paths: list[Path], *, update_baselines: bool) -> None:
-        """Fail if any file exceeds its line-count baseline."""
+        """Fail if any file exceeds its line-count baseline.
+
+        Parameters
+        ----------
+        pykissembed_paths : list[Path]
+            Configured source directories from the ``pykissembed_paths`` fixture; the test skips
+            when empty.
+        update_baselines : bool
+            When true, write the current measurements to the baseline file and skip instead of
+            checking.
+        """
         if not pykissembed_paths:
             pytest.skip("No [tool.pykissembed] paths configured")
         with _locked_envelope() as (baseline_file, envelope):
@@ -501,7 +551,17 @@ class TestCyclomaticComplexity:
         *,
         update_baselines: bool,
     ) -> None:
-        """Fail if any function exceeds its CC or COG threshold or baseline."""
+        """Fail if any function exceeds its CC or COG threshold or baseline.
+
+        Parameters
+        ----------
+        pykissembed_paths : list[Path]
+            Configured source directories from the ``pykissembed_paths`` fixture; the test skips
+            when empty.
+        update_baselines : bool
+            When true, write the current measurements to the baseline file and skip instead of
+            checking.
+        """
         if not pykissembed_paths:
             pytest.skip("No [tool.pykissembed] paths configured")
         with _locked_envelope() as (baseline_file, envelope):
@@ -569,7 +629,14 @@ class TestWrapperProliferation:
     @staticmethod
     @pytest.mark.complexity
     def test_wrapper_proliferation(pykissembed_paths: list[Path]) -> None:
-        """Fail when an exact pass-through wrapper has too few call sites."""
+        """Fail when an exact pass-through wrapper has too few call sites.
+
+        Parameters
+        ----------
+        pykissembed_paths : list[Path]
+            Configured source directories from the ``pykissembed_paths`` fixture; the test skips
+            when empty.
+        """
         if not pykissembed_paths:
             pytest.skip("No [tool.pykissembed] paths configured")
         config = get_config()
@@ -607,7 +674,17 @@ class TestMaintainabilityIndex:
         *,
         update_baselines: bool,
     ) -> None:
-        """Fail if any file's MI drops below threshold or its baseline."""
+        """Fail if any file's MI drops below threshold or its baseline.
+
+        Parameters
+        ----------
+        pykissembed_paths : list[Path]
+            Configured source directories from the ``pykissembed_paths`` fixture; the test skips
+            when empty.
+        update_baselines : bool
+            When true, write the current measurements to the baseline file and skip instead of
+            checking.
+        """
         if not pykissembed_paths:
             pytest.skip("No [tool.pykissembed] paths configured")
         with _locked_envelope() as (baseline_file, envelope):

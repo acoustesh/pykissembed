@@ -67,6 +67,13 @@ class EmbeddingResponseError(TypeError, ValueError):
 def _require_callable(owner: object, attribute: str) -> Callable[..., object]:
     """Return a dynamically loaded callable after validating its boundary.
 
+    Parameters
+    ----------
+    owner : object
+        Module or object expected to expose the attribute.
+    attribute : str
+        Name of the callable attribute to fetch.
+
     Returns
     -------
     Callable[..., object]
@@ -86,6 +93,13 @@ def _require_callable(owner: object, attribute: str) -> Callable[..., object]:
 
 def _require_exception_type(owner: object, attribute: str) -> type[Exception]:
     """Return a dynamically loaded ordinary exception class.
+
+    Parameters
+    ----------
+    owner : object
+        Module or object expected to expose the attribute.
+    attribute : str
+        Name of the exception-class attribute to fetch.
 
     Returns
     -------
@@ -131,6 +145,11 @@ def _requests_api() -> tuple[Callable[..., object], type[Exception], type[Except
 
 def _response_json(response: object) -> object:
     """Raise for an HTTP failure and return a response's decoded JSON.
+
+    Parameters
+    ----------
+    response : object
+        HTTP response whose JSON body should be decoded.
 
     Returns
     -------
@@ -336,6 +355,15 @@ def _build_jina_caller(
     ``task`` (``code2code.*`` / ``nl2code.*``) plus ``truncate`` in the request
     body — hence a dedicated builder rather than the shared OpenRouter branch.
 
+    Parameters
+    ----------
+    model : str
+        Jina embedding model identifier.
+    timeout : float
+        Per-request timeout in seconds.
+    task : str
+        Jina task code, e.g. ``code2code.query``.
+
     Returns
     -------
     tuple[Callable[[list[str]], list[list[float]]], Callable[[Exception], bool]]
@@ -348,6 +376,11 @@ def _build_jina_caller(
 
     def _jina_request(truncated: list[str]) -> list[list[float]]:
         """Send an embedding request to the Jina API.
+
+        Parameters
+        ----------
+        truncated : list[str]
+            Input texts already truncated to the token limit.
 
         Returns
         -------
@@ -384,6 +417,11 @@ def _build_jina_caller(
 
 def _parse_unindexed_response(payload: object) -> list[list[float]]:
     """Validate an embedding response whose items are already input-ordered.
+
+    Parameters
+    ----------
+    payload : object
+        Decoded embedding response envelope.
 
     Returns
     -------
@@ -535,6 +573,13 @@ def _build_voyage_caller(
 ) -> tuple[Callable[[list[str]], list[list[float]]], Callable[[Exception], bool]]:
     """Build request/retry callables for Voyage's native REST endpoint.
 
+    Parameters
+    ----------
+    model : str
+        Voyage embedding model identifier.
+    timeout : float
+        Per-request timeout in seconds.
+
     Returns
     -------
     tuple[Callable[[list[str]], list[list[float]]], Callable[[Exception], bool]]
@@ -550,6 +595,11 @@ def _build_voyage_caller(
 
     def _voyage_request(truncated: list[str]) -> list[list[float]]:
         """Send an embedding request to the Voyage REST API.
+
+        Parameters
+        ----------
+        truncated : list[str]
+            Input texts already truncated to the token limit.
 
         Returns
         -------
@@ -570,6 +620,11 @@ def _build_voyage_caller(
 
     def _voyage_is_retryable(exc: Exception) -> bool:
         """Return whether a Voyage REST failure is transient.
+
+        Parameters
+        ----------
+        exc : Exception
+            The failure raised by the request callable.
 
         Returns
         -------
@@ -718,6 +773,11 @@ def _build_provider_caller(
 
         def _openai_request(truncated: list[str]) -> list[list[float]]:
             """Send an OpenAI request and validate its embedding vectors.
+
+            Parameters
+            ----------
+            truncated : list[str]
+                Input texts already truncated to the token limit.
 
             Returns
             -------
@@ -908,6 +968,11 @@ def compute_cosine_similarity(a: list[float], b: list[float]) -> float:
 def _l2_normalize(vec: list[float]) -> list[float]:
     """Return *vec* scaled to unit L2 norm (unchanged if its norm is zero).
 
+    Parameters
+    ----------
+    vec : list[float]
+        Vector to scale to unit L2 norm.
+
     Returns
     -------
     list[float]
@@ -931,6 +996,13 @@ def jina_combined_members(
     providers — the normalised ``concat(Q, P)`` and ``concat(P, Q)``. Feeding both
     orderings lets the downstream PCA reduction of Combined capture the
     query/passage pairing symmetrically.
+
+    Parameters
+    ----------
+    query : list[float]
+        Jina query vector for one variant.
+    passage : list[float]
+        Jina passage vector for the same variant.
 
     Returns
     -------

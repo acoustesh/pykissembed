@@ -282,6 +282,11 @@ def _evaluate_symbol(level: float, min_score: float) -> bool:
 def _shift(score: float | None) -> float | None:
     """Shift a valid zero-based score to the docstring rubric's levels 1-6.
 
+    Parameters
+    ----------
+    score : float | None
+        Zero-based wire score from the API, or ``None`` when invalid.
+
     Returns
     -------
     float | None
@@ -415,7 +420,20 @@ class TestJevDocstringAudit:
         update_baselines: bool,
         cached_only: bool,
     ) -> None:
-        """Fail when Jev grades a symbol's docstring below ``min_score``."""
+        """Fail when Jev grades a symbol's docstring below ``min_score``.
+
+        Parameters
+        ----------
+        pykissembed_paths : list[Path]
+            Configured source directories from the ``pykissembed_paths`` fixture; the test skips
+            when empty.
+        update_baselines : bool
+            When true, save the baseline file with its default thresholds filled in and skip instead
+            of grading.
+        cached_only : bool
+            When true, never call the API: grade from cached responses only and leave cache misses
+            ungraded.
+        """
         if not pykissembed_paths:
             pytest.skip("No [tool.pykissembed] paths configured")
         api_key = None if cached_only else _load_api_key()

@@ -139,6 +139,23 @@ def _wrapper_candidate(
 ) -> WrapperCandidate | None:
     """Create a candidate when *node* is a non-exempt exact forwarder.
 
+    Parameters
+    ----------
+    node : ast.FunctionDef | ast.AsyncFunctionDef
+        Function definition to test for the exact-forwarder shape.
+    file_path : Path
+        File containing *node*.
+    root : Path
+        Project root, used to build the qualified identifier.
+    parents : dict[ast.AST, ast.AST]
+        Parent map for the scanned module.
+    call_counts : dict[str, int]
+        Project-wide call counts keyed by terminal callee name.
+    wrapper_exclude : list[str]
+        Glob patterns of wrapper identifiers exempt from the rule.
+    wrapper_exempt_decorators : list[str]
+        Glob patterns of decorator names (full or terminal) exempt from the rule.
+
     Returns
     -------
     WrapperCandidate | None
@@ -167,6 +184,11 @@ def _wrapper_candidate(
 def _forwarding_call(node: ast.FunctionDef | ast.AsyncFunctionDef) -> ast.Call | None:
     """Return the exact forwarding call in *node*, if its body has one.
 
+    Parameters
+    ----------
+    node : ast.FunctionDef | ast.AsyncFunctionDef
+        Function definition whose single return statement to inspect.
+
     Returns
     -------
     ast.Call | None
@@ -190,6 +212,11 @@ def _forwarding_call(node: ast.FunctionDef | ast.AsyncFunctionDef) -> ast.Call |
 def _executable_body(node: ast.FunctionDef | ast.AsyncFunctionDef) -> list[ast.stmt]:
     """Return *node*'s body after removing its leading docstring statement.
 
+    Parameters
+    ----------
+    node : ast.FunctionDef | ast.AsyncFunctionDef
+        Function definition whose body to return.
+
     Returns
     -------
     list[ast.stmt]
@@ -203,6 +230,13 @@ def _is_unchanged_forwarding(
     call: ast.Call,
 ) -> bool:
     """Return whether *call* forwards every parameter of *node* unchanged.
+
+    Parameters
+    ----------
+    node : ast.FunctionDef | ast.AsyncFunctionDef
+        Candidate wrapper definition.
+    call : ast.Call
+        The forwarded call found in *node*'s body.
 
     Returns
     -------
@@ -224,6 +258,11 @@ def _is_unchanged_forwarding(
 def _receiver_name(call_target: ast.expr) -> str | None:
     """Return the receiver name for an attribute call target.
 
+    Parameters
+    ----------
+    call_target : ast.expr
+        Call target whose receiver name to extract.
+
     Returns
     -------
     str | None
@@ -240,6 +279,15 @@ def _matches_positional_arguments(
     vararg: ast.arg | None,
 ) -> bool:
     """Return whether positional call arguments forward the declared parameters.
+
+    Parameters
+    ----------
+    values : list[ast.expr]
+        Positional argument expressions in the call.
+    parameter_names : list[str]
+        The wrapper's positional parameter names, excluding a receiver consumed by the call target.
+    vararg : ast.arg | None
+        The wrapper's ``*args`` parameter, if any.
 
     Returns
     -------
@@ -271,6 +319,15 @@ def _matches_keyword_arguments(
 ) -> bool:
     """Return whether keyword call arguments forward declared parameters.
 
+    Parameters
+    ----------
+    keywords : list[ast.keyword]
+        Keyword arguments in the forwarded call.
+    keyword_only : list[ast.arg]
+        The wrapper's keyword-only parameters, in declaration order.
+    kwarg : ast.arg | None
+        The wrapper's ``**kwargs`` parameter, if any.
+
     Returns
     -------
     bool
@@ -297,6 +354,13 @@ def _matches_keyword_arguments(
 def _is_parameter_name(value: ast.expr, parameter_name: str) -> bool:
     """Return whether *value* is a direct read of *parameter_name*.
 
+    Parameters
+    ----------
+    value : ast.expr
+        Expression to test for a parameter-name match.
+    parameter_name : str
+        Parameter name expected on the forwarded call.
+
     Returns
     -------
     bool
@@ -307,6 +371,11 @@ def _is_parameter_name(value: ast.expr, parameter_name: str) -> bool:
 
 def _call_counts(modules: list[tuple[Path, ast.Module]]) -> dict[str, int]:
     """Count direct and attribute calls by their terminal static name.
+
+    Parameters
+    ----------
+    modules : list[tuple[Path, ast.Module]]
+        Scanned ``(path, tree)`` pairs whose calls to count.
 
     Returns
     -------
@@ -328,6 +397,11 @@ def _call_counts(modules: list[tuple[Path, ast.Module]]) -> dict[str, int]:
 def _call_terminal_name(call_target: ast.expr) -> str | None:
     """Return the terminal name of a direct or attribute call target.
 
+    Parameters
+    ----------
+    call_target : ast.expr
+        Call target whose terminal name to extract.
+
     Returns
     -------
     str | None
@@ -342,6 +416,11 @@ def _call_terminal_name(call_target: ast.expr) -> str | None:
 
 def _parent_map(tree: ast.Module) -> dict[ast.AST, ast.AST]:
     """Build an AST child-to-parent lookup table.
+
+    Parameters
+    ----------
+    tree : ast.Module
+        Parsed module to index by parent node.
 
     Returns
     -------
@@ -366,6 +445,17 @@ def _wrapper_identifier(
 ) -> str:
     """Return a stable relative-path and qualified-name wrapper identifier.
 
+    Parameters
+    ----------
+    node : ast.FunctionDef | ast.AsyncFunctionDef
+        Wrapper definition to build an identifier for.
+    file_path : Path
+        File containing *node*.
+    root : Path
+        Project root, used to relativise *file_path*.
+    parents : dict[ast.AST, ast.AST]
+        Parent map for the scanned module.
+
     Returns
     -------
     str
@@ -383,6 +473,13 @@ def _qualified_name(
     parents: dict[ast.AST, ast.AST],
 ) -> str:
     """Return *node*'s class-and-function-qualified source name.
+
+    Parameters
+    ----------
+    node : ast.FunctionDef | ast.AsyncFunctionDef
+        Definition whose dotted name to build.
+    parents : dict[ast.AST, ast.AST]
+        Parent map for the scanned module.
 
     Returns
     -------
@@ -407,6 +504,17 @@ def _is_exempt_wrapper(
 ) -> bool:
     """Return whether a forwarding wrapper is intentionally exempt.
 
+    Parameters
+    ----------
+    node : ast.FunctionDef | ast.AsyncFunctionDef
+        Wrapper definition to test for an exemption.
+    identifier : str
+        Qualified identifier computed for *node*.
+    wrapper_exclude : list[str]
+        Glob patterns of wrapper identifiers exempt from the rule.
+    wrapper_exempt_decorators : list[str]
+        Glob patterns of decorator names (full or terminal) exempt from the rule.
+
     Returns
     -------
     bool
@@ -425,6 +533,13 @@ def _has_exempt_decorator(
     wrapper_exempt_decorators: list[str],
 ) -> bool:
     """Return whether *node* has an automatic or configured exempt decorator.
+
+    Parameters
+    ----------
+    node : ast.FunctionDef | ast.AsyncFunctionDef
+        Wrapper definition whose decorators to inspect.
+    wrapper_exempt_decorators : list[str]
+        Glob patterns of decorator names (full or terminal) exempt from the rule.
 
     Returns
     -------
@@ -449,6 +564,11 @@ def _has_exempt_decorator(
 def decorator_name(decorator: ast.expr) -> str | None:
     """Return the syntactic dotted name for a decorator expression.
 
+    Parameters
+    ----------
+    decorator : ast.expr
+        Decorator expression to take the static name of.
+
     Returns
     -------
     str | None
@@ -468,6 +588,13 @@ def decorator_name(decorator: ast.expr) -> str | None:
 
 def _matches_any(value: str, patterns: list[str]) -> bool:
     """Return whether *value* matches any configured glob pattern.
+
+    Parameters
+    ----------
+    value : str
+        Name to test against the glob patterns.
+    patterns : list[str]
+        Glob patterns to test *value* against.
 
     Returns
     -------

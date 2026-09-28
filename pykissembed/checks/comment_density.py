@@ -67,6 +67,11 @@ def _get_int_attr(obj: object, attr_name: str) -> int:
 def _comment_density_from_source(source: str) -> CommentStats:
     """Compute comment density from source code (radon).
 
+    Parameters
+    ----------
+    source : str
+        Python source text to measure comment density in.
+
     Returns
     -------
     CommentStats
@@ -126,6 +131,11 @@ def _all_functions_short(file_path: Path, max_lines: int = SMALL_FUNCTION_THRESH
     bool
         ``True`` if the file has at least one function/async function
         and every one has a code body under *max_lines*. ``False`` if
+    Parameters
+    ----------
+    node : ast.FunctionDef | ast.AsyncFunctionDef
+        Function definition whose body should be counted.
+
         the file can't be read as UTF-8, fails to parse, or defines no
         functions.
     """
@@ -156,6 +166,13 @@ def _file_stats(file_path: Path) -> CommentStats:
     ----------
     file_path : Path
         File to analyse; unreadable files yield zeroed statistics.
+    Parameters
+    ----------
+    file_path : Path
+        Python file whose functions should be checked.
+    max_lines : int
+        Exclusive upper bound: each function's code body must have fewer lines than this.
+
 
     Returns
     -------
@@ -230,7 +247,17 @@ class TestCommentDensity:
         *,
         update_baselines: bool,
     ) -> None:
-        """Fail if per-file or aggregate density is outside its configured range."""
+        """Fail if per-file or aggregate density is outside its configured range.
+
+        Parameters
+        ----------
+        pykissembed_paths : list[Path]
+            Configured source directories from the ``pykissembed_paths`` fixture; the test skips
+            when empty.
+        update_baselines : bool
+            When true, widen per-file bounds just enough to admit files currently out of range, save
+            the baseline file, and skip instead of checking.
+        """
         if not pykissembed_paths:
             pytest.skip("No [tool.pykissembed] paths configured")
         config = get_config()
