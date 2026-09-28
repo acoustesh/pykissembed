@@ -41,6 +41,7 @@ _CHECK_MODULES = [
     "code_similarity",
     "comment_density",
     "docstring_format",
+    "jev_comment_audit",
     "jev_docstring_audit",
     "lint_typecheck",
     "no_suppressions",

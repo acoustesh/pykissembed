@@ -7,6 +7,7 @@ from typing import TYPE_CHECKING
 import pytest
 import requests
 
+from pykissembed import jev
 from pykissembed.checks import jev_docstring_audit
 from pykissembed.config import PyqtestConfig, reset_config_cache
 
@@ -100,6 +101,19 @@ def _post_returning(payload: dict[str, object]) -> object:
     return post
 
 
+def _parse_docstring_score(payload: object) -> float | None:
+    """Convert Jev's zero-based score to the docstring rubric's level.
+
+    Returns
+    -------
+    float | None
+        One-based level, or ``None`` for a malformed answer.
+    """
+    return jev_docstring_audit._shift(  # ruff:ignore[private-member-access]
+        jev.parse_score(payload, "docstring_score", 6)
+    )
+
+
 def _write_module(path: Path, name: str = "module.py") -> Path:
     """Write a documented function module under *path*.
 
@@ -143,9 +157,11 @@ def _run_check(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     config = PyqtestConfig(paths=["src"], root=tmp_path)
     reset_config_cache()
     monkeypatch.setattr(jev_docstring_audit, "get_config", lambda: config)
+    monkeypatch.setattr(jev, "get_config", lambda: config)
     jev_docstring_audit.TestJevDocstringAudit.test_jev_docstring_audit(
         [src],
         update_baselines=False,
+        cached_only=False,
     )
 
 
@@ -156,7 +172,7 @@ def test_perfect_score_passes(
     """A level-6 score clears the default minimum without failure."""
     monkeypatch.setenv("OPENROUTER_API_KEY", "openrouter-test-key-long-enough")
     monkeypatch.setattr(requests, "post", _post_returning(_answers_response(_PASS_LEVEL)))
-    monkeypatch.setattr(jev_docstring_audit.time, "sleep", lambda _s: None)
+    monkeypatch.setattr(jev.time, "sleep", lambda _s: None)
 
     _run_check(tmp_path, monkeypatch)
 
@@ -168,7 +184,7 @@ def test_minor_issues_score_passes(
     """Level 5 (one or two very minor EIOD) is the intended pass band."""
     monkeypatch.setenv("OPENROUTER_API_KEY", "openrouter-test-key-long-enough")
     monkeypatch.setattr(requests, "post", _post_returning(_answers_response(5)))
-    monkeypatch.setattr(jev_docstring_audit.time, "sleep", lambda _s: None)
+    monkeypatch.setattr(jev.time, "sleep", lambda _s: None)
 
     _run_check(tmp_path, monkeypatch)
 
@@ -180,7 +196,7 @@ def test_important_errors_fail_with_level_in_message(
     """Level 3 fails and the message names the level and the required bar."""
     monkeypatch.setenv("OPENROUTER_API_KEY", "openrouter-test-key-long-enough")
     monkeypatch.setattr(requests, "post", _post_returning(_answers_response(3)))
-    monkeypatch.setattr(jev_docstring_audit.time, "sleep", lambda _s: None)
+    monkeypatch.setattr(jev.time, "sleep", lambda _s: None)
 
     with pytest.raises(pytest.fail.Exception) as exc_info:
         _run_check(tmp_path, monkeypatch)
@@ -198,7 +214,7 @@ def test_level_four_passes_at_the_minimum(
     """Level 4 clears the bar, so the pass band is 4-6 inclusive."""
     monkeypatch.setenv("OPENROUTER_API_KEY", "openrouter-test-key-long-enough")
     monkeypatch.setattr(requests, "post", _post_returning(_answers_response(4)))
-    monkeypatch.setattr(jev_docstring_audit.time, "sleep", lambda _s: None)
+    monkeypatch.setattr(jev.time, "sleep", lambda _s: None)
 
     _run_check(tmp_path, monkeypatch)
 
@@ -210,7 +226,7 @@ def test_level_three_is_the_first_failing_level(
     """Level 3 is one below the bar and therefore the first failure."""
     monkeypatch.setenv("OPENROUTER_API_KEY", "openrouter-test-key-long-enough")
     monkeypatch.setattr(requests, "post", _post_returning(_answers_response(3)))
-    monkeypatch.setattr(jev_docstring_audit.time, "sleep", lambda _s: None)
+    monkeypatch.setattr(jev.time, "sleep", lambda _s: None)
 
     with pytest.raises(pytest.fail.Exception) as exc_info:
         _run_check(tmp_path, monkeypatch)
@@ -229,6 +245,7 @@ def test_missing_docstring_short_circuits_without_network(
     config = PyqtestConfig(paths=["src"], root=tmp_path)
     reset_config_cache()
     monkeypatch.setattr(jev_docstring_audit, "get_config", lambda: config)
+    monkeypatch.setattr(jev, "get_config", lambda: config)
     monkeypatch.setenv("OPENROUTER_API_KEY", "openrouter-test-key-long-enough")
 
     def _boom(*_args: object, **_kwargs: object) -> object:
@@ -241,6 +258,7 @@ def test_missing_docstring_short_circuits_without_network(
         jev_docstring_audit.TestJevDocstringAudit.test_jev_docstring_audit(
             [src],
             update_baselines=False,
+            cached_only=False,
         )
 
     message = str(exc_info.value)
@@ -259,12 +277,14 @@ def test_missing_api_key_skips(
     config = PyqtestConfig(paths=["src"], root=tmp_path)
     reset_config_cache()
     monkeypatch.setattr(jev_docstring_audit, "get_config", lambda: config)
+    monkeypatch.setattr(jev, "get_config", lambda: config)
     monkeypatch.delenv("OPENROUTER_API_KEY", raising=False)
 
     with pytest.raises(pytest.skip.Exception, match="OPENROUTER_API_KEY"):
         jev_docstring_audit.TestJevDocstringAudit.test_jev_docstring_audit(
             [src],
             update_baselines=False,
+            cached_only=False,
         )
 
 
@@ -275,7 +295,7 @@ def test_malformed_answers_are_skipped_not_failed(
     """A malformed Jev reply skips the symbol instead of failing the gate."""
     monkeypatch.setenv("OPENROUTER_API_KEY", "openrouter-test-key-long-enough")
     monkeypatch.setattr(requests, "post", lambda *_a, **_k: _Response({"answers": {}}))
-    monkeypatch.setattr(jev_docstring_audit.time, "sleep", lambda _s: None)
+    monkeypatch.setattr(jev.time, "sleep", lambda _s: None)
 
     _run_check(tmp_path, monkeypatch)
 
@@ -294,8 +314,9 @@ def test_overload_stubs_are_excluded_from_state(
     config = PyqtestConfig(paths=["src"], root=tmp_path)
     reset_config_cache()
     monkeypatch.setattr(jev_docstring_audit, "get_config", lambda: config)
+    monkeypatch.setattr(jev, "get_config", lambda: config)
 
-    states = jev_docstring_audit._extract_symbol_states(  # ruff:ignore[private-member-access]
+    states = jev._extract_symbol_states(  # ruff:ignore[private-member-access]
         src, root=tmp_path
     )
 
@@ -321,7 +342,7 @@ def test_request_targets_decisions_api_with_score_question(
 
     monkeypatch.setenv("OPENROUTER_API_KEY", "openrouter-test-key-long-enough")
     monkeypatch.setattr(requests, "post", fake_post)
-    monkeypatch.setattr(jev_docstring_audit.time, "sleep", lambda _s: None)
+    monkeypatch.setattr(jev.time, "sleep", lambda _s: None)
 
     _run_check(tmp_path, monkeypatch)
 
@@ -334,6 +355,7 @@ def test_request_targets_decisions_api_with_score_question(
     state = body["state"]
     assert isinstance(state, dict)
     assert "source" in state
+    assert "lineno" not in state
     questions = body["questions"]
     assert isinstance(questions, dict)
     assert set(questions) == {"docstring_score"}
@@ -351,7 +373,7 @@ def test_request_targets_decisions_api_with_score_question(
 
 def test_parse_score_answer_shifts_to_one_index() -> None:
     """The API's 0-indexed score maps onto the rubric's 1-indexed level."""
-    parse = jev_docstring_audit._parse_score_answer  # ruff:ignore[private-member-access]
+    parse = _parse_docstring_score
 
     for level in range(1, 7):
         assert parse(_answers_response(level)) == pytest.approx(float(level))
@@ -372,7 +394,7 @@ def test_parse_score_accepts_fractional_expected_values() -> None:
     wire score ``0*0 + 1*0.1 + 2*0.3 + 3*0.6 == 2.5``, which is a level 3.5
     on the 1-indexed rubric -- not a level 3 or a level 4.
     """
-    parse = jev_docstring_audit._parse_score_answer  # ruff:ignore[private-member-access]
+    parse = _parse_docstring_score
 
     assert parse({"answers": {"docstring_score": {"score": 2.5}}}) == pytest.approx(3.5)
     # The documented example: probabilities {"0":0,"1":0,"2":1} with score 1.99.
@@ -404,7 +426,7 @@ def test_out_of_range_score_is_skipped_not_failed(
 
     monkeypatch.setenv("OPENROUTER_API_KEY", "openrouter-test-key-long-enough")
     monkeypatch.setattr(requests, "post", _post_returning(payload))
-    monkeypatch.setattr(jev_docstring_audit.time, "sleep", lambda _s: None)
+    monkeypatch.setattr(jev.time, "sleep", lambda _s: None)
 
     _run_check(tmp_path, monkeypatch)
 
@@ -508,7 +530,7 @@ def test_rubric_is_monotone_in_severity() -> None:
     assert "1 or 2 Minor" in levels[4]
     assert "no Errors, Inaccuracies, Omissions or Deviations" in levels[5]
     # Level 6 keeps the escape hatch for comment-free code.
-    assert "no inline comments" in levels[5]
+    assert "fully accurate" in levels[5]
 
 
 def test_guidance_uses_the_three_tier_severity_scale() -> None:
@@ -545,14 +567,6 @@ def test_guidance_requires_present_optional_content_to_be_correct() -> None:
 
     assert "Validate optional content when it is present" in instructions
     assert "does not excuse incorrect content" in instructions
-
-
-def test_guidance_never_penalises_absent_comments() -> None:
-    """Comment-free code has no comment defects."""
-    instructions = jev_docstring_audit._INSTRUCTIONS  # ruff:ignore[private-member-access]
-
-    assert "Never\n  lower the score for the absence of comments" in instructions
-    assert "no '#' comment lines, there are no comment defects" in instructions
 
 
 def test_guidance_lists_required_and_optional_sections() -> None:

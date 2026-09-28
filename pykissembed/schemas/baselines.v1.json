@@ -24,6 +24,7 @@
         "docstring_format",
         "similarity",
         "comment_density_config",
+        "jev_comment_audit",
         "jev_docstring_audit"
       ]
     },

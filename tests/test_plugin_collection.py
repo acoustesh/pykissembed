@@ -343,12 +343,13 @@ class TestPluginEntryPoint:
     def test_check_stems_are_frozenset() -> None:
         """``_CHECK_STEMS`` is an immutable set of check module stems."""
         assert isinstance(_CHECK_STEMS, frozenset)
-        # All seven check modules must be listed.
+        # All eight check modules must be listed.
         assert {
             "code_complexity",
             "code_similarity",
             "comment_density",
             "docstring_format",
+            "jev_comment_audit",
             "jev_docstring_audit",
             "lint_typecheck",
             "no_suppressions",

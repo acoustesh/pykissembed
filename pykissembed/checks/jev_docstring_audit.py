@@ -1,31 +1,24 @@
 """Jev-backed docstring quality audit (TypeSafe ``jev-1.13``).
 
-Sends each function/class source (code, docstring, and inline comments) as
-``state`` to the OpenRouter Decisions API (``typesafe/jev-1.13``) and asks a
-single ``score`` question on an ordered 1-6 rubric. Every defect is rated on a
-0-3 severity scale -- 0 no violation, 1 Minor, 2 Moderate, 3 Major -- covering
-both docstring defects (E/I/O against the code, D against the NumPy convention)
-and inline comment defects. The code is the source of truth: documentation is
-only accurate insofar as it matches what the code actually does.
+Sends each documented function/class source to the OpenRouter Decisions API
+and asks a score question on an ordered 1-6 docstring rubric. The code is the
+source of truth when checking docstring claims. Valid responses are cached by
+the exact state and question text.
 
 A symbol fails when its score is below ``min_score`` in
 ``tests/baselines/jev_docstring_audit.json``. Symbols with no docstring
 never reach the API -- they are failed locally as level 1.
 
-The check runs with the other consumer checks (marked ``jev``) and is
-network-gated: it skips gracefully when ``OPENROUTER_API_KEY`` is absent,
-so it never blocks offline CI.
+The check runs with the other consumer checks (marked ``jev``). Without an
+OpenRouter key it grades cached responses and skips cache misses.
 """
 
 from __future__ import annotations
 
-import ast
 import contextlib
 import math
-import os
-import time
-from dataclasses import dataclass
-from importlib import import_module
+import warnings
+from contextlib import closing
 from typing import TYPE_CHECKING
 
 import pytest
@@ -36,25 +29,22 @@ from pykissembed.baselines_engine import (
     save_envelope,
 )
 from pykissembed.config import get_config
-from pykissembed.paths import iter_py_files as _iter_py_files
-from pykissembed.paths import warn_non_utf8
-from pykissembed.wrapper_analysis import decorator_name
+from pykissembed.jev import (
+    API_KEY_ENV,
+    JEV_MODEL,
+    SymbolState,
+    _extract_symbol_states,
+    _load_api_key,
+    ask_jev,
+    open_cache,
+    parse_score,
+)
 
 if TYPE_CHECKING:
-    from collections.abc import Callable, Iterator
+    from collections.abc import Iterator
     from pathlib import Path
 
-JEV_MODEL = "typesafe/jev-1.13"
-DECISIONS_URL = "https://openrouter.ai/api/alpha/decisions"
-API_KEY_ENV = "OPENROUTER_API_KEY"
 BASELINE_FILENAME = "jev_docstring_audit.json"
-REQUEST_TIMEOUT = 60.0
-RETRY_DELAYS = (1.0, 2.0, 4.0)
-MAX_STATE_CHARS = 12000
-_HTTP_TOO_MANY_REQUESTS = 429
-_HTTP_SERVER_ERROR_MIN = 500
-_HTTP_SERVER_ERROR_MAX = 600
-
 
 # Minimum expected score (on the 1-6 rubric) for a symbol to pass. The API
 # returns the *expected value* of the distribution over the levels, so the bar
@@ -199,24 +189,6 @@ Two rules that override the severity table above:
   the wrong exception, or an `Examples` block that does not run, is a real
   defect and is graded on its merits."""
 
-# Inline comments are graded on the same 0-3 scale, and a comment defect
-# counts exactly like a docstring defect of equal severity. The absence of
-# comments is deliberately NOT a defect: penalising comment-free code was the
-# single largest source of false positives in the 2026-09-27 run, where 115 of
-# 120 comment-relevance failures landed on symbols containing no '#' comment
-# at all. A comment counts against the symbol only when it is actually present
-# and actually wrong.
-_COMMENT_GUIDANCE = """\
-Judge the inline '#' comments on the same scale:
-
-- If the code has no '#' comment lines, there are no comment defects. Never
-  lower the score for the absence of comments.
-- 1 Minor: the comment only restates the obvious, but is not wrong.
-- 2 Moderate: the comment is stale or factually wrong about the code.
-- 3 Major: the comment would actively mislead a reader about behaviour,
-  safety, or a constraint.
-- The final level is the worse of the docstring level and the comment level."""
-
 _INSTRUCTIONS = (
     "Grade the documentation of this function or class. Treat the code as "
     "the source of truth and judge only the documentation, never the code "
@@ -229,15 +201,13 @@ _INSTRUCTIONS = (
     + _SEVERITY_GUIDANCE
     + "\n\n"
     + _STYLE_GUIDANCE
-    + "\n\n"
-    + _COMMENT_GUIDANCE
 )
 
 _SCORE_QUESTION_ID = "docstring_score"
 
 # Ordered worst -> best. The Decisions API numbers a `score` question from 0
 # for the first criterion up to len(criteria) - 1, so this tuple *is* the
-# rubric; `_parse_score_answer` shifts the API's 0-index back to 1-index.
+# rubric; the audit shifts the API's 0-index back to 1-index.
 #
 # The API answers with the *expected value* of the distribution over these
 # levels, not the argmax, so a reply is usually fractional: 3.5 means the model
@@ -273,8 +243,7 @@ _SCORE_LEVELS: tuple[str, ...] = (
     (
         "Docstring present and fully accurate with respect to the actual code (the "
         "code is the source of truth), with no Errors, Inaccuracies, Omissions or "
-        "Deviations; and every inline comment is relevant and insightful, or there "
-        "are no inline comments."
+        "Deviations."
     ),
 )
 
@@ -287,278 +256,13 @@ _QUESTIONS: dict[str, dict[str, object]] = {
 }
 
 
-@dataclass(frozen=True, slots=True)
-class SymbolState:
-    """One auditable function/class with its source text."""
-
-    file_key: str
-    symbol: str
-    kind: str
-    lineno: int
-    source: str
-    has_docstring: bool
-
-
-def _is_overload_stub(node: ast.FunctionDef | ast.AsyncFunctionDef) -> bool:
-    """Return whether *node* carries a bare or dotted ``overload`` decorator.
-
-    Returns
-    -------
-    bool
-        Whether the function is an overload stub.
-    """
-    for decorator in node.decorator_list:
-        if not isinstance(decorator, ast.Name | ast.Attribute):
-            continue
-        name = decorator_name(decorator)
-        tail = None if name is None else name.rsplit(".", maxsplit=1)[-1]
-        if tail == "overload":
-            return True
-    return False
-
-
-def _extract_symbol_states(base_dir: Path, *, root: Path) -> list[SymbolState]:
-    """Extract auditable function/class states under *base_dir*.
-
-    Parameters
-    ----------
-    base_dir : Path
-        Configured source directory to scan.
-    root : Path
-        Project root used to build repo-relative file keys.
-
-    Returns
-    -------
-    list[SymbolState]
-        One entry per function/class definition (``@overload`` stubs
-        excluded), in deterministic file order. Unreadable or unparsable
-        files contribute nothing.
-    """
-    states: list[SymbolState] = []
-    for py_file in _iter_py_files(base_dir):
-        try:
-            source = py_file.read_text(encoding="utf-8")
-        except (UnicodeDecodeError, OSError) as exc:
-            warn_non_utf8(py_file, exc)
-            continue
-        try:
-            tree = ast.parse(source, filename=str(py_file))
-        except SyntaxError:
-            continue
-        try:
-            rel = str(py_file.relative_to(root))
-        except ValueError:
-            rel = str(py_file)
-        for node in ast.walk(tree):
-            if not isinstance(node, ast.FunctionDef | ast.AsyncFunctionDef | ast.ClassDef):
-                continue
-            if isinstance(node, ast.FunctionDef | ast.AsyncFunctionDef) and _is_overload_stub(node):
-                continue
-            segment = ast.get_source_segment(source, node) or ""
-            if len(segment) > MAX_STATE_CHARS:
-                segment = segment[:MAX_STATE_CHARS] + "\n... [truncated]"
-            kind = "class" if isinstance(node, ast.ClassDef) else "function"
-            states.append(
-                SymbolState(
-                    file_key=rel,
-                    symbol=node.name,
-                    kind=kind,
-                    lineno=node.lineno,
-                    source=segment,
-                    has_docstring=ast.get_docstring(node) is not None,
-                )
-            )
-    return states
-
-
-def _load_api_key() -> str | None:
-    """Load the OpenRouter API key from the environment or ``.env``.
-
-    Returns
-    -------
-    str | None
-        The key when present and non-empty, otherwise ``None``. The
-        environment always wins over the ``.env`` fallback, and only a
-        ``KEY=VALUE`` line match is honored.
-    """
-    api_key = os.environ.get(API_KEY_ENV)
-    if not api_key:
-        env_file = get_config().root / ".env"
-        if env_file.exists():
-            try:
-                lines = env_file.read_text(encoding="utf-8").splitlines()
-            except UnicodeDecodeError, OSError:
-                return None
-            prefix = f"{API_KEY_ENV}="
-            for raw_line in lines:
-                stripped = raw_line.strip()
-                if stripped.startswith(prefix):
-                    api_key = stripped.split("=", 1)[1].strip().strip("\"'")
-                    break
-    return api_key or None
-
-
-def _requests_api() -> tuple[Callable[..., object], type[Exception], type[Exception]]:
-    """Load the ``requests`` call and retry exception types lazily.
-
-    Returns
-    -------
-    tuple[Callable[..., object], type[Exception], type[Exception]]
-        ``(post, timeout_error, http_error)``.
-
-    Raises
-    ------
-    TypeError
-        If ``requests`` does not expose the expected runtime API.
-    """
-    requests_module = import_module("requests")
-    post = getattr(requests_module, "post", None)
-    if not callable(post):
-        msg = "requests.post must be callable"
-        raise TypeError(msg)
-    exceptions = getattr(requests_module, "exceptions", None)
-    if exceptions is None:
-        msg = "requests.exceptions is required"
-        raise TypeError(msg)
-    timeout_error = getattr(exceptions, "Timeout", None)
-    http_error = getattr(exceptions, "HTTPError", None)
-    if not isinstance(timeout_error, type) or not issubclass(timeout_error, Exception):
-        msg = "requests.exceptions.Timeout must be an Exception subclass"
-        raise TypeError(msg)
-    if not isinstance(http_error, type) or not issubclass(http_error, Exception):
-        msg = "requests.exceptions.HTTPError must be an Exception subclass"
-        raise TypeError(msg)
-    return post, timeout_error, http_error
-
-
-def _is_retryable(exc: Exception, timeout_error: type[Exception]) -> bool:
-    """Return whether a Decisions API failure is worth retrying.
-
-    Parameters
-    ----------
-    exc : Exception
-        The caught failure.
-    timeout_error : type[Exception]
-        The ``requests`` timeout type.
-
-    Returns
-    -------
-    bool
-        ``True`` for timeouts, HTTP 429, and HTTP 5xx failures.
-    """
-    if isinstance(exc, timeout_error):
-        return True
-    response = getattr(exc, "response", None)
-    status_code = getattr(response, "status_code", None)
-    if not isinstance(status_code, int) or isinstance(status_code, bool):
-        return False
-    return status_code == _HTTP_TOO_MANY_REQUESTS or (
-        _HTTP_SERVER_ERROR_MIN <= status_code < _HTTP_SERVER_ERROR_MAX
-    )
-
-
-def _parse_score_answer(payload: object) -> float | None:
-    """Extract the expected rubric level from a Decisions API payload.
-
-    A ``score`` answer reports the *expected value* of the distribution over
-    the rubric, not its argmax: with probabilities ``{1: 0.10, 2: 0.30,
-    3: 0.60, 4: 0, 5: 0, 6: 0}`` the score is ``1*0.1 + 2*0.3 + 3*0.6 ==
-    1.99``. The value is therefore fractional in general, and confidence
-    decides how close it sits to the argmax.
-
-    The API numbers the rubric from 0, so this shifts the expected value into
-    the rubric's 1-based numbering, where level 1 ("No docstring") is ``0``
-    on the wire.
-
-    Parameters
-    ----------
-    payload : object
-        Decoded JSON body; untrusted shape.
-
-    Returns
-    -------
-    float | None
-        Expected level in ``[1, len(_SCORE_LEVELS)]``, or ``None`` when the
-        reply is malformed or out of range so the caller skips the symbol
-        rather than failing the gate on transport noise.
-    """
-    if not isinstance(payload, dict):
-        return None
-    answers = payload.get("answers")
-    if not isinstance(answers, dict):
-        return None
-    entry = answers.get(_SCORE_QUESTION_ID)
-    if not isinstance(entry, dict):
-        return None
-    raw = entry.get("score")
-    if isinstance(raw, bool) or not isinstance(raw, (int, float)):
-        return None
-    level = float(raw) + 1.0
-    if not math.isfinite(level) or not 1.0 <= level <= len(_SCORE_LEVELS):
-        return None
-    return level
-
-
-def _query_jev(state: SymbolState, *, api_key: str) -> float | None:
-    """Ask Jev to grade one symbol's docstring on the 1-6 rubric.
-
-    Parameters
-    ----------
-    state : SymbolState
-        The symbol whose source is sent as Jev ``state``.
-    api_key : str
-        OpenRouter bearer token; never logged.
-
-    Returns
-    -------
-    float | None
-        The expected level in ``[1, 6]``, or ``None`` when the request fails
-        after retries or the reply is malformed (the caller skips the symbol
-        rather than failing the gate on transport noise).
-    """
-    try:
-        post, timeout_error, _ = _requests_api()
-    except ImportError, TypeError:
-        return None
-    body: dict[str, object] = {
-        "model": JEV_MODEL,
-        "state": {
-            "file": state.file_key,
-            "symbol": state.symbol,
-            "kind": state.kind,
-            "lineno": state.lineno,
-            "source": state.source,
-        },
-        "questions": _QUESTIONS,
-    }
-    # The bearer token lives only in this per-call header mapping, never in
-    # logs or baselines.
-    auth_headers = {"Authorization": f"Bearer {api_key}", "Content-Type": "application/json"}
-    for attempt in range(len(RETRY_DELAYS) + 1):
-        try:
-            response = post(DECISIONS_URL, headers=auth_headers, json=body, timeout=REQUEST_TIMEOUT)
-            raise_for_status = getattr(response, "raise_for_status", None)
-            if callable(raise_for_status):
-                _ = raise_for_status()
-            decode = getattr(response, "json", None)
-            if not callable(decode):
-                return None
-            return _parse_score_answer(decode())
-        except (OSError, ValueError, TypeError, AttributeError) as exc:
-            if attempt < len(RETRY_DELAYS) and _is_retryable(exc, timeout_error):
-                time.sleep(RETRY_DELAYS[attempt])
-                continue
-            return None
-    return None
-
-
 def _evaluate_symbol(level: float, min_score: float) -> bool:
     """Return whether an expected level clears the configured minimum.
 
     Parameters
     ----------
     level : float
-        The expected 1-6 level returned by :func:`_query_jev`, or
+        The expected 1-6 level returned by Jev, or
         :data:`_LEVEL_NO_DOCTRING` for a symbol with no docstring. Fractional
         values arise because the API reports an expected value, not an
         argmax, so a level of 3.9 is a docstring the model is 90% confident
@@ -573,6 +277,17 @@ def _evaluate_symbol(level: float, min_score: float) -> bool:
         comparison is ``>=``.
     """
     return level >= min_score
+
+
+def _shift(score: float | None) -> float | None:
+    """Shift a valid zero-based score to the docstring rubric's levels 1-6.
+
+    Returns
+    -------
+    float | None
+        One-based score, or ``None`` for an invalid response.
+    """
+    return None if score is None else score + 1
 
 
 @contextlib.contextmanager
@@ -681,7 +396,7 @@ def _format_symbol_failure(state: SymbolState, level: float, min_score: float) -
         rubric text is written per level, and the raw expected value is
         printed so a low-confidence grade stays visible.
     """
-    nearest = min(len(_SCORE_LEVELS), max(1, math.ceil(level)))
+    nearest = min(len(_SCORE_LEVELS), max(1, round(level)))
     text = _SCORE_LEVELS[nearest - 1]
     return (
         f"{state.file_key}:{state.lineno} {state.symbol}({state.kind}) — "
@@ -698,16 +413,12 @@ class TestJevDocstringAudit:
         pykissembed_paths: list[Path],
         *,
         update_baselines: bool,
+        cached_only: bool,
     ) -> None:
         """Fail when Jev grades a symbol's docstring below ``min_score``."""
         if not pykissembed_paths:
             pytest.skip("No [tool.pykissembed] paths configured")
-        api_key = _load_api_key()
-        if not api_key:
-            pytest.skip(
-                "OPENROUTER_API_KEY not set (env or .env) — "
-                "Jev docstring audit needs a live OpenRouter key"
-            )
+        api_key = None if cached_only else _load_api_key()
         config = get_config()
         with _locked_envelope() as (baseline_file, envelope):
             if update_baselines:
@@ -721,27 +432,46 @@ class TestJevDocstringAudit:
             if not states:
                 pytest.skip("No auditable functions or classes found")
             failures: list[str] = []
-            for state in states:
-                min_score = _min_score_for(state, envelope.data)
-                if not state.has_docstring:
-                    # No docstring is level 1 by definition; never call the API.
-                    if not _evaluate_symbol(_LEVEL_NO_DOCTRING, min_score):
-                        failures.append(
-                            _format_symbol_failure(state, _LEVEL_NO_DOCTRING, min_score)
+            ungraded = 0
+            graded = 0
+            with closing(open_cache(config)) as conn:
+                for state in states:
+                    min_score = _min_score_for(state, envelope.data)
+                    if not state.has_docstring:
+                        # No docstring is level 1 by definition; never call the API.
+                        level = _LEVEL_NO_DOCTRING
+                    else:
+                        level = ask_jev(
+                            state,
+                            _QUESTIONS,
+                            parse=lambda payload: _shift(
+                                parse_score(payload, _SCORE_QUESTION_ID, len(_SCORE_LEVELS))
+                            ),
+                            api_key=api_key,
+                            conn=conn,
                         )
-                    continue
-                level = _query_jev(state, api_key=api_key)
-                if level is None:
-                    continue
-                if not _evaluate_symbol(level, min_score):
-                    failures.append(_format_symbol_failure(state, level, min_score))
+                    if level is None:
+                        ungraded += 1
+                        continue
+                    graded += 1
+                    if not _evaluate_symbol(level, min_score):
+                        failures.append(_format_symbol_failure(state, level, min_score))
             if failures:
                 header = (
                     "Jev docstring audit: "
                     f"{len(failures)} symbol(s) scored below the minimum "
-                    f"(model {JEV_MODEL}, need level {base_min:g} for library code "
+                    f"({ungraded} ungraded; model {JEV_MODEL}, "
+                    f"need level {base_min:g} for library code "
                     f"and {test_min:g} for tests). "
                     f"Adjust {_MIN_SCORE_KEY!r} / {_TEST_MIN_SCORE_KEY!r} in "
                     f"{BASELINE_FILENAME} to change the bars."
                 )
                 pytest.fail(header + "\n" + "\n".join(failures), pytrace=False)
+            if not api_key and not graded:
+                pytest.skip(f"{API_KEY_ENV} unavailable; {ungraded} symbol(s) ungraded")
+            if ungraded:
+                warnings.warn(
+                    f"Jev docstring audit: {ungraded} symbol(s) ungraded",
+                    UserWarning,
+                    stacklevel=2,
+                )

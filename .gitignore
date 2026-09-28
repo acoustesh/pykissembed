@@ -20,6 +20,7 @@ tests/.pykissembed_cache/
 
 # Baseline file locks (cross-process lock sidecars) — never commit
 tests/baselines/*.lock
+tests/baselines/jev_cache.sqlite3*
 .vscode/settings.json
 tests/baselines/voyage_ast_embeddings.json.zlib
 tests/baselines/voyage_text_embeddings.json.zlib
