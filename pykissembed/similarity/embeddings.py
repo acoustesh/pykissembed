@@ -650,6 +650,73 @@ def _build_voyage_caller(
     return (_voyage_request, _voyage_is_retryable)
 
 
+def _build_openai_caller(
+    model: str,
+    timeout: float,
+) -> tuple[Callable[[list[str]], list[list[float]]], Callable[[Exception], bool]]:
+    """Build the OpenAI embedding request and retry callables.
+
+    Parameters
+    ----------
+    model : str
+        Model identifier passed to the SDK.
+    timeout : float
+        Request timeout in seconds.
+
+    Returns
+    -------
+    tuple[Callable[[list[str]], list[list[float]]], Callable[[Exception], bool]]
+        The validated request callable and transient-error classifier.
+    """
+    # Optional cloud SDK: only needed if the caller requests this provider.
+    openai = import_module("openai")
+    openai_client = _require_callable(openai, "OpenAI")(
+        api_key=_load_api_key_from_env("OPENAI_API_KEY"),
+        timeout=timeout,
+    )
+    embeddings_api = getattr(openai_client, "embeddings", None)
+    create_embeddings = _require_callable(embeddings_api, "create")
+    rate_limit_error = _require_exception_type(openai, "RateLimitError")
+    timeout_error = _require_exception_type(openai, "APITimeoutError")
+
+    def _openai_request(truncated: list[str]) -> list[list[float]]:
+        """Send an OpenAI request and validate its embedding vectors.
+
+        Parameters
+        ----------
+        truncated : list[str]
+            Input texts already truncated to the token limit.
+
+        Returns
+        -------
+        list[list[float]]
+            Validated embedding vectors.
+
+        Raises
+        ------
+        TypeError
+            If the SDK response does not contain typed embedding vectors.
+        """
+        result = create_embeddings(input=truncated, model=model)
+        data = getattr(result, "data", None)
+        if not isinstance(data, list):
+            msg = "OpenAI API returned invalid embedding data"
+            raise TypeError(msg)
+        values: list[list[float]] = []
+        for item in data:
+            embedding = getattr(item, "embedding", None)
+            if not _is_float_embedding(embedding):
+                msg = "OpenAI API returned an invalid embedding"
+                raise TypeError(msg)
+            values.append(embedding)
+        return values
+
+    return (
+        _openai_request,
+        lambda e: isinstance(e, (rate_limit_error, timeout_error)),
+    )
+
+
 def _build_provider_caller(
     provider: str,
     model: str,
@@ -762,55 +829,7 @@ def _build_provider_caller(
         return (_gemini_request, _gemini_is_retryable)
 
     if provider == "openai":
-        # Optional cloud SDK: not a pykissembed core dependency, only needed
-        # if the caller actually requests the openai provider.
-        openai = import_module("openai")
-
-        openai_client = _require_callable(openai, "OpenAI")(
-            api_key=_load_api_key_from_env("OPENAI_API_KEY"),
-            timeout=timeout,
-        )
-        embeddings_api = getattr(openai_client, "embeddings", None)
-        create_embeddings = _require_callable(embeddings_api, "create")
-        rate_limit_error = _require_exception_type(openai, "RateLimitError")
-        timeout_error = _require_exception_type(openai, "APITimeoutError")
-
-        def _openai_request(truncated: list[str]) -> list[list[float]]:
-            """Send an OpenAI request and validate its embedding vectors.
-
-            Parameters
-            ----------
-            truncated : list[str]
-                Input texts already truncated to the token limit.
-
-            Returns
-            -------
-            list[list[float]]
-                Validated embedding vectors.
-
-            Raises
-            ------
-            TypeError
-                If the SDK response does not contain typed embedding vectors.
-            """
-            result = create_embeddings(input=truncated, model=model)
-            data = getattr(result, "data", None)
-            if not isinstance(data, list):
-                msg = "OpenAI API returned invalid embedding data"
-                raise TypeError(msg)
-            values: list[list[float]] = []
-            for item in data:
-                embedding = getattr(item, "embedding", None)
-                if not _is_float_embedding(embedding):
-                    msg = "OpenAI API returned an invalid embedding"
-                    raise TypeError(msg)
-                values.append(embedding)
-            return values
-
-        return (
-            _openai_request,
-            lambda e: isinstance(e, (rate_limit_error, timeout_error)),
-        )
+        return _build_openai_caller(model, timeout)
 
     if provider in {"codestral", "qwen"}:
         # Optional cloud SDK: not a pykissembed core dependency, only needed
