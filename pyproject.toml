@@ -44,7 +44,7 @@ dependencies = [
     "pyright[nodejs]>=1.1.411",
     "radon>=6.0",
     "complexipy>=0.5",
-    "numpy<2.5",   #Ensure compatibility with Nvidia cuml
+    "numpy<2.6",   #Ensure compatibility with Nvidia cuml
     "scikit-learn>=1.5",
     "tiktoken>=0.7",
 ]
