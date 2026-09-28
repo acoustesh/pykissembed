@@ -1,4 +1,4 @@
-"""Dependency-policy tests for the cloud-only embedding architecture."""
+"""Dependency-policy tests for cloud embeddings and optional GPU support."""
 
 from __future__ import annotations
 
@@ -59,19 +59,55 @@ def _canonical_dependency_name(requirement: str) -> str:
     return match.group().lower().replace("_", "-")
 
 
-def _assert_allowed(names: set[str], *, source: Path) -> None:
-    """Assert *names* contains no forbidden or neural-runtime distribution."""
+def _assert_allowed(
+    names: set[str], *, source: Path, gpu_dependencies: set[str] | None = None
+) -> None:
+    """Reject retired packages and GPU packages outside the optional GPU graph."""
+    gpu_dependencies = gpu_dependencies or set()
     forbidden = sorted(
         name
         for name in names
-        if name in FORBIDDEN_PACKAGES or name.startswith(FORBIDDEN_PREFIXES)
+        if (name in FORBIDDEN_PACKAGES and name != "pandas")
+        or (
+            (name == "pandas" or name.startswith(FORBIDDEN_PREFIXES))
+            and name not in gpu_dependencies
+        )
     )
     assert not forbidden, f"{source.relative_to(REPO_ROOT)} contains {forbidden!r}"
 
 
+def _locked_dependencies(packages: dict[str, dict], roots: list[dict]) -> set[str]:
+    """Return distributions reachable from *roots* in a uv lock.
+
+    Returns
+    -------
+    set[str]
+        Distribution names, including requested dependency extras.
+    """
+    pending = [
+        (requirement["name"], extra)
+        for requirement in roots
+        for extra in (None, *requirement.get("extra", []))
+    ]
+    visited: set[tuple[str, str | None]] = set()
+    while pending:
+        name, extra = pending.pop()
+        if (name, extra) in visited:
+            continue
+        visited.add((name, extra))
+        package = packages[name]
+        dependencies = [*package.get("dependencies", [])]
+        if extra is not None:
+            dependencies.extend(package.get("optional-dependencies", {}).get(extra, []))
+        for dependency in dependencies:
+            pending.append((dependency["name"], None))
+            pending.extend((dependency["name"], item) for item in dependency.get("extra", []))
+    return {name for name, _ in visited}
+
+
 @pytest.mark.parametrize("manifest", MANIFESTS)
 def test_manifests_have_no_forbidden_dependencies(manifest: Path) -> None:
-    """Runtime and development dependency declarations stay cloud-only."""
+    """Manifests keep retired and native GPU packages out of direct requirements."""
     data = tomllib.loads(manifest.read_text(encoding="utf-8"))
     project = data.get("project", {})
     requirements = list(project.get("dependencies", []))
@@ -85,10 +121,26 @@ def test_manifests_have_no_forbidden_dependencies(manifest: Path) -> None:
 
 @pytest.mark.parametrize("lockfile", LOCKFILES)
 def test_locks_have_no_forbidden_distributions(lockfile: Path) -> None:
-    """Every committed uv lock is free of the retired ML dependency graph."""
+    """Lockfiles permit GPU dependencies only through the optional cuML graph."""
     data = tomllib.loads(lockfile.read_text(encoding="utf-8"))
-    names = {str(package["name"]).lower().replace("_", "-") for package in data["package"]}
-    _assert_allowed(names, source=lockfile)
+    packages = {
+        str(package["name"]).lower().replace("_", "-"): package for package in data["package"]
+    }
+    gpu_dependencies: set[str] = set()
+    if lockfile == LOCKFILES[0]:
+        root = packages["pykissembed"]
+        optional = root.get("optional-dependencies", {})
+        gpu_roots = optional.get("gpu", [])
+        if [item["name"] for item in gpu_roots] == ["cuml-cu13"]:
+            other_roots = [
+                *root.get("dependencies", []),
+                *(item for extra, items in optional.items() if extra != "gpu" for item in items),
+                *(item for items in root.get("dev-dependencies", {}).values() for item in items),
+            ]
+            gpu_dependencies = _locked_dependencies(packages, gpu_roots) - _locked_dependencies(
+                packages, other_roots
+            )
+    _assert_allowed(set(packages), source=lockfile, gpu_dependencies=gpu_dependencies)
 
 
 def test_production_code_has_no_forbidden_imports() -> None:
