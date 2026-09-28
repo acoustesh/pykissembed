@@ -14,9 +14,9 @@ from pykissembed.config import get_config
 from pykissembed.jev import (
     API_KEY_ENV,
     JEV_MODEL,
-    _extract_symbol_states,
-    _load_api_key,
     ask_jev,
+    extract_symbol_states,
+    load_api_key,
     open_cache,
     parse_score,
 )
@@ -168,7 +168,7 @@ class TestJevCommentAudit:
         """
         if not pykissembed_paths:
             pytest.skip("No [tool.pykissembed] paths configured")
-        api_key = None if cached_only else _load_api_key()
+        api_key = None if cached_only else load_api_key()
         config = get_config()
         baseline_file = config.baseline_path / BASELINE_FILENAME
         with locked_envelope(baseline_file, kind="jev_comment_audit") as envelope:
@@ -180,7 +180,7 @@ class TestJevCommentAudit:
             states = [
                 state
                 for base_dir in pykissembed_paths
-                for state in _extract_symbol_states(base_dir, root=config.root)
+                for state in extract_symbol_states(base_dir, root=config.root)
                 if state.kind == "function"
             ]
             # A missing docstring is still sent: comments may explain intent

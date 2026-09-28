@@ -127,6 +127,11 @@ def _extract_symbol_states(base_dir: Path, *, root: Path) -> list[SymbolState]:
     return states
 
 
+# Public re-export. Both consumer checks need symbol extraction, and a
+# private name imported across modules trips pyright's reportPrivateUsage.
+extract_symbol_states = _extract_symbol_states
+
+
 def _load_api_key() -> str | None:
     """Load the OpenRouter API key from the environment or ``.env``.
 
@@ -152,6 +157,10 @@ def _load_api_key() -> str | None:
                     api_key = stripped.split("=", 1)[1].strip().strip("\"'")
                     break
     return api_key or None
+
+
+# Public re-export; see the note on extract_symbol_states above.
+load_api_key = _load_api_key
 
 
 def _requests_api() -> tuple[Callable[..., object], type[Exception], type[Exception]]:

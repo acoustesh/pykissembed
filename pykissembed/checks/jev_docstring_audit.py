@@ -33,9 +33,9 @@ from pykissembed.jev import (
     API_KEY_ENV,
     JEV_MODEL,
     SymbolState,
-    _extract_symbol_states,
-    _load_api_key,
     ask_jev,
+    extract_symbol_states,
+    load_api_key,
     open_cache,
     parse_score,
 )
@@ -436,7 +436,7 @@ class TestJevDocstringAudit:
         """
         if not pykissembed_paths:
             pytest.skip("No [tool.pykissembed] paths configured")
-        api_key = None if cached_only else _load_api_key()
+        api_key = None if cached_only else load_api_key()
         config = get_config()
         with _locked_envelope() as (baseline_file, envelope):
             if update_baselines:
@@ -446,7 +446,7 @@ class TestJevDocstringAudit:
             test_min = _read_threshold(envelope.data, _TEST_MIN_SCORE_KEY, DEFAULT_TEST_MIN_SCORE)
             states: list[SymbolState] = []
             for base_dir in pykissembed_paths:
-                states.extend(_extract_symbol_states(base_dir, root=config.root))
+                states.extend(extract_symbol_states(base_dir, root=config.root))
             if not states:
                 pytest.skip("No auditable functions or classes found")
             failures: list[str] = []

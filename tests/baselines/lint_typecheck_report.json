@@ -1,51 +1,12 @@
 {
-  "files": {
-    "pykissembed/checks/jev_comment_audit.py": {
-      "ruff": [],
-      "pyright": [
-        {
-          "code": "reportPrivateUsage",
-          "message": "\"_extract_symbol_states\" is private and used outside of the module in which it is declared",
-          "line": 16,
-          "col": 4,
-          "severity": "warning"
-        },
-        {
-          "code": "reportPrivateUsage",
-          "message": "\"_load_api_key\" is private and used outside of the module in which it is declared",
-          "line": 17,
-          "col": 4,
-          "severity": "warning"
-        }
-      ]
-    },
-    "pykissembed/checks/jev_docstring_audit.py": {
-      "ruff": [],
-      "pyright": [
-        {
-          "code": "reportPrivateUsage",
-          "message": "\"_extract_symbol_states\" is private and used outside of the module in which it is declared",
-          "line": 35,
-          "col": 4,
-          "severity": "warning"
-        },
-        {
-          "code": "reportPrivateUsage",
-          "message": "\"_load_api_key\" is private and used outside of the module in which it is declared",
-          "line": 36,
-          "col": 4,
-          "severity": "warning"
-        }
-      ]
-    }
-  },
+  "files": {},
   "summary": {
-    "total_files": 2,
+    "total_files": 0,
     "ruff_errors": 0,
     "pyright_errors": 0,
-    "pyright_warnings": 4,
+    "pyright_warnings": 0,
     "pyright_information": 0,
     "pyright_hints": 0,
-    "total": 4
+    "total": 0
   }
 }
