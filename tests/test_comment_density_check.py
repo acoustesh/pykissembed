@@ -36,3 +36,28 @@ def test_consumer_tests_directory_is_excluded(
         [tmp_path],
         update_baselines=False,
     )
+
+
+def test_docstring_lines_are_not_counted_as_code(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Docstring lines, blank or one-line, do not dilute a file's comment density."""
+    assignments = "".join(f"SETTING_{index} = {index}\n" for index in range(17))
+    _ = (tmp_path / "module.py").write_text(
+        '"""Module.\n\nDetails.\n\nMore.\n"""\n'
+        "# Explain the related module-level settings.\n"
+        f"{assignments}"
+        "class Holder:\n"
+        '    """One line."""\n',
+        encoding="utf-8",
+    )
+    config = PyqtestConfig(paths=["."], root=tmp_path)
+    monkeypatch.setattr(comment_density, "get_config", lambda: config)
+
+    # 1 comment over 18 code lines is 5.6%; counting the module docstring's two
+    # blank lines and the one-line class docstring as code would give 4.8%.
+    comment_density.TestCommentDensity.test_comment_density(
+        [tmp_path],
+        update_baselines=False,
+    )

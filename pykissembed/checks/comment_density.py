@@ -80,21 +80,61 @@ def _comment_density_from_source(source: str) -> CommentStats:
     """
     metrics = analyze(source)
     loc = _get_int_attr(metrics, "loc")
-    multi = _get_int_attr(metrics, "multi")
     comments = _get_int_attr(metrics, "comments")
-    # Denominator excludes docstrings/multi-line strings (`multi`) and pure
-    # `#` comment lines, but deliberately keeps blank lines — unlike
+    # Denominator excludes every line a docstring spans and pure `#` comment
+    # lines, but deliberately keeps blank lines outside docstrings — unlike
     # radon's own `sloc` below, which excludes blanks too. That's why
     # `density` and the reported `sloc` in violation messages don't line
     # up if you try to recompute one from the other by hand.
-    code_lines = loc - multi - comments
+    code_lines = loc - comments - _string_statement_lines(source, metrics)
     sloc = _get_int_attr(metrics, "sloc")
     density = 0.0 if code_lines <= 0 else 100.0 * (comments / code_lines)
     return CommentStats(sloc=sloc, comments=comments, density_pct=density)
 
 
+def _string_statement_lines(source: str, metrics: object) -> int:
+    """Count the physical lines spanned by bare string statements.
+
+    Bare string statements are docstrings plus any other string literal used
+    as a statement. Radon splits these lines across ``multi`` (non-blank lines
+    of multi-line strings), ``blank`` (blank lines inside them), and
+    ``single_comments`` (one-line strings), so the AST is used instead.
+
+    Parameters
+    ----------
+    source : str
+        Python source text.
+    metrics : object
+        Radon raw-analysis result for *source*.
+
+    Returns
+    -------
+    int
+        Number of distinct lines covered by bare string statements, or
+        radon's ``multi`` count when *source* does not parse.
+    """
+    try:
+        tree = ast.parse(source)
+    except SyntaxError:
+        return _get_int_attr(metrics, "multi")
+    covered: set[int] = set()
+    for node in ast.walk(tree):
+        if (
+            isinstance(node, ast.Expr)
+            and isinstance(node.value, ast.Constant)
+            and isinstance(node.value.value, str)
+        ):
+            covered.update(range(node.lineno, (node.end_lineno or node.lineno) + 1))
+    return len(covered)
+
+
 def _code_body_lines(node: ast.FunctionDef | ast.AsyncFunctionDef) -> int:
     """Count lines of code in a function body, excluding the docstring.
+
+    Parameters
+    ----------
+    node : ast.FunctionDef | ast.AsyncFunctionDef
+        Function definition whose body should be counted.
 
     Returns
     -------
@@ -126,16 +166,18 @@ def _code_body_lines(node: ast.FunctionDef | ast.AsyncFunctionDef) -> int:
 def _all_functions_short(file_path: Path, max_lines: int = SMALL_FUNCTION_THRESHOLD) -> bool:
     """Return True if every function's code body is shorter than *max_lines*.
 
+    Parameters
+    ----------
+    file_path : Path
+        Python file whose functions should be checked.
+    max_lines : int
+        Exclusive upper bound: each function's code body must have fewer lines than this.
+
     Returns
     -------
     bool
         ``True`` if the file has at least one function/async function
         and every one has a code body under *max_lines*. ``False`` if
-    Parameters
-    ----------
-    node : ast.FunctionDef | ast.AsyncFunctionDef
-        Function definition whose body should be counted.
-
         the file can't be read as UTF-8, fails to parse, or defines no
         functions.
     """
@@ -166,13 +208,6 @@ def _file_stats(file_path: Path) -> CommentStats:
     ----------
     file_path : Path
         File to analyse; unreadable files yield zeroed statistics.
-    Parameters
-    ----------
-    file_path : Path
-        Python file whose functions should be checked.
-    max_lines : int
-        Exclusive upper bound: each function's code body must have fewer lines than this.
-
 
     Returns
     -------
