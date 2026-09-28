@@ -143,6 +143,10 @@ def _requests_api() -> tuple[Callable[..., object], type[Exception], type[Except
     )
 
 
+# Shared with the Jev audit without duplicating the runtime validation.
+requests_api = _requests_api
+
+
 def _response_json(response: object) -> object:
     """Raise for an HTTP failure and return a response's decoded JSON.
 

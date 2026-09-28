@@ -10,13 +10,13 @@ import sqlite3
 import time
 from dataclasses import dataclass
 from datetime import UTC, datetime
-from importlib import import_module
 from typing import TYPE_CHECKING
 
 from pykissembed.config import get_config
 from pykissembed.paths import iter_py_files as _iter_py_files
 from pykissembed.paths import warn_non_utf8
 from pykissembed.similarity.ast_helpers import compute_content_hash
+from pykissembed.similarity.embeddings import requests_api
 from pykissembed.wrapper_analysis import decorator_name
 
 if TYPE_CHECKING:
@@ -161,39 +161,6 @@ def _load_api_key() -> str | None:
 
 # Public re-export; see the note on extract_symbol_states above.
 load_api_key = _load_api_key
-
-
-def _requests_api() -> tuple[Callable[..., object], type[Exception], type[Exception]]:
-    """Load the ``requests`` call and retry exception types lazily.
-
-    Returns
-    -------
-    tuple[Callable[..., object], type[Exception], type[Exception]]
-        ``(post, timeout_error, http_error)``.
-
-    Raises
-    ------
-    TypeError
-        If ``requests`` does not expose the expected runtime API.
-    """
-    requests_module = import_module("requests")
-    post = getattr(requests_module, "post", None)
-    if not callable(post):
-        msg = "requests.post must be callable"
-        raise TypeError(msg)
-    exceptions = getattr(requests_module, "exceptions", None)
-    if exceptions is None:
-        msg = "requests.exceptions is required"
-        raise TypeError(msg)
-    timeout_error = getattr(exceptions, "Timeout", None)
-    http_error = getattr(exceptions, "HTTPError", None)
-    if not isinstance(timeout_error, type) or not issubclass(timeout_error, Exception):
-        msg = "requests.exceptions.Timeout must be an Exception subclass"
-        raise TypeError(msg)
-    if not isinstance(http_error, type) or not issubclass(http_error, Exception):
-        msg = "requests.exceptions.HTTPError must be an Exception subclass"
-        raise TypeError(msg)
-    return post, timeout_error, http_error
 
 
 def _is_retryable(exc: Exception, timeout_error: type[Exception]) -> bool:
@@ -377,7 +344,7 @@ def ask_jev(
         # A cached grade must remain usable in an offline or cache-only run.
         return None
     try:
-        post, timeout_error, _ = _requests_api()
+        post, timeout_error, _ = requests_api()
     except ImportError, TypeError:
         return None
     body: dict[str, object] = {"model": JEV_MODEL, "state": payload, "questions": questions}
