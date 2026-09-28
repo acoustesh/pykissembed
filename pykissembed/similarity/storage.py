@@ -470,14 +470,31 @@ def _build_combined_row(
 
 
 class EmbeddingRegistry:
-    """Central catalogue of all embedding providers.
+    """Index embedding providers and manage their baseline caches.
+
+    Entries retain their registration order. The registry separates cosine
+    providers from standalone caches and the combined entry, reports cache
+    coverage, removes orphaned vectors, and rebuilds combined vectors in a
+    baselines mapping.
 
     Parameters
     ----------
     providers : list[ProviderEntry]
-        All provider entries to register, including the combined entry.
+        Entries to register. Include an entry whose ``cache_key`` equals
+        ``combined_key`` for operations that access ``combined``.
     combined_key : str
-        The ``cache_key`` that identifies the combined provider.
+        Cache key that identifies the combined entry and excludes it from
+        ``base_providers``.
+
+    Attributes
+    ----------
+    _providers : tuple[ProviderEntry, ...]
+        Registered entries in input order.
+    _combined_key : str
+        Cache key used to identify the combined entry.
+    _by_cache_key : dict[str, ProviderEntry]
+        Entries indexed by cache key. If keys repeat, the last entry is
+        returned by ``by_cache_key``.
     """
 
     def __init__(self, providers: list[ProviderEntry], combined_key: str) -> None:
