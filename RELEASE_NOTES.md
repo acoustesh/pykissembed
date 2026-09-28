@@ -1,3 +1,37 @@
+# v0.2.6 release notes
+
+Changes since `v0.2.5`:
+
+- Add two Jev-backed audits, `jev_docstring_audit` and `jev_comment_audit`.
+  They grade docstrings and inline comments through the OpenRouter Decisions
+  API (`typesafe/jev-1.13`) and cache valid responses in
+  `jev_cache.sqlite3` in the baseline directory. Both run with the other
+  consumer checks under the `jev` marker. Without `OPENROUTER_API_KEY` they
+  grade cached responses only and skip cache misses.
+- Add a `gpu` extra that installs `cuml-cu13==26.8.*` for CUDA 13
+  acceleration. cuML is published on `https://pypi.nvidia.com`, so consumers
+  must add that index themselves.
+- Fix comment density so every docstring line is left out of the code-line
+  count. Before this fix, adding a docstring section lowered a file's density.
+- Skip hidden directories such as `.claude/` and `.kilo/` worktrees when
+  scanning source and when running the no-suppressions check.
+- Keep the Gemini client alive between embedding requests. Previously,
+  garbage collection closed its HTTP transport and later requests failed.
+- Share one classifier for timeout, 429 and 5xx retry decisions between the
+  Jev and Voyage transports.
+
+**Behavior change:** projects that set `OPENROUTER_API_KEY` for the cloud
+providers will now also send function and class source to the Jev audits on
+their next test run. A symbol that scores below the baseline threshold fails
+the run. To skip both audits, run `pytest -m "not jev"`.
+
+The core `numpy` requirement changed from `>=1.26` to `<2.5` so that it stays
+compatible with cuML.
+
+- [pykissembed 0.2.6](https://test.pypi.org/project/pykissembed/0.2.6/)
+- [pykissembed-cloud 0.2.6](https://test.pypi.org/project/pykissembed-cloud/0.2.6/)
+- [Full comparison](https://github.com/acoustesh/pykissembed/compare/v0.2.5...v0.2.6)
+
 # v0.2.5 release notes
 
 Changes since `v0.2.4`:
