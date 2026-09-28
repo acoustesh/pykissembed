@@ -354,13 +354,27 @@ Test**. The debug configurations in `.vscode/launch.json` set the right
 
 The core package ships lint, type-check, complexity, docstring, comment
 density, and the full similarity infrastructure (PCA, refactor index, file
-split). Embedding providers are opt-in via extras:
+split). Embedding providers and GPU support are opt-in via extras:
 
 | Extras | Command | What you get |
 | --- | --- | --- |
 | *(none)* | `uv add pykissembed` | Core checks and cached similarity; no provider entry points or cloud clients |
 | `cloud` | `uv add "pykissembed[cloud]"` | Adds `openai`, `gemini`, `qwen` (OpenRouter) and `jina` (native) providers |
 | `all` | `uv add "pykissembed[all]"` | Compatibility alias for `cloud` |
+| `gpu` | `uv add "pykissembed[gpu]"` | Adds cuML for CUDA 13 GPU acceleration |
+
+### CUDA 13 development environment
+
+In this repository's Python 3.14.6 environment, declare the GPU extra and
+install all dependency groups and extras with:
+
+```bash
+uv add --optional gpu \
+  --index nvidia=https://pypi.nvidia.com \
+  'cuml-cu13==26.8.*'
+uv sync --all-groups --upgrade --all-extras
+.venv/bin/python -c "import cuml; print(cuml.__version__)"
+```
 
 ### Installing from TestPyPI (current release channel)
 
