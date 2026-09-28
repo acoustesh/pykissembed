@@ -119,6 +119,12 @@ class _FunctionHashEntry(TypedDict):
     text_hash: str
 
 
+# The two cache helpers below hand back the *live* object stored in
+# ``baselines`` instead of a copy. Callers rely on that: they write new
+# vectors straight into the returned mapping, so a defensive copy would be
+# silently discarded at the end of the run and every paid embedding lost.
+
+
 def _get_embedding_cache(baselines: Baselines, cache_key: str) -> dict[str, list[float]]:
     """Return the live provider cache for *cache_key*, creating it when absent.
 
@@ -300,17 +306,23 @@ def _populate_provider(
         # For Gemini API, use smaller batches with delays due to free tier quota limits
         if cfg.provider == "gemini":
             embeddings: list[list[float]] = []
-            batch_size = 50  # Gemini free tier: 100 requests/minute, use 50 to be safe
+            # Gemini free tier: 100 requests/minute, use 50 to be safe
+            batch_size = 50
             for i in range(0, len(texts), batch_size):
                 batch_texts = texts[i : i + batch_size]
                 batch_embeddings = _request_embeddings(batch_texts, provider=cfg.provider)
                 embeddings.extend(batch_embeddings)
-                # Add delay between batches to respect rate limits
                 if i + batch_size < len(texts):
-                    time.sleep(1.5)  # 1.5 second delay between batches
+                    # Only sleep between batches, never after the last one.
+                    time.sleep(1.5)
+
         else:
             embeddings = _request_embeddings(texts, provider=cfg.provider)
 
+        # strict=True is the whole safety story here: texts and embeddings are
+        # built in the same order, so a short response would otherwise shift
+        # every later vector onto the wrong function and quietly corrupt the
+        # cache with mislabelled embeddings.
         new_embeddings = {
             getattr(func, hash_attr): emb for func, emb in zip(uncached, embeddings, strict=True)
         }
@@ -385,6 +397,9 @@ def _populate_jina(baselines: Baselines, functions: list[FunctionInfo], cfg: _Ji
     hash_attr = "text_hash" if cfg.use_text else "hash"
     query_cache = _get_embedding_cache(baselines, cfg.query_cache_key)
     passage_cache = _get_embedding_cache(baselines, cfg.passage_cache_key)
+    # Either half missing disqualifies the function: retrieval symmetrizes the
+    # two sides, so keeping a lone query or passage vector would contribute a
+    # score that can never be reproduced on a later run.
     uncached = [
         func
         for func in functions
@@ -402,6 +417,8 @@ def _populate_jina(baselines: Baselines, functions: list[FunctionInfo], cfg: _Ji
         passage_embs = _request_embeddings(passage_texts, provider="jina", task=cfg.passage_task)
         query_updates: dict[str, list[float]] = {}
         passage_updates: dict[str, list[float]] = {}
+        # Both halves are staged before either cache is merged, so a failure
+        # part-way through cannot leave a function with a query but no passage.
         for func, query_emb, passage_emb in zip(uncached, query_embs, passage_embs, strict=True):
             key = getattr(func, hash_attr)
             query_updates[key] = query_emb
@@ -429,6 +446,18 @@ def _populate_jina(baselines: Baselines, functions: list[FunctionInfo], cfg: _Ji
 
 # ---------------------------------------------------------------------------
 # Per-provider configurations
+#
+# Each provider contributes two variants that differ only in *what text* is
+# embedded, never in credentials: the ``-text`` variant sends
+# ``text_for_embedding`` (the docstring-led text) and is keyed by
+# ``text_hash``, while the ``-ast`` variant sends ``ast_text`` and is keyed by
+# the AST ``hash``. The pair is what lets the similarity matrix tell a
+# rename-only refactor apart from a behaviour change, so the two variants
+# must never be pointed at the same source text or the same cache key.
+#
+# Several families share one credential (codestral and qwen both read
+# OPENROUTER_API_KEY), which is why ``env_var`` is repeated per config rather
+# than looked up from a single family table.
 # ---------------------------------------------------------------------------
 
 _OPENAI_TEXT_CFG = _ProviderCfg(
@@ -523,6 +552,8 @@ _QWEN_AST_CFG = _ProviderCfg(
 
 _JINA_TEXT_CFG = _JinaCfg(
     label="Jina-Text",
+    # nl2code: the query is natural language and the passage is the code, so
+    # the two caches hold different vectors for the same function.
     query_cache_key="jina_text_query_embeddings",
     passage_cache_key="jina_text_passage_embeddings",
     use_text=True,
@@ -532,6 +563,8 @@ _JINA_TEXT_CFG = _JinaCfg(
 
 _JINA_AST_CFG = _JinaCfg(
     label="Jina-AST",
+    # code2code: query and passage are both the code, so the asymmetry comes
+    # from the task codes rather than from different source text.
     query_cache_key="jina_ast_query_embeddings",
     passage_cache_key="jina_ast_passage_embeddings",
     use_text=False,
@@ -558,6 +591,9 @@ def cli_provider_name(cache_key: str) -> str:
         Provider name accepted by ``pykissembed populate-embeddings --provider``.
     """
     return (
+        # The suffix order matters: a Jina query key must shed "_query" before
+        # the generic "_embeddings" strip can see it, otherwise the result
+        # would keep a "jina-text-query" stem that is not a valid provider.
         cache_key
         .removesuffix("_embeddings")
         .removesuffix("_query")
@@ -593,6 +629,8 @@ def _missing_for_cache(
     raw_cache = baselines.get(cache_key)
     cache = raw_cache if is_embedding_cache(raw_cache) else {}
     hash_field = REGISTRY.by_cache_key(cache_key).hash_field
+    # A malformed cache counts as empty rather than raising, so --cached-only
+    # can still report a gap instead of crashing on a half-written baseline.
     return sum(getattr(function, hash_field) not in cache for function in functions)
 
 
@@ -811,7 +849,13 @@ def _scoped_text_hashes(baselines: Baselines, directories: list[_Path]) -> set[s
     return scoped - unscoped
 
 
-# Map provider names to functions
+# Map provider names to functions.
+#
+# The lambdas exist so every entry has the same ``(baselines, functions)``
+# signature and the Jina variants, which need a _JinaCfg, slot in beside the
+# plain providers without a wrapper function each. "combined" is listed last
+# and maps straight to its function: it derives every vector from the member
+# caches, so it must never run before they are populated.
 _PROVIDER_MAP: dict[str, PopulateFn] = {
     "openai-text": lambda b, f: _populate_provider(b, f, _OPENAI_TEXT_CFG),
     "openai-ast": lambda b, f: _populate_provider(b, f, _OPENAI_AST_CFG),
@@ -860,11 +904,17 @@ _NETWORK_PROVIDERS = (
     "jina-ast",
 )
 
+# "combined" is excluded here and appended instead, so the loop that walks
+# these providers can never attempt a network call for it.
 _ALL_PROVIDERS = (
     *_NETWORK_PROVIDERS,
     "combined",
 )
 
+# Credential table used only for pre-flight checks and error messages, not for
+# fetching. Fetching reads the same names through _ProviderCfg.env_var, so a
+# name appearing in both places must stay in sync. "codestral" and "qwen" are
+# separate families that happen to share OPENROUTER_API_KEY.
 _PROVIDER_CREDENTIALS = {
     "openai": ("OPENAI_API_KEY", ("your_", "sk-xxx")),
     "codestral": ("OPENROUTER_API_KEY", ("your_", "sk-xxx")),
@@ -927,6 +977,8 @@ def _provider_cache_keys(provider: str) -> tuple[str, ...]:
         keys for a Jina variant.
     """
     stem = provider.replace("-", "_")
+    # Jina is the one asymmetric provider: it persists two caches under one
+    # name, so it needs a dedicated branch rather than the single-key default.
     if provider.startswith("jina-"):
         return (f"{stem}_query_embeddings", f"{stem}_passage_embeddings")
     return (f"{stem}_embeddings",)
@@ -1017,6 +1069,8 @@ def _attempt_network_provider(
         return 0, f"{provider}: {missing_credential} is not configured ({missing_before} missing)"
     handler = _PROVIDER_MAP[provider]
     new_count = handler(baselines, functions)
+    # Re-measure instead of trusting new_count: the handler reports what it
+    # embedded, which is not the same as what is still missing afterwards.
     missing_after = _missing_for_provider(baselines, functions, provider)
     if missing_after:
         return new_count, f"{provider}: cache remains incomplete ({missing_after} missing)"
@@ -1107,6 +1161,9 @@ def _populate_all(
         _missing_for_provider(baselines, functions, provider) for provider in _ALL_PROVIDERS
     )
     if unresolved and any_missing and not performed:
+        # Only fatal when nothing at all succeeded. A partial run still leaves
+        # usable caches behind, so the missing pieces are reported rather than
+        # thrown away along with the vectors that were just paid for.
         raise PopulationError(
             "No requested cache work could be completed. " + "; ".join(unresolved),
         )
@@ -1188,6 +1245,9 @@ def populate_provider_embeddings(
         _scoped_text_hashes(baselines, directories) if directories is not None else None
     )
     if replace_combined_hashes is not None:
+        # The scan found the authoritative current set, so anything sharing a
+        # text hash in scope must be rebuilt even if an identical hash already
+        # has a Combined vector from a different identity.
         replace_combined_hashes.update(function.text_hash for function in functions)
     _synchronize_scanned_function_hashes(
         baselines,

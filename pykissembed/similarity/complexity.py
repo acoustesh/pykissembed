@@ -51,6 +51,10 @@ def call_analyzer(
     try:
         return analyzer(*args, **kwargs)
     except Exception as exc:
+        # Deliberately broad: a third-party analyzer with no stubs can fail in
+        # any way at all, and the callers here only need a single predictable
+        # error type to fall back on. The original text is kept on the raised
+        # message so a malformed source is still diagnosable from the traceback.
         msg = f"{getattr(analyzer, '__name__', 'analyzer')} failed"
         raise AnalyzerError(msg) from exc
 
@@ -150,6 +154,9 @@ def _get_complexities(
         try:
             return _cc_complexities_from_source(file_path.read_text(encoding="utf-8"))
         except SyntaxError:
+            # A file that does not parse has no metrics to report. Returning an
+            # empty list lets the caller merge results from the other scanned
+            # files instead of aborting the whole scan over one bad file.
             return []
 
     # Lazy: complexipy is a compiled analyzer; defer loading for callers that
@@ -264,6 +271,9 @@ def load_all_complexity_maps() -> tuple[dict[str, int], dict[str, int]]:
     cog_map: dict[str, int] = {}
 
     for base_dir in resolve_paths():
+        # A path outside the root (an absolute scan target) is used verbatim as
+        # its prefix, which keeps the merged keys unambiguous instead of
+        # inventing a "../"-style relative path that would not round-trip.
         rel_dir = (
             str(base_dir.relative_to(root)) if base_dir.is_relative_to(root) else str(base_dir)
         )
