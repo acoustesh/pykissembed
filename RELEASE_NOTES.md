@@ -1,3 +1,20 @@
+# v0.2.8 release notes
+
+Changes since `v0.2.7`:
+
+- Fix GPU PCA under `cuml.accel`. That mode (and
+  `cuml.set_global_output_type("numpy")`) makes cuML return host NumPy arrays
+  from `transform()` and `explained_variance_ratio_`, which overrides the
+  estimator's own `output_type` and broke the CuPy operations that consume
+  them (`TypeError: cuML transform() must return a sliceable CuPy array`).
+  PCA fit, variance read and transform now pin cuML's output type to CuPy with
+  `cuml.using_output_type("cupy")`.
+- Refresh locked package versions.
+
+- [pykissembed 0.2.8](https://test.pypi.org/project/pykissembed/0.2.8/)
+- [pykissembed-cloud 0.2.8](https://test.pypi.org/project/pykissembed-cloud/0.2.8/)
+- [Full comparison](https://github.com/acoustesh/pykissembed/compare/v0.2.7...v0.2.8)
+
 # v0.2.7 release notes
 
 Changes since `v0.2.6`:
