@@ -17,6 +17,7 @@ from pykissembed.similarity.types import PCAModel
 
 if TYPE_CHECKING:
     from collections.abc import Callable
+    from contextlib import AbstractContextManager
 
     from pykissembed.similarity.types import FunctionInfo
 
@@ -63,13 +64,13 @@ class _CupyModule(Protocol):
 
     float32: type[np.float32]
 
-    def asarray(self, a: object, dtype: object | None = None) -> object:
-        """Convert array-like input, or an existing CuPy array, to a CuPy array.
+    def asarray(self, a: npt.ArrayLike, dtype: object | None = None) -> object:
+        """Convert array-like input to CuPy array.
 
         Parameters
         ----------
-        a : object
-            Host array-like or CuPy array to convert.
+        a : npt.ArrayLike
+            Array-like input to convert.
         dtype : object | None, optional
             Target dtype, or ``None`` (the default) to infer it from *a*.
 
@@ -191,6 +192,22 @@ def _explained_variance_ratio(model: object, *, name: str) -> object:
         msg = f"{name} has no explained_variance_ratio_; was fit() called?"
         raise TypeError(msg)
     return ratio
+
+
+def _cupy_output() -> AbstractContextManager[object]:
+    """Force cuML to return CuPy arrays, whatever its global output type is.
+
+    ``cuml.accel`` and ``cuml.set_global_output_type`` switch cuML to host
+    (NumPy) results. That overrides the estimator's own ``output_type`` and
+    breaks the CuPy operations that consume fitted attributes and
+    ``transform()``.
+
+    Returns
+    -------
+    AbstractContextManager[object]
+        Context manager that pins cuML's output type to ``"cupy"``.
+    """
+    return import_module("cuml").using_output_type("cupy")
 
 
 def _load_cupy_module() -> _CupyModule:
@@ -428,12 +445,10 @@ def fit_pca(
         else:
             raw_model = pca_class(n_components=max_components)
         estimator = _as_pca_estimator(raw_model, name="cuML PCA")
-        _ = estimator.fit(all_embeddings_gpu)
-        cumulative_variance = _to_numpy_from_cupy(
-            # asarray: IncrementalPCA reports a host ratio, PCA a device one.
-            cp.cumsum(cp.asarray(_explained_variance_ratio(estimator, name="cuML PCA"))),
-            name="cumsum",
-        )
+        with _cupy_output():
+            _ = estimator.fit(all_embeddings_gpu)
+            ratio = _explained_variance_ratio(estimator, name="cuML PCA")
+        cumulative_variance = _to_numpy_from_cupy(cp.cumsum(ratio), name="cumsum")
     else:
         raw_model = pca_class(n_components=max_components, random_state=42)
         estimator = _as_pca_estimator(raw_model, name="sklearn PCA")
@@ -519,7 +534,8 @@ def transform_embeddings_with_pca(
         cp = _load_cupy_module()
         emb_array = cp.asarray(embeddings_to_transform, dtype=cp.float32)
         pca_gpu_model = _as_pca_estimator(pca_model, name="PCA model")
-        transformed = pca_gpu_model.transform(emb_array)
+        with _cupy_output():
+            transformed = pca_gpu_model.transform(emb_array)
         if not isinstance(transformed, _CupyArray):
             msg = "cuML transform() must return a sliceable CuPy array"
             raise TypeError(msg)

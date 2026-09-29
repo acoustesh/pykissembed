@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from contextlib import contextmanager
 from importlib import import_module
 from importlib.util import find_spec
 from types import SimpleNamespace
@@ -15,6 +16,8 @@ from pykissembed.similarity import pca
 from pykissembed.similarity.types import FunctionInfo
 
 if TYPE_CHECKING:
+    from collections.abc import Callable
+
     import numpy.typing as npt
 
 
@@ -46,25 +49,56 @@ def gpu_backend(monkeypatch: pytest.MonkeyPatch):
     def array(value: npt.ArrayLike, dtype: npt.DTypeLike | None = None):
         return np.asarray(value, dtype=dtype).view(_GPUArray)
 
-    def incremental_model(*, n_components: int, batch_size: int):
-        estimator = IncrementalPCA(n_components=n_components, batch_size=batch_size)
+    pinned = {"depth": 0}
+
+    @contextmanager
+    def using_output_type(output_type: str):
+        assert output_type == "cupy"
+        pinned["depth"] += 1
+        try:
+            yield
+        finally:
+            pinned["depth"] -= 1
+
+    def device_model(estimator: PCA | IncrementalPCA, *, on_fit: Callable[[np.ndarray], None]):
+        """Wrap *estimator* so results are device arrays only under a pinned cupy output type.
+
+        Returns
+        -------
+        SimpleNamespace
+            Model whose ``fit``/``transform`` assert the pinned output type.
+        """
 
         def fit(value: np.ndarray) -> None:
-            assert batch_size == value.shape[0]
-            assert n_components == min(value.shape)
-            calls["svd"].append(value.shape)
+            assert pinned["depth"], "cuML fit() ran outside using_output_type('cupy')"
+            on_fit(value)
             _ = estimator.fit(value)
             ratio = estimator.explained_variance_ratio_
             assert ratio is not None
-            # Real cuML IncrementalPCA exposes a host NumPy ratio, not a CuPy array.
-            model.explained_variance_ratio_ = np.asarray(ratio)
+            model.explained_variance_ratio_ = array(ratio)
 
-        model = SimpleNamespace(fit=fit, transform=lambda value: array(estimator.transform(value)))
+        def transform(value: np.ndarray):
+            assert pinned["depth"], "cuML transform() ran outside using_output_type('cupy')"
+            return array(estimator.transform(value))
+
+        model = SimpleNamespace(fit=fit, transform=transform)
         return model
+
+    def incremental_model(*, n_components: int, batch_size: int):
+        def check(value: np.ndarray) -> None:
+            assert batch_size == value.shape[0]
+            assert n_components == min(value.shape)
+            calls["svd"].append(value.shape)
+
+        return device_model(
+            IncrementalPCA(n_components=n_components, batch_size=batch_size), on_fit=check
+        )
 
     def covariance_model(*, n_components: int):
         calls["covariance"].append((n_components,))
-        return PCA(n_components=n_components, svd_solver="full")
+        return device_model(
+            PCA(n_components=n_components, svd_solver="full"), on_fit=lambda _value: None
+        )
 
     def cumsum(value: object):
         # Like cupy.cumsum, reject host arrays.
@@ -81,6 +115,8 @@ def gpu_backend(monkeypatch: pytest.MonkeyPatch):
     def import_backend(name: str):
         if name == "cuml.decomposition":
             return SimpleNamespace(IncrementalPCA=incremental_model)
+        if name == "cuml":
+            return SimpleNamespace(using_output_type=using_output_type)
         return real_import(name)
 
     monkeypatch.setattr(pca, "import_module", import_backend)
@@ -159,7 +195,18 @@ def test_wide_constant_embeddings_remain_finite(
     assert model is not None
     assert is_gpu is True
     assert 1 <= count <= len(values)
-    np.testing.assert_array_equal(model.transform(values.view(_GPUArray)), 0)
+    function = FunctionInfo(
+        name="constant",
+        file="sample.py",
+        start_line=1,
+        end_line=2,
+        loc=2,
+        hash="constant",
+        text="",
+        embedding=values[0].tolist(),
+    )
+    pca.transform_embeddings_with_pca([function], model, count, is_gpu=is_gpu)
+    assert function.embedding == [0.0] * count
     assert gpu_backend["covariance"] == []
 
 
@@ -195,3 +242,34 @@ def test_real_gpu_wide_pca_avoids_feature_squared_storage(monkeypatch: pytest.Mo
     expected_count = int(np.searchsorted(np.cumsum(reference.explained_variance_ratio_), 0.9)) + 1
     assert count == expected_count
     np.testing.assert_allclose(actual @ actual.T, expected @ expected.T, rtol=5e-3, atol=25)
+
+
+@pytest.mark.skipif(find_spec("cuml") is None, reason="cuML is unavailable")
+@pytest.mark.parametrize("shape", [(40, 100), (100, 40)])
+def test_real_gpu_pca_ignores_global_numpy_output_type(shape: tuple[int, int]) -> None:
+    """Device results survive ``cuml.accel``-style global host output settings."""
+    cp = import_module("cupy")
+    if cp.cuda.runtime.getDeviceCount() == 0:
+        pytest.skip("CUDA device is unavailable")
+    cuml = import_module("cuml")
+    values = np.random.default_rng(42).normal(size=shape).astype(np.float32)
+    cache = {str(i): row.tolist() for i, row in enumerate(values)}
+    functions = [
+        FunctionInfo(
+            name=str(i),
+            file="sample.py",
+            start_line=1,
+            end_line=2,
+            loc=2,
+            hash=str(i),
+            text="",
+            embedding=row.tolist(),
+        )
+        for i, row in enumerate(values[:5])
+    ]
+    with cuml.using_output_type("numpy"):
+        model, count, is_gpu = pca.fit_pca(cache, 0.9)
+        assert model is not None
+        pca.transform_embeddings_with_pca(functions, model, count, is_gpu=is_gpu)
+    assert is_gpu is True
+    assert all(function.embedding is not None and len(function.embedding) == count for function in functions)
