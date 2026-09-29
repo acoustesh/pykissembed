@@ -56,7 +56,8 @@ def gpu_backend(monkeypatch: pytest.MonkeyPatch):
             _ = estimator.fit(value)
             ratio = estimator.explained_variance_ratio_
             assert ratio is not None
-            model.explained_variance_ratio_ = array(ratio)
+            # Real cuML IncrementalPCA exposes a host NumPy ratio, not a CuPy array.
+            model.explained_variance_ratio_ = np.asarray(ratio)
 
         model = SimpleNamespace(fit=fit, transform=lambda value: array(estimator.transform(value)))
         return model
@@ -65,9 +66,14 @@ def gpu_backend(monkeypatch: pytest.MonkeyPatch):
         calls["covariance"].append((n_components,))
         return PCA(n_components=n_components, svd_solver="full")
 
+    def cumsum(value: object):
+        # Like cupy.cumsum, reject host arrays.
+        assert isinstance(value, _GPUArray), type(value)
+        return array(np.cumsum(value))
+
     cp = SimpleNamespace(
         asarray=array,
-        cumsum=lambda value: array(np.cumsum(value)),
+        cumsum=cumsum,
         float32=np.float32,
     )
     real_import = pca.import_module

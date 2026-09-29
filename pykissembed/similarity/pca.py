@@ -63,13 +63,13 @@ class _CupyModule(Protocol):
 
     float32: type[np.float32]
 
-    def asarray(self, a: npt.ArrayLike, dtype: object | None = None) -> object:
-        """Convert array-like input to CuPy array.
+    def asarray(self, a: object, dtype: object | None = None) -> object:
+        """Convert array-like input, or an existing CuPy array, to a CuPy array.
 
         Parameters
         ----------
-        a : npt.ArrayLike
-            Array-like input to convert.
+        a : object
+            Host array-like or CuPy array to convert.
         dtype : object | None, optional
             Target dtype, or ``None`` (the default) to infer it from *a*.
 
@@ -430,7 +430,8 @@ def fit_pca(
         estimator = _as_pca_estimator(raw_model, name="cuML PCA")
         _ = estimator.fit(all_embeddings_gpu)
         cumulative_variance = _to_numpy_from_cupy(
-            cp.cumsum(_explained_variance_ratio(estimator, name="cuML PCA")),
+            # asarray: IncrementalPCA reports a host ratio, PCA a device one.
+            cp.cumsum(cp.asarray(_explained_variance_ratio(estimator, name="cuML PCA"))),
             name="cumsum",
         )
     else:
