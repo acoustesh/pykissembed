@@ -1,3 +1,19 @@
+# v0.2.7 release notes
+
+Changes since `v0.2.6`:
+
+- Fix GPU PCA on wide inputs (more features than samples). cuML
+  `IncrementalPCA` reports `explained_variance_ratio_` as a host NumPy array,
+  and `cupy.cumsum` rejected it with a `TypeError`. The ratio is now moved to
+  the device before the cumulative sum, so it works for both PCA variants.
+- When Combined embeddings cannot be built because member caches are
+  incomplete, the hint now also names the bulk command
+  `uv run pykissembed populate-embeddings --provider all`.
+
+- [pykissembed 0.2.7](https://test.pypi.org/project/pykissembed/0.2.7/)
+- [pykissembed-cloud 0.2.7](https://test.pypi.org/project/pykissembed-cloud/0.2.7/)
+- [Full comparison](https://github.com/acoustesh/pykissembed/compare/v0.2.6...v0.2.7)
+
 # v0.2.6 release notes
 
 Changes since `v0.2.5`:
