@@ -725,7 +725,9 @@ def _populate_combined_scoped(
         pytest.skip(
             "Cannot build combined embeddings until every member cache covers "
             f"the scanned functions ({details}). Run: "
-            "pykissembed populate-embeddings --provider <name>",
+            "pykissembed populate-embeddings --provider <name>, or fill every "
+            "member and rebuild combined with: "
+            "uv run pykissembed populate-embeddings --provider all",
         )
 
     _ = REGISTRY.rebuild_combined(baselines)

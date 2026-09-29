@@ -199,7 +199,8 @@ def _missing_embeddings_advice(
     return [
         (
             "Member embeddings missing for those functions "
-            "(fix with: pykissembed populate-embeddings --provider <name>):"
+            "(fix with: pykissembed populate-embeddings --provider <name>, or all at once: "
+            "uv run pykissembed populate-embeddings --provider all):"
         ),
         *(f"  {name}: {count}" for name, count in member_gaps.items()),
     ]
