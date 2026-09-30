@@ -1,3 +1,18 @@
+# v0.2.9 release notes
+
+Changes since `v0.2.8`:
+
+- Tolerate start-up noise in tool output. `test_no_lint_or_type_errors` and
+  the docstring-format check now decode ruff/pyright JSON starting at the
+  first line that begins a valid document. Warnings printed to stdout ahead of
+  it (for example `[cuml.accel] Warning: ...` from an environment that loads
+  `cuml.accel`) no longer crash the lint gate with `JSONDecodeError`, and no
+  longer make the docstring-format gate pass silently by discarding the output.
+
+- [pykissembed 0.2.9](https://test.pypi.org/project/pykissembed/0.2.9/)
+- [pykissembed-cloud 0.2.9](https://test.pypi.org/project/pykissembed-cloud/0.2.9/)
+- [Full comparison](https://github.com/acoustesh/pykissembed/compare/v0.2.8...v0.2.9)
+
 # v0.2.8 release notes
 
 Changes since `v0.2.7`:
