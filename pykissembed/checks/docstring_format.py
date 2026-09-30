@@ -15,6 +15,7 @@ from typing import override
 import pytest
 
 from pykissembed.baselines_engine import locked_envelope, read_int_map, save_envelope
+from pykissembed.checks.lint_typecheck import parse_tool_json
 from pykissembed.config import get_config
 from pykissembed.paths import include_notebooks
 
@@ -74,7 +75,7 @@ def _run_ruff_docstring_check(target_dir: Path, *, root: Path) -> list[Docstring
     if not result.stdout.strip():
         return []
     try:
-        parsed_obj: object = json.loads(result.stdout)
+        parsed_obj: object = parse_tool_json(result.stdout)
     except json.JSONDecodeError:
         return []
     # ruff's JSON schema isn't a stable contract this project controls, so

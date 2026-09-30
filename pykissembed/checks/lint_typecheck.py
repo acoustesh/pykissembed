@@ -161,13 +161,45 @@ def run_ruff(paths: list[Path]) -> list[Mapping[str, object]]:
         return []
     if not result.stdout.strip():
         return []
-    parsed: object = json.loads(result.stdout)
+    parsed: object = parse_tool_json(result.stdout)
     if not isinstance(parsed, list):
         return []
     # Keep only well-formed entries; a reshaped ruff release degrades to
     # "diagnostic dropped" rather than crashing the gate.
     records: list[Mapping[str, object]] = [item for item in parsed if isinstance(item, dict)]
     return records
+
+
+def parse_tool_json(stdout: str) -> object:
+    """Decode a tool's JSON document, skipping any non-JSON lines before it.
+
+    Interpreter start-up hooks in the consumer environment (for example
+    ``cuml.accel``) can print warnings to stdout ahead of the tool's JSON.
+
+    Parameters
+    ----------
+    stdout : str
+        Captured stdout of the tool.
+
+    Returns
+    -------
+    object
+        The first JSON document that starts at a line boundary.
+
+    Raises
+    ------
+    json.JSONDecodeError
+        If no line of *stdout* starts a valid JSON document.
+    """
+    decoder = json.JSONDecoder()
+    offset = 0
+    for line in stdout.splitlines(keepends=True):
+        try:
+            return decoder.raw_decode(stdout, offset)[0]
+        except json.JSONDecodeError:
+            offset += len(line)
+    msg = "no JSON document in tool output"
+    raise json.JSONDecodeError(msg, stdout, 0)
 
 
 def run_pyright(paths: list[Path]) -> list[Mapping[str, object]]:
@@ -197,7 +229,7 @@ def run_pyright(paths: list[Path]) -> list[Mapping[str, object]]:
         return []
     if not result.stdout.strip():
         return []
-    parsed: object = json.loads(result.stdout)
+    parsed: object = parse_tool_json(result.stdout)
     if not isinstance(parsed, dict):
         return []
     diagnostics = parsed.get("generalDiagnostics", [])
