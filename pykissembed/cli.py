@@ -7,6 +7,7 @@ Subcommands
 - ``pykissembed.providers list`` — show installed embedding providers
 - ``pykissembed populate-embeddings --provider NAME``
 - ``pykissembed type-review --json REPORT.json``
+- ``pykissembed docfix [PATHS]`` — report or fix NumPy docstring non-conformance
 - ``pykissembed init`` — (opt-in) scaffold a ``[tool.pykissembed]`` block and
   sync VS Code pytest settings
 """
@@ -32,6 +33,9 @@ from pykissembed.baselines_engine import ratchet
 from pykissembed.checks.lint_typecheck import build_report, run_pyright, run_ruff
 from pykissembed.config import get_config, load_config
 from pykissembed.providers.registry import discover_all
+from pykissembed.tools.docfix import DEFAULT_MODEL as DEFAULT_DOCFIX_MODEL
+from pykissembed.tools.docfix import Request as DocfixRequest
+from pykissembed.tools.docfix import main as run_docfix
 from pykissembed.vscode_settings import sync_vscode_settings
 
 app = typer.Typer(
@@ -620,3 +624,119 @@ __all__ = ["app", "load_config"]
 
 if __name__ == "__main__":
     app()
+
+
+# ---------------------------------------------------------------------------
+# docfix
+# ---------------------------------------------------------------------------
+
+
+@app.command()
+def docfix(
+    paths: Annotated[
+        list[Path] | None,
+        typer.Argument(help="Files or directories (default: configured source paths)."),
+    ] = None,
+    *,
+    write: Annotated[bool, typer.Option("--write", help="Write verified fixes to disk.")] = False,
+    diff: Annotated[bool, typer.Option("--diff", help="Show unified diffs of the changes.")] = False,
+    check: Annotated[
+        bool, typer.Option("--check", help="Exit 1 when fixable findings remain (CI mode).")
+    ] = False,
+    select: Annotated[
+        str, typer.Option("--select", help="Comma-separated DF codes to run; DF052 is opt-in.")
+    ] = "",
+    ignore: Annotated[
+        str, typer.Option("--ignore", help="Comma-separated DF codes to skip (DF002 = no ruff).")
+    ] = "",
+    symbol: Annotated[
+        list[str] | None, typer.Option("--symbol", help="Restrict to FILE::NAME (repeatable).")
+    ] = None,
+    only_failing: Annotated[
+        bool,
+        typer.Option("--only-failing", help="Restrict to symbols the cached Jev gate grades fail."),
+    ] = False,
+    allow_dirty: Annotated[
+        bool, typer.Option("--allow-dirty", help="Also write files with uncommitted changes.")
+    ] = False,
+    draft: Annotated[
+        bool, typer.Option("--draft", help="Fill missing prose with an OpenRouter model.")
+    ] = False,
+    grade: Annotated[
+        bool, typer.Option("--grade", help="Revert any edit that lowers the Jev docstring level.")
+    ] = False,
+    model: Annotated[str, typer.Option("--model", help="OpenRouter model for --draft.")] = "",
+    max_calls: Annotated[
+        int, typer.Option("--max-calls", help="Budget of live --draft requests.")
+    ] = 50,
+    line_length: Annotated[
+        int, typer.Option("--line-length", help="Wrap width for drafted text.")
+    ] = 88,
+    grade_tolerance: Annotated[
+        float,
+        typer.Option("--grade-tolerance", help="Jev level drop --grade treats as noise."),
+    ] = 0.1,
+) -> None:
+    """Report or fix NumPy docstring non-conformance, editing docstrings only.
+
+    Parameters
+    ----------
+    paths : list[Path] | None
+        Files or directories; ``None`` uses the configured source paths.
+    write : bool
+        Write fixes that pass every guard.
+    diff : bool
+        Print unified diffs.
+    check : bool
+        Exit non-zero while fixable findings remain.
+    select : str
+        Comma-separated codes to run.
+    ignore : str
+        Comma-separated codes to skip.
+    symbol : list[str] | None
+        ``FILE::NAME`` filters.
+    only_failing : bool
+        Target only symbols failing the cached Jev docstring gate.
+    allow_dirty : bool
+        Permit writing files with uncommitted git changes.
+    draft : bool
+        Draft missing prose with an OpenRouter model.
+    grade : bool
+        Keep only edits that do not lower the Jev level.
+    model : str
+        OpenRouter model id for drafting; empty uses the default.
+    max_calls : int
+        Maximum live drafting requests.
+    line_length : int
+        Line width used to wrap drafted text.
+    grade_tolerance : float
+        Largest Jev level drop ``--grade`` accepts as noise, unless the drop
+        crosses the gate's bar.
+
+    Raises
+    ------
+    typer.Exit
+        With status 1 on file errors (or pending fixes under ``--check``)
+        and 2 on invalid arguments.
+    """
+    report, status = run_docfix(
+        DocfixRequest(
+            paths=list(paths or []),
+            write=write,
+            diff=diff,
+            check=check,
+            select=select,
+            ignore=ignore,
+            symbols=tuple(symbol or ()),
+            only_failing=only_failing,
+            allow_dirty=allow_dirty,
+            draft=draft,
+            grade=grade,
+            model=model or DEFAULT_DOCFIX_MODEL,
+            max_calls=max_calls,
+            line_length=line_length,
+            grade_tolerance=grade_tolerance,
+        )
+    )
+    typer.echo(report)
+    raise typer.Exit(status)

@@ -410,6 +410,39 @@ def _format_symbol_failure(state: SymbolState, level: float, min_score: float) -
     )
 
 
+def symbol_level(state: SymbolState, *, api_key: str | None, conn: Connection) -> float | None:
+    """Return the 1-6 rubric level of one symbol, from cache or the API.
+
+    Parameters
+    ----------
+    state : SymbolState
+        The symbol to grade.
+    api_key : str | None
+        OpenRouter key, or ``None`` to read cached responses only.
+    conn : Connection
+        Shared Jev response cache connection.
+
+    Returns
+    -------
+    float | None
+        The expected level; level one for a symbol with no docstring, which
+        never reaches the API; ``None`` when no valid grade is available.
+    """
+    if not state.has_docstring:
+        return _LEVEL_NO_DOCTRING
+    return ask_jev(
+        state,
+        _QUESTIONS,
+        parse=lambda payload: _shift(parse_score(payload, _SCORE_QUESTION_ID, len(_SCORE_LEVELS))),
+        api_key=api_key,
+        conn=conn,
+    )
+
+
+# Public re-export for tools that apply the gate's own thresholds.
+min_score_for = _min_score_for
+
+
 def _grade_docstrings(
     states: list[SymbolState], baseline_data: object, api_key: str | None, conn: Connection
 ) -> tuple[list[str], int, int]:
@@ -436,19 +469,7 @@ def _grade_docstrings(
     graded = 0
     for state in states:
         min_score = _min_score_for(state, baseline_data)
-        if not state.has_docstring:
-            # No docstring is level 1 by definition; never call the API.
-            level = _LEVEL_NO_DOCTRING
-        else:
-            level = ask_jev(
-                state,
-                _QUESTIONS,
-                parse=lambda payload: _shift(
-                    parse_score(payload, _SCORE_QUESTION_ID, len(_SCORE_LEVELS))
-                ),
-                api_key=api_key,
-                conn=conn,
-            )
+        level = symbol_level(state, api_key=api_key, conn=conn)
         if level is None:
             ungraded += 1
             continue

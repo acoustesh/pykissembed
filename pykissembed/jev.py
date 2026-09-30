@@ -108,21 +108,41 @@ def _extract_symbol_states(base_dir: Path, *, root: Path) -> list[SymbolState]:
                 continue
             if isinstance(node, ast.FunctionDef | ast.AsyncFunctionDef) and _is_overload_stub(node):
                 continue
-            segment = ast.get_source_segment(source, node) or ""
-            if len(segment) > MAX_STATE_CHARS:
-                segment = segment[:MAX_STATE_CHARS] + "\n... [truncated]"
-            kind = "class" if isinstance(node, ast.ClassDef) else "function"
-            states.append(
-                SymbolState(
-                    file_key=rel,
-                    symbol=node.name,
-                    kind=kind,
-                    lineno=node.lineno,
-                    source=segment,
-                    has_docstring=ast.get_docstring(node) is not None,
-                )
-            )
+            states.append(state_for(node, source, rel))
     return states
+
+
+def state_for(
+    node: ast.FunctionDef | ast.AsyncFunctionDef | ast.ClassDef, source: str, file_key: str
+) -> SymbolState:
+    """Build the graded state of one definition exactly as the audits do.
+
+    Parameters
+    ----------
+    node : ast.FunctionDef | ast.AsyncFunctionDef | ast.ClassDef
+        Definition parsed from *source*.
+    source : str
+        Full text of the file that contains *node*.
+    file_key : str
+        Project-relative file key.
+
+    Returns
+    -------
+    SymbolState
+        The state whose payload keys the shared response cache, with the
+        source segment truncated at ``MAX_STATE_CHARS``.
+    """
+    segment = ast.get_source_segment(source, node) or ""
+    if len(segment) > MAX_STATE_CHARS:
+        segment = segment[:MAX_STATE_CHARS] + "\n... [truncated]"
+    return SymbolState(
+        file_key=file_key,
+        symbol=node.name,
+        kind="class" if isinstance(node, ast.ClassDef) else "function",
+        lineno=node.lineno,
+        source=segment,
+        has_docstring=ast.get_docstring(node) is not None,
+    )
 
 
 # Public re-export. Both consumer checks need symbol extraction, and a

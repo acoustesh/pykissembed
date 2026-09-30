@@ -19,6 +19,10 @@ from pykissembed.checks.lint_typecheck import parse_tool_json
 from pykissembed.config import get_config
 from pykissembed.paths import include_notebooks
 
+# ruff's exit status for a configuration or usage error (as opposed to
+# 1, "violations found").
+_RUFF_USAGE_ERROR = 2
+
 
 @dataclass(frozen=True, slots=True)
 class DocstringViolation:
@@ -42,6 +46,29 @@ class DocstringViolation:
         return f"{self.file}:{self.line}:{self.column} {self.code} {self.message}"
 
 
+def _run_ruff(ruff: str, args: list[str], *, preview: bool) -> subprocess.CompletedProcess[str]:
+    """Run ``ruff check`` once with *args*.
+
+    Parameters
+    ----------
+    ruff : str
+        Resolved ruff executable.
+    args : list[str]
+        Arguments after ``ruff check``.
+    preview : bool
+        Whether to pass ``--preview``.
+
+    Returns
+    -------
+    subprocess.CompletedProcess[str]
+        The completed process, whatever its exit status.
+    """
+    cmd = [ruff, "check", *(["--preview"] if preview else []), *args]
+    # S603: fixed argv (resolved ruff binary + literal flags + a configured
+    # directory path); no shell involved.
+    return subprocess.run(cmd, capture_output=True, text=True, check=False)
+
+
 def _run_ruff_docstring_check(target_dir: Path, *, root: Path) -> list[DocstringViolation]:
     """Run ``ruff check --select=D --output-format=json`` on *target_dir*.
 
@@ -61,17 +88,29 @@ def _run_ruff_docstring_check(target_dir: Path, *, root: Path) -> list[Docstring
     -------
     list[DocstringViolation]
         Detected violations, with filenames relative to *root* where possible.
+        Empty when ruff is not installed.
+
+    Raises
+    ------
+    RuntimeError
+        If ruff runs but rejects its configuration or arguments, so a broken
+        setup fails the gate instead of passing it with zero violations.
     """
     ruff = shutil.which("ruff")
     if ruff is None:
         return []
-    cmd = [ruff, "check"]
+    args = [str(target_dir), "--select=D", "--output-format=json"]
     if not include_notebooks():
-        cmd.extend(["--extend-exclude", "*.ipynb"])
-    cmd.extend([str(target_dir), "--select=D", "--output-format=json"])
-    # S603: fixed argv (resolved ruff binary + literal flags + a configured
-    # directory path); no shell involved.
-    result = subprocess.run(cmd, capture_output=True, text=True, check=False)
+        args[:0] = ["--extend-exclude", "*.ipynb"]
+    result = _run_ruff(ruff, args, preview=False)
+    # A config that selects rules by name (e.g. "line-too-long") is only
+    # accepted in preview mode; retry once rather than always enabling
+    # preview, which could add preview-only D rules and shift baselines.
+    if result.returncode == _RUFF_USAGE_ERROR and "preview" in result.stderr:
+        result = _run_ruff(ruff, args, preview=True)
+    if result.returncode == _RUFF_USAGE_ERROR:
+        msg = f"ruff could not check {target_dir}:\n{result.stderr.strip()}"
+        raise RuntimeError(msg)
     if not result.stdout.strip():
         return []
     try:
@@ -121,6 +160,11 @@ def _run_ruff_docstring_check(target_dir: Path, *, root: Path) -> list[Docstring
             ),
         )
     return violations
+
+
+# Public re-export for tests of the ruff invocation; see the same pattern in
+# pykissembed.jev (extract_symbol_states).
+run_ruff_docstring_check = _run_ruff_docstring_check
 
 
 def _collect_docstring_violations(paths: list[Path]) -> list[DocstringViolation]:
