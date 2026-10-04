@@ -30,7 +30,7 @@ from filelock import FileLock
 from jsonschema import Draft7Validator
 
 if TYPE_CHECKING:
-    from collections.abc import Iterator, Mapping, Sequence
+    from collections.abc import Generator, Iterator, Mapping, Sequence
 
     from jsonschema.protocols import Validator
 
@@ -209,7 +209,7 @@ def save_envelope(path: Path, envelope: BaselineEnvelope) -> None:
 
 
 @contextlib.contextmanager
-def locked_envelope(path: Path, kind: str) -> Iterator[BaselineEnvelope]:
+def locked_envelope(path: Path, kind: str) -> Generator[BaselineEnvelope]:
     """Load *path* as a v1 envelope under an exclusive cross-process lock.
 
     The lock is held for the whole context, not just the load — callers

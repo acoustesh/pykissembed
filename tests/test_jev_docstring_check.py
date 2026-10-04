@@ -297,7 +297,10 @@ def test_malformed_answers_are_skipped_not_failed(
     monkeypatch.setattr(requests, "post", lambda *_a, **_k: _Response({"answers": {}}))
     monkeypatch.setattr(jev.time, "sleep", lambda _s: None)
 
-    _run_check(tmp_path, monkeypatch)
+    # The reply is unparseable, so the symbol is never graded: the gate must
+    # neither fail nor skip the run, but it does warn that it graded nothing.
+    with pytest.warns(UserWarning, match="ungraded"):
+        _run_check(tmp_path, monkeypatch)
 
 
 def test_overload_stubs_are_excluded_from_state(
@@ -428,7 +431,10 @@ def test_out_of_range_score_is_skipped_not_failed(
     monkeypatch.setattr(requests, "post", _post_returning(payload))
     monkeypatch.setattr(jev.time, "sleep", lambda _s: None)
 
-    _run_check(tmp_path, monkeypatch)
+    # A score of 99 is outside the 0-5 wire range, so it is rejected as
+    # malformed and the symbol goes ungraded rather than failing the gate.
+    with pytest.warns(UserWarning, match="ungraded"):
+        _run_check(tmp_path, monkeypatch)
 
 
 def test_evaluate_symbol_passes_at_or_above_minimum() -> None:

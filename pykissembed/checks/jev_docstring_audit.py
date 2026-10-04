@@ -41,7 +41,7 @@ from pykissembed.jev import (
 )
 
 if TYPE_CHECKING:
-    from collections.abc import Iterator
+    from collections.abc import Generator
     from pathlib import Path
     from sqlite3 import Connection
 
@@ -297,7 +297,7 @@ def _shift(score: float | None) -> float | None:
 
 
 @contextlib.contextmanager
-def _locked_envelope() -> Iterator[tuple[Path, BaselineEnvelope]]:
+def _locked_envelope() -> Generator[tuple[Path, BaselineEnvelope]]:
     """Load ``jev_docstring_audit.json`` under a cross-process lock.
 
     The default ``min_score`` and ``test_min_score`` are merged in so the

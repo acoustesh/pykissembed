@@ -1,8 +1,6 @@
 {
   "data": {
-    "per_file": {
-      "pykissembed/checks/code_complexity.py": 1
-    }
+    "per_file": {}
   },
   "kind": "lint_typecheck",
   "schema_version": "1.0"

@@ -15,7 +15,7 @@ from typing import TYPE_CHECKING, TypedDict
 import pytest
 
 if TYPE_CHECKING:
-    from collections.abc import Callable, Iterator
+    from collections.abc import Callable, Generator
     from pathlib import Path
 
 from pykissembed.baselines_engine import (
@@ -413,7 +413,7 @@ def _complexity_failure_message(
 
 
 @contextlib.contextmanager
-def _locked_envelope() -> Iterator[tuple[Path, BaselineEnvelope]]:
+def _locked_envelope() -> Generator[tuple[Path, BaselineEnvelope]]:
     """Load ``complexity.json`` under a cross-process lock, defaults merged in.
 
     Held for the whole ``with`` block so a test's compute-then-maybe-save
@@ -688,9 +688,7 @@ class TestMaintainabilityIndex:
         if not pykissembed_paths:
             pytest.skip("No [tool.pykissembed] paths configured")
         with _locked_envelope() as (baseline_file, envelope):
-            threshold = read_float(
-                envelope.data, "mi_threshold", _DEFAULT_CONFIG["mi_threshold"]
-            )
+            threshold = read_float(envelope.data, "mi_threshold", _DEFAULT_CONFIG["mi_threshold"])
             mi_baselines = read_float_map(envelope.data, "mi_baselines")
             violations: list[str] = []
             current_mi: dict[str, float] = {}
