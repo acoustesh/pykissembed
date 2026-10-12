@@ -84,11 +84,16 @@ Pick one:
 - Anything else (bare `pytest`, `-k` alone, `--deselect` alone) injects
   nothing from pykissembed, so your own tests run untouched.
 
-`pykissembed init` configures VS Code's Test Explorer with `tests` and
-`--pykissembed-all`. By default, missing embeddings are populated for all
-providers through their APIs while tests run. To keep code-derived data local,
-pass `--cached-only` or set `cached_only = true` in `[tool.pykissembed]`;
-unrelated custom pytest arguments are left untouched.
+`pykissembed init` configures VS Code's Test Explorer with plain `["tests"]`.
+The checks still appear in the tree (discovery uses `--collect-only`), but
+running the `tests` folder runs only your own tests. Run the checks by
+selecting them in the tree, with `pykissembed check`, or with
+`pytest --pykissembed-all`. Older generated values that forced
+`--pykissembed-all` are migrated on the next `pykissembed init`; unrelated
+custom pytest arguments are left untouched. By default, missing embeddings are
+populated for all providers through their APIs while tests run. To keep
+code-derived data local, pass `--cached-only` or set `cached_only = true` in
+`[tool.pykissembed]`.
 
 The `no_suppressions.py` check is a strict, non-ratcheted gate. It scans every
 `.py` file below the consumer project root for `# type: ignore`, `# noqa`,

@@ -228,7 +228,7 @@ class TestInit:
         assert result.exit_code == 0
         settings = (tmp_path / ".vscode" / "settings.json").read_text()
         assert '"python.testing.pytestArgs"' in settings
-        assert '"--pykissembed-all"' in settings
+        assert '"--pykissembed-all"' not in settings
         assert '"--cached-only"' not in settings
         assert '"python.testing.pytestEnabled": true' in settings
 

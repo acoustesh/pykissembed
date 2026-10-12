@@ -398,8 +398,8 @@ def init(
     ``[tool.setuptools]`` packages, or ``.`` as fallback) for the
     ``pyproject.toml`` block. Independently, adds
     ``python.testing.pytestArgs``/``pytestEnabled`` to
-    ``.vscode/settings.json`` so VS Code's Test Explorer runs pykissembed's
-    checks. Each step is idempotent and only needs ``--force`` to overwrite
+    ``.vscode/settings.json`` so VS Code's Test Explorer discovers the
+    project's tests and pykissembed's checks; checks only run when selected. Each step is idempotent and only needs ``--force`` to overwrite
     a value that already differs from pykissembed's own.
 
     Parameters
