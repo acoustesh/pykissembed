@@ -20,7 +20,7 @@ import os
 import sys
 from importlib import import_module, util
 from pathlib import Path
-from typing import TYPE_CHECKING, TypeGuard
+from typing import TYPE_CHECKING, Literal, TypeGuard
 
 import pytest
 from _pytest.stash import StashKey
@@ -726,14 +726,16 @@ def pytest_collect_file(file_path: Path, parent: pytest.Collector) -> pytest.Mod
 
 
 def pytest_collection_modifyitems(config: pytest.Config, items: list[pytest.Item]) -> None:
-    """Deselect check items when a run mixes them with the project's own tests.
+    """Turn check items into no-op passes when a run mixes them with project tests.
 
     IDE test explorers list the checks (see :func:`_decide_injection`), so
     running the explorer's root passes every discovered NodeId, checks
     included. Such a mixed run is not an explicit request for the checks;
     selecting only checks, ``--pykissembed-all``, a marker filter, or ini
-    ``testpaths`` naming the checks still runs them. Discovery
-    (``--collect-only``) is left untouched so the checks stay listed.
+    ``testpaths`` naming the checks still runs them. The items are kept
+    rather than deselected because explorers render deselected tests as
+    skipped; a no-op pass keeps the tree green without running fixtures.
+    Discovery (``--collect-only``) is left untouched so the checks stay listed.
 
     Parameters
     ----------
@@ -754,8 +756,42 @@ def pytest_collection_modifyitems(config: pytest.Config, items: list[pytest.Item
     check_items = [item for item in items if _is_installed_check_path(str(item.path), checks)]
     if not check_items or len(check_items) == len(items):
         return
-    config.hook.pytest_deselected(items=check_items)
-    items[:] = [item for item in items if item not in check_items]
+    for item in check_items:
+        item.stash[_passthrough_key] = True
+
+
+_passthrough_key = StashKey[bool]()
+_PHASES: tuple[Literal["setup", "call", "teardown"], ...] = ("setup", "call", "teardown")
+
+
+@pytest.hookimpl(tryfirst=True)
+def pytest_runtest_protocol(item: pytest.Item, nextitem: pytest.Item | None) -> bool | None:
+    """Report a passthrough check as passed without setting it up or running it.
+
+    Parameters
+    ----------
+    item : pytest.Item
+        Item about to run.
+    nextitem : pytest.Item | None
+        Following item; unused because no fixtures are set up here.
+
+    Returns
+    -------
+    bool | None
+        ``True`` when the item was handled here, ``None`` to defer to pytest.
+    """
+    del nextitem
+    if not item.stash.get(_passthrough_key, False):
+        return None
+    hook = item.ihook
+    hook.pytest_runtest_logstart(nodeid=item.nodeid, location=item.location)
+    # Each phase gets a real report built from an empty call, so terminals
+    # and IDE explorers see a normal pass while no fixture is ever resolved.
+    for phase in _PHASES:
+        call = pytest.CallInfo.from_call(lambda: None, phase)
+        hook.pytest_runtest_logreport(report=hook.pytest_runtest_makereport(item=item, call=call))
+    hook.pytest_runtest_logfinish(nodeid=item.nodeid, location=item.location)
+    return True
 
 
 def _testpaths_target_checks(config: pytest.Config, checks_dir: Path) -> bool:

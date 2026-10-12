@@ -842,11 +842,12 @@ class TestMixedRunDeselection:
             Path(__file__).resolve().parents[1] / "pykissembed" / "checks" / "no_suppressions.py"
         )
 
-    def test_mixed_run_deselects_checks(self, tmp_path: Path) -> None:
-        """Project test + check file → only the project test is kept."""
-        out = self._run(tmp_path, "tests/test_user.py::test_user_passes", self._check_file())
-        assert "1 deselected" in out
-        assert "test_no_suppressions_or_casts" not in out
+    def test_mixed_run_passes_checks_without_running(self, tmp_path: Path) -> None:
+        """Project test + check file → the check is kept but its fixtures never run."""
+        out = self._run(tmp_path, "tests/test_user.py::test_user_passes", self._check_file(), "-v")
+        assert "deselected" not in out
+        assert "test_no_suppressions_or_casts PASSED" in out
+        assert "SETUP" not in out
 
     def test_checks_only_run_is_kept(self, tmp_path: Path) -> None:
         """Selecting only a check still runs it."""
