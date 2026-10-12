@@ -1,3 +1,27 @@
+# v0.2.10 release notes
+
+Changes since `v0.2.9`:
+
+- Stop pykissembed's checks from running with a consumer's `tests` folder in
+  VS Code. `pykissembed init` used to set Test Explorer's pytest args to
+  `["tests", "--pykissembed-all"]`, so running `tests` also ran the full check
+  set. It now writes plain `["tests"]`. The checks still show up in the test
+  tree, but they run only when you select them, run `pykissembed check`, or
+  pass `--pykissembed-all`. Re-run `pykissembed init` to migrate settings that
+  an older version generated; values you edited by hand are left alone.
+- Add `pykissembed docfix`, a guarded NumPy docstring fixer. It repairs
+  sections and entries deterministically from facts it reads out of the AST,
+  without changing code, and writes files atomically. It supports reports,
+  diffs, check mode, symbol filters and dirty-tree protection, and can
+  optionally draft text through OpenRouter and grade it with Jev.
+- Type the locked envelope context managers as generators, and assert that
+  malformed or out-of-range Jev scores emit "ungraded" warnings.
+- Refresh locked dependencies (google-genai 2.28.0, openai 3.24.0).
+
+- [pykissembed 0.2.10](https://test.pypi.org/project/pykissembed/0.2.10/)
+- [pykissembed-cloud 0.2.10](https://test.pypi.org/project/pykissembed-cloud/0.2.10/)
+- [Full comparison](https://github.com/acoustesh/pykissembed/compare/v0.2.9...v0.2.10)
+
 # v0.2.9 release notes
 
 Changes since `v0.2.8`:
