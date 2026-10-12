@@ -1,3 +1,18 @@
+# v0.2.12 release notes
+
+Changes since `v0.2.11`:
+
+- Checks in a mixed run now show as passed instead of skipped. 0.2.11
+  deselected them, and VS Code's test tree shows deselected tests as skipped.
+  They still do not run: no fixtures are set up and no embeddings are
+  computed, so a green check from a mixed run is not a real result. Selecting
+  only checks, `--pykissembed-all`, `-m <marker>` and ini `testpaths` entries
+  that point at the checks still run them for real.
+
+- [pykissembed 0.2.12](https://test.pypi.org/project/pykissembed/0.2.12/)
+- [pykissembed-cloud 0.2.12](https://test.pypi.org/project/pykissembed-cloud/0.2.12/)
+- [Full comparison](https://github.com/acoustesh/pykissembed/compare/v0.2.11...v0.2.12)
+
 # v0.2.11 release notes
 
 Changes since `v0.2.10`:
