@@ -723,3 +723,59 @@ def pytest_collect_file(file_path: Path, parent: pytest.Collector) -> pytest.Mod
         return None
     collected.add(resolved)
     return pytest.Module.from_parent(parent, path=file_path)
+
+
+def pytest_collection_modifyitems(config: pytest.Config, items: list[pytest.Item]) -> None:
+    """Deselect check items when a run mixes them with the project's own tests.
+
+    IDE test explorers list the checks (see :func:`_decide_injection`), so
+    running the explorer's root passes every discovered NodeId, checks
+    included. Such a mixed run is not an explicit request for the checks;
+    selecting only checks, ``--pykissembed-all``, a marker filter, or ini
+    ``testpaths`` naming the checks still runs them. Discovery
+    (``--collect-only``) is left untouched so the checks stay listed.
+
+    Parameters
+    ----------
+    config : pytest.Config
+        Active pytest configuration.
+    items : list[pytest.Item]
+        Collected items, filtered in place.
+    """
+    checks = _checks_dir()
+    if (
+        checks is None
+        or config.getoption("--collect-only")
+        or config.getoption("--pykissembed-all")
+        or _has_marker_filter(list(config.invocation_params.args))
+        or _testpaths_target_checks(config, checks)
+    ):
+        return
+    check_items = [item for item in items if _is_installed_check_path(str(item.path), checks)]
+    if not check_items or len(check_items) == len(items):
+        return
+    config.hook.pytest_deselected(items=check_items)
+    items[:] = [item for item in items if item not in check_items]
+
+
+def _testpaths_target_checks(config: pytest.Config, checks_dir: Path) -> bool:
+    """Return whether ini ``testpaths`` explicitly names pykissembed checks.
+
+    Parameters
+    ----------
+    config : pytest.Config
+        Active pytest configuration.
+    checks_dir : Path
+        Installed ``pykissembed/checks/`` directory.
+
+    Returns
+    -------
+    bool
+        ``True`` when a ``testpaths`` entry resolves to *checks_dir* or a check file.
+    """
+    testpaths: list[str] = config.getini("testpaths")
+    for entry in testpaths:
+        path = (config.rootpath / entry).resolve()
+        if path == checks_dir.resolve() or _is_installed_check_path(str(path), checks_dir):
+            return True
+    return False

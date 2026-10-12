@@ -793,3 +793,73 @@ __all__ = [
     "TestPluginEntryPoint",
     "TestSubprocessCollection",
 ]
+
+
+class TestMixedRunDeselection:
+    """A run mixing project tests with check NodeIds (IDE "run all") skips the checks."""
+
+    @staticmethod
+    def _run(tmp_path: Path, *selectors: str) -> str:
+        """Run ``--setup-plan`` in a scratch consumer and return its stdout.
+
+        Returns
+        -------
+        str
+            Captured pytest stdout.
+        """
+        consumer = tmp_path / "consumer"
+        (consumer / "tests").mkdir(parents=True)
+        (consumer / "tests" / "test_user.py").write_text(
+            "def test_user_passes():\n    assert True\n",
+            encoding="utf-8",
+        )
+        (consumer / "pyproject.toml").write_text(
+            '[tool.pykissembed]\npaths = ["."]\n',
+            encoding="utf-8",
+        )
+        repo = Path(__file__).resolve().parents[1]
+        result = subprocess.run(
+            [sys.executable, "-m", "pytest", "-c", "pyproject.toml", "--setup-plan", *selectors],
+            cwd=consumer,
+            env={**os.environ, "PYTHONPATH": str(repo)},
+            capture_output=True,
+            text=True,
+            check=False,
+        )
+        assert result.returncode == 0, result.stdout + result.stderr
+        return result.stdout
+
+    @staticmethod
+    def _check_file() -> str:
+        """Return the absolute path of an installed check module.
+
+        Returns
+        -------
+        str
+            Path to ``pykissembed/checks/no_suppressions.py``.
+        """
+        return str(
+            Path(__file__).resolve().parents[1] / "pykissembed" / "checks" / "no_suppressions.py"
+        )
+
+    def test_mixed_run_deselects_checks(self, tmp_path: Path) -> None:
+        """Project test + check file → only the project test is kept."""
+        out = self._run(tmp_path, "tests/test_user.py::test_user_passes", self._check_file())
+        assert "1 deselected" in out
+        assert "test_no_suppressions_or_casts" not in out
+
+    def test_checks_only_run_is_kept(self, tmp_path: Path) -> None:
+        """Selecting only a check still runs it."""
+        out = self._run(tmp_path, self._check_file())
+        assert "deselected" not in out
+        assert "test_no_suppressions_or_casts" in out
+
+    def test_pykissembed_all_keeps_checks_in_mixed_run(self, tmp_path: Path) -> None:
+        """``--pykissembed-all`` is an explicit request, so nothing is deselected."""
+        out = self._run(
+            tmp_path,
+            "tests/test_user.py::test_user_passes",
+            self._check_file(),
+            "--pykissembed-all",
+        )
+        assert "deselected" not in out
