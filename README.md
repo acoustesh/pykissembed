@@ -86,7 +86,9 @@ Pick one:
 
 `pykissembed init` configures VS Code's Test Explorer with plain `["tests"]`.
 The checks still appear in the tree (discovery uses `--collect-only`), but
-running the `tests` folder runs only your own tests. Run the checks by
+running the `tests` folder runs only your own tests. Running the tree's
+root skips them too: a run that mixes project tests with checks deselects the
+checks. Run the checks by
 selecting them in the tree, with `pykissembed check`, or with
 `pytest --pykissembed-all`. Older generated values that forced
 `--pykissembed-all` are migrated on the next `pykissembed init`; unrelated
@@ -403,7 +405,7 @@ Then:
 uv add "pykissembed[all]"
 uv lock --upgrade-package pykissembed --upgrade-package pykissembed-cloud
 uv sync
-uv run pykissembed --version    # should show 0.2.10
+uv run pykissembed --version    # should show 0.2.11
 ```
 
 After installing, configure a provider and run the suite. Missing embeddings

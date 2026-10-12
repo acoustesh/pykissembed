@@ -1,3 +1,18 @@
+# v0.2.11 release notes
+
+Changes since `v0.2.10`:
+
+- Running the root of VS Code's test tree no longer runs pykissembed's checks.
+  The tree still lists them, so "run all" passed their test IDs along with the
+  project's own tests. A run that mixes project tests with checks now skips
+  the checks. Selecting only checks (the checks folder or a single check)
+  still runs them, and so do `--pykissembed-all`, `-m <marker>` and ini
+  `testpaths` entries that point at the checks.
+
+- [pykissembed 0.2.11](https://test.pypi.org/project/pykissembed/0.2.11/)
+- [pykissembed-cloud 0.2.11](https://test.pypi.org/project/pykissembed-cloud/0.2.11/)
+- [Full comparison](https://github.com/acoustesh/pykissembed/compare/v0.2.10...v0.2.11)
+
 # v0.2.10 release notes
 
 Changes since `v0.2.9`:
