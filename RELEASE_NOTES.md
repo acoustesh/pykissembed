@@ -1,3 +1,16 @@
+# v0.2.14 release notes
+
+Changes since `v0.2.13`:
+
+- Fix Gemini embedding requests: `gemini-embedding-2` folded a list of strings
+  into a single vector, so populating embeddings failed with
+  `zip() argument 2 is shorter than argument 1`. Each text is now sent as its
+  own content and gets its own vector.
+
+- [pykissembed 0.2.14](https://test.pypi.org/project/pykissembed/0.2.14/)
+- [pykissembed-cloud 0.2.14](https://test.pypi.org/project/pykissembed-cloud/0.2.14/)
+- [Full comparison](https://github.com/acoustesh/pykissembed/compare/v0.2.13...v0.2.14)
+
 # v0.2.13 release notes
 
 Changes since `v0.2.12`:
