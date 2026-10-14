@@ -737,6 +737,8 @@ def _build_provider_caller(
             http_options=_require_callable(types, "HttpOptions")(timeout=int(timeout * 1000)),
         )
         embed_content_config = _require_callable(types, "EmbedContentConfig")
+        content_type = _require_callable(types, "Content")
+        part_type = _require_callable(types, "Part")
 
         def _gemini_request(truncated: list[str]) -> list[list[float]]:
             """Send an embedding request to the Gemini API.
@@ -766,7 +768,12 @@ def _build_provider_caller(
             )
             result = embed_content(
                 model=model,
-                contents=[GEMINI_TASK_PREFIX + text for text in truncated],
+                # gemini-embedding-2 folds a bare list of strings into ONE
+                # embedding; one Content per text yields one vector per text.
+                contents=[
+                    content_type(parts=[part_type(text=GEMINI_TASK_PREFIX + text)])
+                    for text in truncated
+                ],
                 config=embed_content_config(output_dimensionality=3072),
             )
             embeddings = getattr(result, "embeddings", None)

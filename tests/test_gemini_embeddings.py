@@ -24,12 +24,14 @@ class _Models:
     def __init__(self, transport: _Transport) -> None:
         self._transport = transport
 
-    def embed_content(self, *, model: str, contents: list[str], config: object) -> SimpleNamespace:
+    def embed_content(self, *, model: str, contents: list[object], config: object) -> SimpleNamespace:
         _ = model, config
+        # Real gemini-embedding-2 aggregates a bare list of strings into one vector.
+        count = 1 if all(isinstance(c, str) for c in contents) else len(contents)
         if self._transport.closed:
             msg = "Cannot send a request, as the client has been closed."
             raise RuntimeError(msg)
-        return SimpleNamespace(embeddings=[SimpleNamespace(values=[0.5]) for _ in contents])
+        return SimpleNamespace(embeddings=[SimpleNamespace(values=[0.5]) for _ in range(count)])
 
 
 class _Client:
@@ -48,6 +50,8 @@ def test_gemini_request_keeps_client_alive(monkeypatch: pytest.MonkeyPatch) -> N
     types = ModuleType("google.genai.types")
     monkeypatch.setattr(types, "HttpOptions", dict, raising=False)
     monkeypatch.setattr(types, "EmbedContentConfig", dict, raising=False)
+    monkeypatch.setattr(types, "Content", dict, raising=False)
+    monkeypatch.setattr(types, "Part", dict, raising=False)
     monkeypatch.setitem(sys.modules, "google.genai", genai)
     monkeypatch.setitem(sys.modules, "google.genai.types", types)
     monkeypatch.setenv("GOOGLE_API_KEY", "test-key-with-at-least-20-chars")
@@ -55,4 +59,4 @@ def test_gemini_request_keeps_client_alive(monkeypatch: pytest.MonkeyPatch) -> N
     make_request, _ = _build_provider_caller("gemini", "gemini-embedding-2", timeout=5.0)
     _ = gc.collect()
 
-    assert make_request(["def f(): pass"]) == [[0.5]]
+    assert make_request(["def f(): pass", "def g(): pass"]) == [[0.5], [0.5]]
