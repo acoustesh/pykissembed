@@ -1,3 +1,14 @@
+# v0.2.13 release notes
+
+Changes since `v0.2.12`:
+
+- Gemini provider now defaults to `gemini-embedding-2` (config and
+  similarity constants updated to match).
+
+- [pykissembed 0.2.13](https://test.pypi.org/project/pykissembed/0.2.13/)
+- [pykissembed-cloud 0.2.13](https://test.pypi.org/project/pykissembed-cloud/0.2.13/)
+- [Full comparison](https://github.com/acoustesh/pykissembed/compare/v0.2.12...v0.2.13)
+
 # v0.2.12 release notes
 
 Changes since `v0.2.11`:
