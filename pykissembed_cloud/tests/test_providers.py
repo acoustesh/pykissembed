@@ -58,7 +58,7 @@ class TestAttributes:
         ("provider", "expected_name", "expected_model"),
         [
             (OpenAIProvider, "openai", "openai/text-embedding-3-large"),
-            (GeminiProvider, "gemini", "google/gemini-embedding-001"),
+            (GeminiProvider, "gemini", "google/gemini-embedding-2"),
             (QwenProvider, "qwen", "qwen/qwen3-embedding-8b"),
             (JinaProvider, "jina", "jina-code-embeddings-1.5b"),
         ],
@@ -155,6 +155,31 @@ class TestEmbed:
         assert captured["input"] == ["alpha", "beta"]
         assert captured["base_url"] == "https://openrouter.ai/api/v1/"
         assert captured["api_key"] == "sk-or-fake"
+
+    @staticmethod
+    def test_gemini_prefixes_inputs_with_task(monkeypatch: pytest.MonkeyPatch) -> None:
+        """gemini-embedding-2 selects the task via a text prefix on each input."""
+        monkeypatch.setenv("OPENROUTER_API_KEY", "sk-or-fake")
+        sent: list[object] = []
+
+        class _FakeEmbeddings:
+            @staticmethod
+            def create(**kwargs: object) -> object:
+                request_input = kwargs["input"]
+                assert isinstance(request_input, list)
+                sent.extend(request_input)
+                return _FakeResponse([[0.0] for _ in request_input])
+
+        class _FakeClient:
+            def __init__(self, *, base_url: str, api_key: str) -> None:
+                self.embeddings = _FakeEmbeddings()
+
+        import openai as openai_module
+
+        monkeypatch.setattr(openai_module, "OpenAI", _FakeClient)
+
+        _ = GeminiProvider().embed(["alpha"])
+        assert sent == ["task: sentence similarity | query: alpha"]
 
     @staticmethod
     def test_jina_uses_native_endpoint_and_extra_body(monkeypatch: pytest.MonkeyPatch) -> None:

@@ -52,7 +52,7 @@ def test_gemini_request_keeps_client_alive(monkeypatch: pytest.MonkeyPatch) -> N
     monkeypatch.setitem(sys.modules, "google.genai.types", types)
     monkeypatch.setenv("GOOGLE_API_KEY", "test-key-with-at-least-20-chars")
 
-    make_request, _ = _build_provider_caller("gemini", "gemini-embedding-001", timeout=5.0)
+    make_request, _ = _build_provider_caller("gemini", "gemini-embedding-2", timeout=5.0)
     _ = gc.collect()
 
     assert make_request(["def f(): pass"]) == [[0.5]]

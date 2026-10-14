@@ -27,7 +27,10 @@ QWEN_EMBED_MODEL = "qwen/qwen3-embedding-8b"
 VOYAGE_CODE_MODEL = "voyage-code-3"
 
 # Gemini config
-GEMINI_EMBED_MODEL = "gemini-embedding-001"
+GEMINI_EMBED_MODEL = "gemini-embedding-2"
+# gemini-embedding-2 has no task_type parameter; the task is selected by
+# prefixing each text. Symmetric prefix for semantic textual similarity.
+GEMINI_TASK_PREFIX = "task: sentence similarity | query: "
 
 # Jina config — native (non-OpenRouter) API with asymmetric query/passage tasks.
 # Each function is embedded twice (once as query, once as passage); similarity is

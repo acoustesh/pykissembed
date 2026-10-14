@@ -64,6 +64,8 @@ class OpenAICompatProvider:
     extra_body
         Extra JSON fields merged into each ``embeddings.create`` request (e.g.
         Jina's ``{"task": ..., "truncate": False}``). ``None`` sends none.
+    input_prefix
+        Text prepended to every input (e.g. Gemini Embedding 2's task prefix).
     """
 
     name: str
@@ -76,6 +78,7 @@ class OpenAICompatProvider:
     api_key_env: ClassVar[str] = _API_KEY_ENV
     api_key_url: ClassVar[str] = _OPENROUTER_KEY_URL
     extra_body: ClassVar[dict[str, Any] | None] = None
+    input_prefix: ClassVar[str] = ""
 
     def embed(self, texts: Sequence[str]) -> list[list[float]]:
         """Compute embedding vectors for *texts*.
@@ -114,7 +117,7 @@ class OpenAICompatProvider:
         # fields keep the exact create() signature the OpenAI SDK expects.
         vectors: list[list[float]] = []
         for start in range(0, len(inputs), self.batch_size):
-            chunk = inputs[start : start + self.batch_size]
+            chunk = [self.input_prefix + t for t in inputs[start : start + self.batch_size]]
             if self.extra_body:
                 response = client.embeddings.create(
                     input=chunk,

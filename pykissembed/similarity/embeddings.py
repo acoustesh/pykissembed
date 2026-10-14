@@ -27,6 +27,7 @@ if TYPE_CHECKING:
 from pykissembed.similarity.constants import (
     CODESTRAL_EMBED_MODEL,
     GEMINI_EMBED_MODEL,
+    GEMINI_TASK_PREFIX,
     JINA_API_URL,
     JINA_EMBED_MODEL,
     OPENROUTER_API_URL,
@@ -42,7 +43,7 @@ _VOYAGE_API_URL = "https://api.voyageai.com/v1/embeddings"
 _OPENAI_MAX_TOKENS = 8191  # text-embedding-3-large limit is 8192
 _VOYAGE_MAX_TOKENS = 31000  # voyage-code-3 limit is 32000
 _CODESTRAL_MAX_TOKENS = 8000  # Conservative estimate
-_GEMINI_MAX_TOKENS = 2000  # gemini-embedding-001 limit is 2048
+_GEMINI_MAX_TOKENS = 8000  # gemini-embedding-2 limit is 8192
 _QWEN_MAX_TOKENS = 32000  # qwen3-embedding-8b limit
 # jina-code-embeddings-1.5b rejects long inputs with "Failed to encode text"
 # (empirically ~768+ cl100k tokens, and its own truncate=True does NOT help), so
@@ -765,11 +766,8 @@ def _build_provider_caller(
             )
             result = embed_content(
                 model=model,
-                contents=truncated,
-                config=embed_content_config(
-                    task_type="SEMANTIC_SIMILARITY",
-                    output_dimensionality=3072,
-                ),
+                contents=[GEMINI_TASK_PREFIX + text for text in truncated],
+                config=embed_content_config(output_dimensionality=3072),
             )
             embeddings = getattr(result, "embeddings", None)
             if embeddings is None:

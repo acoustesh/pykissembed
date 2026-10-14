@@ -16,7 +16,7 @@ Providers:
 - OpenAI-Text, OpenAI-AST (text-embedding-3-large)
 - Codestral-Text, Codestral-AST (codestral-embed via OpenRouter)
 - Voyage-Text, Voyage-AST (voyage-code-3)
-- Gemini-Text, Gemini-AST (gemini-embedding-001)
+- Gemini-Text, Gemini-AST (gemini-embedding-2)
 - Qwen-Text, Qwen-AST (qwen3-embedding-8b)
 - Jina-Text (nl2code), Jina-AST (code2code) (jina-code-embeddings-1.5b)
 - Combined (14-way concatenation)

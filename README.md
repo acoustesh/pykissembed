@@ -204,8 +204,8 @@ using embedding providers. It supports 13 providers:
 | Codestral-AST | codestral-embed-2505 | ast_hash | 0.97 |
 | Voyage-Text | voyage-code-3 | text_hash | 0.95 |
 | Voyage-AST | voyage-code-3 | ast_hash | 0.95 |
-| Gemini-Text | gemini-embedding-001 | text_hash | 0.90 |
-| Gemini-AST | gemini-embedding-001 | ast_hash | 0.90 |
+| Gemini-Text | gemini-embedding-2 | text_hash | 0.90 |
+| Gemini-AST | gemini-embedding-2 | ast_hash | 0.90 |
 | Qwen-Text | qwen3-embedding-8b | text_hash | 0.90 |
 | Qwen-AST | qwen3-embedding-8b | ast_hash | 0.90 |
 | Jina-Text | jina-code-embeddings-1.5b (nl2code) | text_hash | 0.90 |

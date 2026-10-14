@@ -41,7 +41,7 @@ loader runs lazily on the first `is_configured()` call, so importing
 | Name | Model | Max tokens | Batch size | Key |
 |---|---|---|---|---|
 | `openai` | `openai/text-embedding-3-large` | 8191 | 100 | `OPENROUTER_API_KEY` |
-| `gemini` | `google/gemini-embedding-001` | 2048 | 100 | `OPENROUTER_API_KEY` |
+| `gemini` | `google/gemini-embedding-2` | 8000 | 100 | `OPENROUTER_API_KEY` |
 | `qwen` | `qwen/qwen3-embedding-8b` | 32000 | 32 | `OPENROUTER_API_KEY` |
 | `jina` | `jina-code-embeddings-1.5b` | 512 | 32 | `JINA_API_KEY` |
 
