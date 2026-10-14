@@ -30,4 +30,7 @@
     "**/.pytest_cache": true,
     "**/.ruff_cache": true
   },
+  "chat.tools.terminal.autoApprove": {
+    "paste": true
+  },
 }
