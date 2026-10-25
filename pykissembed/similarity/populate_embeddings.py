@@ -70,7 +70,16 @@ class _ProviderRequestError(RuntimeError):
 
 
 def _emit(message: str) -> None:
-    """Write one status line to standard output."""
+    """Write *message* plus a trailing newline to ``sys.stdout``.
+
+    Used for progress, skip and failure notices during population. The
+    stream is not flushed explicitly.
+
+    Parameters
+    ----------
+    message : str
+        Line text without its newline.
+    """
     _ = sys.stdout.write(f"{message}\n")
 
 
@@ -195,7 +204,25 @@ def _get_function_hashes(baselines: Baselines) -> dict[str, object]:
 
 @dataclass(frozen=True)
 class _ProviderCfg:
-    """Configuration for a single embedding provider's populate step."""
+    """Configuration for a single non-Jina provider's populate step.
+
+    Attributes
+    ----------
+    label : str
+        User-facing label used in status lines (e.g. ``"OpenAI-Text"``).
+    env_var : str
+        Environment variable holding the API key.
+    invalid_prefixes : tuple[str, ...]
+        Placeholder key prefixes that make the key count as unset.
+    cache_key : str
+        Baselines key of the embedding cache this step writes.
+    use_text : bool
+        ``True`` embeds ``text_for_embedding`` keyed by ``text_hash``;
+        ``False`` embeds ``ast_text`` keyed by the AST ``hash``.
+    provider : str
+        Canonical provider name passed to the embedding transport;
+        ``"gemini"`` is sent in batches of 50 with a pause between them.
+    """
 
     label: str
     env_var: str

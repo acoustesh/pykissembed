@@ -1,13 +1,15 @@
 """Jev-backed docstring quality audit (TypeSafe ``jev-1.13``).
 
 Sends each documented function/class source to the OpenRouter Decisions API
-and asks a score question on an ordered 1-6 docstring rubric. The code is the
+and asks a score question on an ordered 0-5 docstring rubric. The code is the
 source of truth when checking docstring claims. Valid responses are cached by
 the exact state and question text.
 
 A symbol fails when its score is below ``min_score`` in
-``tests/baselines/jev_docstring_audit.json``. Symbols with no docstring
-never reach the API -- they are failed locally as level 1.
+``tests/baselines/jev_docstring_audit.json``, unless the model's confidence
+in that grade is at most ``LOW_CONFIDENCE``: such a grade passes with a
+warning. Symbols with no docstring never reach the API -- they are failed
+locally as level 0.
 
 The check runs with the other consumer checks (marked ``jev``). Without an
 OpenRouter key it grades cached responses and skips cache misses.
@@ -32,11 +34,14 @@ from pykissembed.config import get_config
 from pykissembed.jev import (
     API_KEY_ENV,
     JEV_MODEL,
+    LOW_CONFIDENCE,
     SymbolState,
     ask_jev,
     extract_symbol_states,
+    is_low_confidence,
     load_api_key,
     open_cache,
+    parse_confidence,
     parse_score,
 )
 
@@ -47,59 +52,65 @@ if TYPE_CHECKING:
 
 BASELINE_FILENAME = "jev_docstring_audit.json"
 
-# Minimum expected score (on the 1-6 rubric) for a symbol to pass. The API
+# Minimum expected score (on the 0-5 rubric) for a symbol to pass. The API
 # returns the *expected value* of the distribution over the levels, so the bar
-# is continuous: 4.00 passes and 3.99 does not. A float here is valid and lets
+# is continuous: 3.00 passes and 2.99 does not. A float here is valid and lets
 # the boundary be nudged without a code change.
 #
-# 4 is not a guess. It is the knee of a live 2026-09-27 run that graded all 392
-# documented symbols (median 5.02, 0 skipped, ~$0.02), scored against the
-# AST-verified verdicts from the earlier noul run:
+# 3 is not a guess. It is the knee of a live 2026-09-27 run that graded all 392
+# documented symbols (median 4.02, 0 skipped, ~$0.02), scored against the
+# AST-verified verdicts from the earlier noul run. That run reported a 1-6
+# scale; every number here is converted to 0-5:
 #
 #   min_score   flagged   precision   recall
-#      3.50       126        98.4%      79.5%
-#      3.90       143        92.3%      84.6%
-#      4.00       146        92.5%      86.5%   <- chosen
-#      4.25       151        92.1%      89.1%
-#      5.00       192        75.0%      92.3%
+#      2.50       126        98.4%      79.5%
+#      2.90       143        92.3%      84.6%
+#      3.00       146        92.5%      86.5%   <- chosen
+#      3.25       151        92.1%      89.1%
+#      4.00       192        75.0%      92.3%
 #
-# Below 3.9 precision holds but recall collapses; above 4.25 the false positives
-# climb faster than the real findings. The band just under 4.0 held only three
+# Below 2.9 precision holds but recall collapses; above 3.25 the false positives
+# climb faster than the real findings. The band just under 3.0 held only three
 # symbols, all three genuine, so the boundary is not perched on noise.
 #
 # The residual false positives are structural, not random: test classes and
-# Protocol stubs score 3.2-4.1 because they have no parameters to document,
+# Protocol stubs score 2.2-3.1 because they have no parameters to document,
 # yet a bare "Tests for X." docstring is perfectly adequate. Eight of the
 # eleven are `Test*` classes, all verified conformant, which is why they get
 # their own bar via DEFAULT_TEST_MIN_SCORE.
-DEFAULT_MIN_SCORE = 4.0
+DEFAULT_MIN_SCORE = 3.0
 
 # Test code is held to a lower bar. A `Test*` class documents a gate rather
 # than a public API, and pytest fixtures routinely carry parameters that are
 # self-evident from the name.
 #
 # The bar is LOWER than DEFAULT_MIN_SCORE because raising it backfired. The
-# eight `Test*` classes here span 3.18-4.95, so a 4.5 bar failed the two that
-# sit in [4.0, 4.5) -- TestCyclomaticComplexity (4.08) and TestDocstringFormat
-# (4.39) -- both verified conformant by AST inspection, i.e. false positives
-# by construction. Swept against the live 2026-09-27 run:
+# eight `Test*` classes here span 2.18-3.95, so a 3.5 bar failed the two that
+# sit in [3.0, 3.5) -- TestCyclomaticComplexity (3.08) and TestDocstringFormat
+# (3.39) -- both verified conformant by AST inspection, i.e. false positives
+# by construction. Swept against the live 2026-09-27 run (converted to 0-5):
 #
 #   test_min_score   flagged   noise   real kept
-#        4.50         148      13        135
-#        4.00         146      11        135
-#        3.75         144       9        135
-#        3.50         142       7        135   <- chosen
-#        3.00         141       6        135
+#        3.50         148      13        135
+#        3.00         146      11        135
+#        2.75         144       9        135
+#        2.50         142       7        135   <- chosen
+#        2.00         141       6        135
 #
-# 3.5 clears six of the seven test false positives while keeping every real
-# finding: the lowest-scoring genuine defect outside tests is a 1.00 (three
+# 2.5 clears six of the seven test false positives while keeping every real
+# finding: the lowest-scoring genuine defect outside tests is a 0.00 (three
 # symbols with no docstring at all), so there is no recall to trade. Only
-# TestJevDocstringAudit (3.18) is still flagged.
-DEFAULT_TEST_MIN_SCORE = 3.5
+# TestJevDocstringAudit (2.18) is still flagged.
+DEFAULT_TEST_MIN_SCORE = 2.5
+
 _MIN_SCORE_KEY = "min_score"
 _TEST_MIN_SCORE_KEY = "test_min_score"
 _TEST_SYMBOL_PREFIX = "Test"
-_LEVEL_NO_DOCTRING = 1.0
+_LEVEL_NO_DOCTRING = 0.0
+
+# (level, confidence); confidence is None when the reply carries none, and
+# for a missing docstring, which is graded locally.
+type Grade = tuple[float, float | None]
 
 
 def is_test_symbol(symbol: str) -> bool:
@@ -208,7 +219,7 @@ _SCORE_QUESTION_ID = "docstring_score"
 
 # Ordered worst -> best. The Decisions API numbers a `score` question from 0
 # for the first criterion up to len(criteria) - 1, so this tuple *is* the
-# rubric; the audit shifts the API's 0-index back to 1-index.
+# rubric and the API's score is used as the level unchanged.
 #
 # The API answers with the *expected value* of the distribution over these
 # levels, not the argmax, so a reply is usually fractional: 3.5 means the model
@@ -217,36 +228,38 @@ _SCORE_QUESTION_ID = "docstring_score"
 #
 # The ladder is monotone in severity: each level names the worst defect
 # present and how many of it, with no gap between neighbouring levels.
-#   6  no defects
-#   5  1-2 Minor
-#   4  3+ Minor
-#   3  1-2 Moderate
-#   2  3+ Moderate, or 1 Major
-#   1  2+ Major, or no docstring
+#   5  no defects
+#   4  1-2 Minor
+#   3  3+ Minor
+#   2  1-2 Moderate
+#   1  3+ Moderate, or 1 Major
+#   0  2+ Major, or no docstring
 _SCORE_LEVELS: tuple[str, ...] = (
-    # 1
+    # 0
     (
         "No docstring at all; or a docstring carrying at least 2 Major Errors, "
         "Inaccuracies, Omissions or Deviations."
     ),
-    # 2
+    # 1
     (
         "Docstring present, with 1 Major Error, Inaccuracy, Omission or "
         "Deviation, or with 3 or more Moderate ones."
     ),
-    # 3
+    # 2
     "Docstring present, with 1 or 2 Moderate Errors, Inaccuracies, Omissions or Deviations.",
-    # 4
+    # 3
     "Docstring present, with 3 or more Minor Errors, Inaccuracies, Omissions or Deviations.",
-    # 5
+    # 4
     "Docstring present, with only 1 or 2 Minor Errors, Inaccuracies, Omissions or Deviations.",
-    # 6
+    # 5
     (
         "Docstring present and fully accurate with respect to the actual code (the "
         "code is the source of truth), with no Errors, Inaccuracies, Omissions or "
         "Deviations."
     ),
 )
+
+_MAX_LEVEL = float(len(_SCORE_LEVELS) - 1)
 
 _QUESTIONS: dict[str, dict[str, object]] = {
     _SCORE_QUESTION_ID: {
@@ -263,11 +276,11 @@ def _evaluate_symbol(level: float, min_score: float) -> bool:
     Parameters
     ----------
     level : float
-        The expected 1-6 level returned by Jev, or
+        The expected 0-5 level returned by Jev, or
         :data:`_LEVEL_NO_DOCTRING` for a symbol with no docstring. Fractional
         values arise because the API reports an expected value, not an
-        argmax, so a level of 3.9 is a docstring the model is 90% confident
-        is a 4.
+        argmax, so a level of 2.9 can be a docstring the model is 90% sure
+        is a 3 and 10% sure is a 2.
     min_score : float
         Minimum passing level from the baseline envelope.
 
@@ -280,20 +293,25 @@ def _evaluate_symbol(level: float, min_score: float) -> bool:
     return level >= min_score
 
 
-def _shift(score: float | None) -> float | None:
-    """Shift a valid zero-based score to the docstring rubric's levels 1-6.
+def _parse_grade(payload: object) -> Grade | None:
+    """Read the level and confidence of a docstring score answer.
 
     Parameters
     ----------
-    score : float | None
-        Zero-based wire score from the API, or ``None`` when invalid.
+    payload : object
+        Decoded Decisions response.
 
     Returns
     -------
-    float | None
-        One-based score, or ``None`` for an invalid response.
+    Grade | None
+        ``(level, confidence)``, or ``None`` when the score is malformed. A
+        missing or out-of-range confidence alone does not invalidate the
+        reply; it is reported as ``None``.
     """
-    return None if score is None else score + 1
+    level = parse_score(payload, _SCORE_QUESTION_ID, len(_SCORE_LEVELS))
+    if level is None:
+        return None
+    return level, parse_confidence(payload, _SCORE_QUESTION_ID)
 
 
 @contextlib.contextmanager
@@ -332,9 +350,8 @@ def _read_threshold(data: object, key: str, default: float) -> float:
     Returns
     -------
     float
-        The configured minimum level, clamped into
-        ``[1, len(_SCORE_LEVELS)]`` so a hand-edited file cannot disable the
-        gate or demand an unreachable level.
+        The configured minimum level, clamped into ``[0, _MAX_LEVEL]`` so a
+        hand-edited file cannot demand a level outside the rubric.
     """
     mapping = data if isinstance(data, dict) else {}
     raw = mapping.get(key, default)
@@ -343,7 +360,7 @@ def _read_threshold(data: object, key: str, default: float) -> float:
     value = float(raw)
     if not math.isfinite(value):
         return float(default)
-    return max(1.0, min(float(len(_SCORE_LEVELS)), value))
+    return max(0.0, min(_MAX_LEVEL, value))
 
 
 def _read_min_score(data: object) -> float:
@@ -382,36 +399,38 @@ def _min_score_for(state: SymbolState, data: object) -> float:
     return _read_threshold(data, _MIN_SCORE_KEY, DEFAULT_MIN_SCORE)
 
 
-def _format_symbol_failure(state: SymbolState, level: float, min_score: float) -> str:
-    """Render one symbol's failure line with its expected rubric level.
+def _format_symbol_failure(state: SymbolState, grade: Grade, min_score: float) -> str:
+    """Render one symbol's below-the-bar line with its expected rubric level.
 
     Parameters
     ----------
     state : SymbolState
-        The failing symbol.
-    level : float
-        The expected 1-6 level awarded by Jev, usually fractional.
+        The symbol scoring below its bar.
+    grade : Grade
+        The expected 0-5 level awarded by Jev (usually fractional) and the
+        model's confidence in it.
     min_score : float
         The minimum passing level.
 
     Returns
     -------
     str
-        A single ``file:line symbol(kind) — level X/6 (need M): text`` line.
+        A single ``file:line symbol(kind) — level X/5, confidence C
+        (need M): text`` line; the confidence part is omitted when unknown.
         The description is taken from the nearest whole level, since the
-        rubric text is written per level, and the raw expected value is
-        printed so a low-confidence grade stays visible.
+        rubric text is written per level.
     """
-    nearest = min(len(_SCORE_LEVELS), max(1, round(level)))
-    text = _SCORE_LEVELS[nearest - 1]
+    level, confidence = grade
+    text = _SCORE_LEVELS[round(min(_MAX_LEVEL, max(0.0, level)))]
+    sureness = "" if confidence is None else f", confidence {confidence:.2f}"
     return (
         f"{state.file_key}:{state.lineno} {state.symbol}({state.kind}) — "
-        f"level {level:.2f}/{len(_SCORE_LEVELS)} (need {min_score:g}): {text}"
+        f"level {level:.2f}/{_MAX_LEVEL:g}{sureness} (need {min_score:g}): {text}"
     )
 
 
-def symbol_level(state: SymbolState, *, api_key: str | None, conn: Connection) -> float | None:
-    """Return the 1-6 rubric level of one symbol, from cache or the API.
+def symbol_grade(state: SymbolState, *, api_key: str | None, conn: Connection) -> Grade | None:
+    """Return the 0-5 rubric level of one symbol and its confidence.
 
     Parameters
     ----------
@@ -424,19 +443,34 @@ def symbol_level(state: SymbolState, *, api_key: str | None, conn: Connection) -
 
     Returns
     -------
-    float | None
-        The expected level; level one for a symbol with no docstring, which
-        never reaches the API; ``None`` when no valid grade is available.
+    Grade | None
+        ``(level, confidence)`` from cache or the API; ``(0.0, None)`` for a
+        symbol with no docstring, which never reaches the API; ``None`` when
+        no valid grade is available.
     """
     if not state.has_docstring:
-        return _LEVEL_NO_DOCTRING
-    return ask_jev(
-        state,
-        _QUESTIONS,
-        parse=lambda payload: _shift(parse_score(payload, _SCORE_QUESTION_ID, len(_SCORE_LEVELS))),
-        api_key=api_key,
-        conn=conn,
-    )
+        return _LEVEL_NO_DOCTRING, None
+    return ask_jev(state, _QUESTIONS, parse=_parse_grade, api_key=api_key, conn=conn)
+
+
+def is_failing(grade: Grade, min_score: float) -> bool:
+    """Return whether a grade fails the gate at *min_score*.
+
+    Parameters
+    ----------
+    grade : Grade
+        ``(level, confidence)`` of one symbol.
+    min_score : float
+        The bar that applies to the symbol.
+
+    Returns
+    -------
+    bool
+        ``True`` when the level is below the bar and the confidence is not
+        low enough to excuse it.
+    """
+    level, confidence = grade
+    return not _evaluate_symbol(level, min_score) and not is_low_confidence(confidence)
 
 
 # Public re-export for tools that apply the gate's own thresholds.
@@ -445,8 +479,8 @@ min_score_for = _min_score_for
 
 def _grade_docstrings(
     states: list[SymbolState], baseline_data: object, api_key: str | None, conn: Connection
-) -> tuple[list[str], int, int]:
-    """Grade docstrings, assigning level one locally when they are absent.
+) -> tuple[list[str], list[str], int, int]:
+    """Grade docstrings, assigning level zero locally when they are absent.
 
     Parameters
     ----------
@@ -461,26 +495,30 @@ def _grade_docstrings(
 
     Returns
     -------
-    tuple[list[str], int, int]
-        Failure descriptions, ungraded count, and graded count.
+    tuple[list[str], list[str], int, int]
+        Failure lines, lines for below-the-bar grades excused by low
+        confidence, ungraded count, and graded count.
     """
     failures: list[str] = []
+    uncertain: list[str] = []
     ungraded = 0
     graded = 0
     for state in states:
         min_score = _min_score_for(state, baseline_data)
-        level = symbol_level(state, api_key=api_key, conn=conn)
-        if level is None:
+        grade = symbol_grade(state, api_key=api_key, conn=conn)
+        if grade is None:
             ungraded += 1
             continue
         graded += 1
-        if not _evaluate_symbol(level, min_score):
-            failures.append(_format_symbol_failure(state, level, min_score))
-    return failures, ungraded, graded
+        if _evaluate_symbol(grade[0], min_score):
+            continue
+        line = _format_symbol_failure(state, grade, min_score)
+        (failures if is_failing(grade, min_score) else uncertain).append(line)
+    return failures, uncertain, ungraded, graded
 
 
 class TestJevDocstringAudit:
-    """Jev-judged docstring quality on a 1-6 rubric (consumer check)."""
+    """Jev-judged docstring quality on a 0-5 rubric (consumer check)."""
 
     @staticmethod
     @pytest.mark.jev
@@ -490,10 +528,12 @@ class TestJevDocstringAudit:
         update_baselines: bool,
         cached_only: bool,
     ) -> None:
-        """Audit function and class docstrings against the 1-6 rubric.
+        """Audit function and class docstrings against the 0-5 rubric.
 
-        An absent docstring receives level one locally. Documented symbols
-        use Jev grades, with a separate minimum for pytest-style classes.
+        An absent docstring receives level zero locally. Documented symbols
+        use Jev grades, with a separate minimum for pytest-style classes. A
+        grade below its minimum fails the test unless its confidence is at
+        most ``LOW_CONFIDENCE``; those are reported in a warning instead.
 
         Parameters
         ----------
@@ -520,7 +560,17 @@ class TestJevDocstringAudit:
             if not states:
                 pytest.skip("No auditable functions or classes found")
             with closing(open_cache(config)) as conn:
-                failures, ungraded, graded = _grade_docstrings(states, envelope.data, api_key, conn)
+                failures, uncertain, ungraded, graded = _grade_docstrings(
+                    states, envelope.data, api_key, conn
+                )
+            # Warn before any failure so excused grades show up either way.
+            if uncertain:
+                warnings.warn(
+                    f"Jev docstring audit: {len(uncertain)} symbol(s) below the minimum "
+                    f"passed on low confidence (<= {LOW_CONFIDENCE:g}):\n" + "\n".join(uncertain),
+                    UserWarning,
+                    stacklevel=2,
+                )
             if failures:
                 header = (
                     "Jev docstring audit: "

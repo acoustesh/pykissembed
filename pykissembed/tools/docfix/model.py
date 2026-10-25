@@ -341,6 +341,10 @@ def parse(text: str) -> Docstring:
 def parse_entries(body: list[str]) -> list[Entry] | None:
     """Split a section body into entries headed by column-0 lines.
 
+    Each non-blank line that does not start with whitespace opens a new
+    ``Entry``; every following line, blank or indented, is appended to
+    that entry's ``desc``.
+
     Parameters
     ----------
     body : list[str]
@@ -349,8 +353,11 @@ def parse_entries(body: list[str]) -> list[Entry] | None:
     Returns
     -------
     list[Entry] | None
-        Entries whose rendering reproduces *body*, or ``None`` when indented
-        text precedes the first entry header and the body is not a list.
+        Entries in body order, or ``None`` if a non-blank indented line
+        appears before the first header. Blank lines before the first
+        header are dropped, so :func:`render_entries` reproduces *body*
+        only when it does not start with blank lines. An empty or
+        all-blank body yields ``[]``.
     """
     entries: list[Entry] = []
     for line in body:

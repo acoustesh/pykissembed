@@ -14,36 +14,37 @@ from pykissembed.config import PyqtestConfig, reset_config_cache
 if TYPE_CHECKING:
     from pathlib import Path
 
-# The rubric is 1-indexed for humans; the API returns 0-indexed scores.
-_PASS_LEVEL = 6
-_MIN_SCORE = 4
+# The rubric uses the API's 0-indexed levels directly.
+_PASS_LEVEL = 5
+_MIN_SCORE = 3
 
 
-def _answers_response(level: int = _PASS_LEVEL) -> dict[str, object]:
+def _answers_response(level: int = _PASS_LEVEL, confidence: float = 1) -> dict[str, object]:
     """Build a Decisions API body for a rubric *level*.
 
     Parameters
     ----------
     level : int
-        1-indexed rubric level to simulate.
+        0-indexed rubric level to simulate.
+    confidence : float
+        Confidence the canned answer reports.
 
     Returns
     -------
     dict[str, object]
-        A well-formed ``score`` answer payload, 0-indexed as the API sends it.
+        A well-formed ``score`` answer payload.
     """
-    api_score = level - 1
     return {
         "answers": {
             "docstring_score": {
                 "type": "score",
-                "score": api_score,
+                "score": level,
                 "legend": {
                     str(i): text
                     for i, text in enumerate(jev_docstring_audit._SCORE_LEVELS)  # ruff:ignore[private-member-access]
                 },
-                "probabilities": {str(i): (1.0 if i == api_score else 0.0) for i in range(6)},
-                "confidence": 1,
+                "probabilities": {str(i): (1.0 if i == level else 0.0) for i in range(6)},
+                "confidence": confidence,
             },
         },
     }
@@ -102,16 +103,15 @@ def _post_returning(payload: dict[str, object]) -> object:
 
 
 def _parse_docstring_score(payload: object) -> float | None:
-    """Convert Jev's zero-based score to the docstring rubric's level.
+    """Read the docstring rubric level from a Jev answer.
 
     Returns
     -------
     float | None
-        One-based level, or ``None`` for a malformed answer.
+        The 0-5 level, or ``None`` for a malformed answer.
     """
-    return jev_docstring_audit._shift(  # ruff:ignore[private-member-access]
-        jev.parse_score(payload, "docstring_score", 6)
-    )
+    grade = jev_docstring_audit._parse_grade(payload)  # ruff:ignore[private-member-access]
+    return None if grade is None else grade[0]
 
 
 def _write_module(path: Path, name: str = "module.py") -> Path:
@@ -169,7 +169,7 @@ def test_perfect_score_passes(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    """A level-6 score clears the default minimum without failure."""
+    """A level-5 score clears the default minimum without failure."""
     monkeypatch.setenv("OPENROUTER_API_KEY", "openrouter-test-key-long-enough")
     monkeypatch.setattr(requests, "post", _post_returning(_answers_response(_PASS_LEVEL)))
     monkeypatch.setattr(jev.time, "sleep", lambda _s: None)
@@ -181,9 +181,9 @@ def test_minor_issues_score_passes(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    """Level 5 (one or two very minor EIOD) is the intended pass band."""
+    """Level 4 (one or two very minor EIOD) is the intended pass band."""
     monkeypatch.setenv("OPENROUTER_API_KEY", "openrouter-test-key-long-enough")
-    monkeypatch.setattr(requests, "post", _post_returning(_answers_response(5)))
+    monkeypatch.setattr(requests, "post", _post_returning(_answers_response(4)))
     monkeypatch.setattr(jev.time, "sleep", lambda _s: None)
 
     _run_check(tmp_path, monkeypatch)
@@ -193,45 +193,86 @@ def test_important_errors_fail_with_level_in_message(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    """Level 3 fails and the message names the level and the required bar."""
+    """Level 2 fails and the message names the level and the required bar."""
     monkeypatch.setenv("OPENROUTER_API_KEY", "openrouter-test-key-long-enough")
-    monkeypatch.setattr(requests, "post", _post_returning(_answers_response(3)))
+    monkeypatch.setattr(requests, "post", _post_returning(_answers_response(2)))
     monkeypatch.setattr(jev.time, "sleep", lambda _s: None)
 
     with pytest.raises(pytest.fail.Exception) as exc_info:
         _run_check(tmp_path, monkeypatch)
 
     message = str(exc_info.value)
-    assert "level 3.00/6" in message
-    assert "need 4" in message
+    assert "level 2.00/5, confidence 1.00" in message
+    assert "need 3" in message
     assert "Moderate Errors" in message
 
 
-def test_level_four_passes_at_the_minimum(
+def test_level_three_passes_at_the_minimum(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    """Level 4 clears the bar, so the pass band is 4-6 inclusive."""
+    """Level 3 clears the bar, so the pass band is 3-5 inclusive."""
     monkeypatch.setenv("OPENROUTER_API_KEY", "openrouter-test-key-long-enough")
-    monkeypatch.setattr(requests, "post", _post_returning(_answers_response(4)))
+    monkeypatch.setattr(requests, "post", _post_returning(_answers_response(3)))
     monkeypatch.setattr(jev.time, "sleep", lambda _s: None)
 
     _run_check(tmp_path, monkeypatch)
 
 
-def test_level_three_is_the_first_failing_level(
+def test_level_two_is_the_first_failing_level(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    """Level 3 is one below the bar and therefore the first failure."""
+    """Level 2 is one below the bar and therefore the first failure."""
     monkeypatch.setenv("OPENROUTER_API_KEY", "openrouter-test-key-long-enough")
-    monkeypatch.setattr(requests, "post", _post_returning(_answers_response(3)))
+    monkeypatch.setattr(requests, "post", _post_returning(_answers_response(2)))
     monkeypatch.setattr(jev.time, "sleep", lambda _s: None)
 
     with pytest.raises(pytest.fail.Exception) as exc_info:
         _run_check(tmp_path, monkeypatch)
 
-    assert "level 3.00/6" in str(exc_info.value)
+    assert "level 2.00/5" in str(exc_info.value)
+
+
+@pytest.mark.parametrize("confidence", [0.2, 0.1, 0.0])
+def test_low_confidence_failure_passes_with_warning(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    confidence: float,
+) -> None:
+    """A below-the-bar grade at confidence <= 0.2 warns instead of failing."""
+    monkeypatch.setenv("OPENROUTER_API_KEY", "openrouter-test-key-long-enough")
+    monkeypatch.setattr(requests, "post", _post_returning(_answers_response(1, confidence)))
+    monkeypatch.setattr(jev.time, "sleep", lambda _s: None)
+
+    with pytest.warns(UserWarning, match="low confidence") as record:
+        _run_check(tmp_path, monkeypatch)
+
+    assert "greet(function) — level 1.00/5" in str(record[0].message)
+
+
+def test_confidence_just_above_the_cutoff_still_fails(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Only confidence at or below 0.2 excuses a failing grade."""
+    monkeypatch.setenv("OPENROUTER_API_KEY", "openrouter-test-key-long-enough")
+    monkeypatch.setattr(requests, "post", _post_returning(_answers_response(1, 0.21)))
+    monkeypatch.setattr(jev.time, "sleep", lambda _s: None)
+
+    with pytest.raises(pytest.fail.Exception, match=r"confidence 0\.21"):
+        _run_check(tmp_path, monkeypatch)
+
+
+def test_missing_confidence_never_excuses_a_failure() -> None:
+    """An answer without a confidence is graded on its level alone."""
+    payload = {"answers": {"docstring_score": {"score": 1}}}
+
+    grade = jev_docstring_audit._parse_grade(payload)  # ruff:ignore[private-member-access]
+
+    assert grade == (1.0, None)
+    assert grade is not None
+    assert jev_docstring_audit.is_failing(grade, _MIN_SCORE) is True
 
 
 def test_missing_docstring_short_circuits_without_network(
@@ -262,7 +303,8 @@ def test_missing_docstring_short_circuits_without_network(
         )
 
     message = str(exc_info.value)
-    assert "level 1.00/6" in message
+    assert "level 0.00/5" in message
+    assert "confidence" not in message
     assert "No docstring at all" in message
 
 
@@ -326,6 +368,17 @@ def test_overload_stubs_are_excluded_from_state(
     assert states == []
 
 
+def test_test_directories_are_excluded_from_state(tmp_path: Path) -> None:
+    """Code under ``tests/`` or ``test/`` is never audited."""
+    for name in ("tests", "test", "pkg"):
+        (tmp_path / name).mkdir()
+        _ = (tmp_path / name / "m.py").write_text("def f():\n    pass\n", encoding="utf-8")
+
+    states = jev.extract_symbol_states(tmp_path, root=tmp_path)
+
+    assert [state.file_key for state in states] == ["pkg/m.py"]
+
+
 def test_request_targets_decisions_api_with_score_question(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
@@ -354,7 +407,7 @@ def test_request_targets_decisions_api_with_score_question(
     assert call["url"] == "https://openrouter.ai/api/alpha/decisions"
     body = call["json"]
     assert isinstance(body, dict)
-    assert body["model"] == "typesafe/jev-1.13"
+    assert body["model"] == "typesafe/jev-1.14"
     state = body["state"]
     assert isinstance(state, dict)
     assert "source" in state
@@ -374,11 +427,11 @@ def test_request_targets_decisions_api_with_score_question(
     assert headers["Authorization"] == "Bearer openrouter-test-key-long-enough"
 
 
-def test_parse_score_answer_shifts_to_one_index() -> None:
-    """The API's 0-indexed score maps onto the rubric's 1-indexed level."""
+def test_parse_score_answer_is_the_level() -> None:
+    """The API's 0-indexed score is the rubric level, unshifted."""
     parse = _parse_docstring_score
 
-    for level in range(1, 7):
+    for level in range(6):
         assert parse(_answers_response(level)) == pytest.approx(float(level))
 
     assert parse(None) is None
@@ -394,25 +447,25 @@ def test_parse_score_accepts_fractional_expected_values() -> None:
     """The score is the expected value of the distribution, not the argmax.
 
     A reply of ``{0: 0, 1: 0.10, 2: 0.30, 3: 0.60, 4: 0, 5: 0}`` has the
-    wire score ``0*0 + 1*0.1 + 2*0.3 + 3*0.6 == 2.5``, which is a level 3.5
-    on the 1-indexed rubric -- not a level 3 or a level 4.
+    wire score ``0*0 + 1*0.1 + 2*0.3 + 3*0.6 == 2.5``, which is a level 2.5
+    -- not a level 2 or a level 3.
     """
     parse = _parse_docstring_score
 
-    assert parse({"answers": {"docstring_score": {"score": 2.5}}}) == pytest.approx(3.5)
+    assert parse({"answers": {"docstring_score": {"score": 2.5}}}) == pytest.approx(2.5)
     # The documented example: probabilities {"0":0,"1":0,"2":1} with score 1.99.
-    assert parse({"answers": {"docstring_score": {"score": 1.99}}}) == pytest.approx(2.99)
+    assert parse({"answers": {"docstring_score": {"score": 1.99}}}) == pytest.approx(1.99)
     # A whole-number score is still accepted, so an argmax-style reply works.
-    assert parse({"answers": {"docstring_score": {"score": 5}}}) == pytest.approx(6.0)
+    assert parse({"answers": {"docstring_score": {"score": 5}}}) == pytest.approx(5.0)
 
 
 def test_fractional_level_decides_pass_and_fail_at_the_boundary() -> None:
-    """The bar is inclusive, so 4.0 passes and 3.99 fails."""
+    """The bar is inclusive, so 3.0 passes and 2.99 fails."""
     evaluate = jev_docstring_audit._evaluate_symbol  # ruff:ignore[private-member-access]
 
-    assert evaluate(4.0, 4.0) is True
-    assert evaluate(3.99, 4.0) is False
-    assert evaluate(4.01, 4.0) is True
+    assert evaluate(3.0, 3.0) is True
+    assert evaluate(2.99, 3.0) is False
+    assert evaluate(3.01, 3.0) is True
 
 
 def test_out_of_range_score_is_skipped_not_failed(
@@ -441,26 +494,26 @@ def test_evaluate_symbol_passes_at_or_above_minimum() -> None:
     """Higher is better, so the bar is inclusive at ``min_score``."""
     evaluate = jev_docstring_audit._evaluate_symbol  # ruff:ignore[private-member-access]
 
-    assert evaluate(6, _MIN_SCORE) is True
     assert evaluate(5, _MIN_SCORE) is True
     assert evaluate(4, _MIN_SCORE) is True
-    assert evaluate(3, _MIN_SCORE) is False
-    assert evaluate(1, _MIN_SCORE) is False
-    # A stricter bar rejects the level-4 band entirely.
-    assert evaluate(4, 5) is False
+    assert evaluate(3, _MIN_SCORE) is True
+    assert evaluate(2, _MIN_SCORE) is False
+    assert evaluate(0, _MIN_SCORE) is False
+    # A stricter bar rejects the level-3 band entirely.
+    assert evaluate(3, 4) is False
 
 
 def test_read_min_score_defaults_and_clamps() -> None:
     """A missing, mistyped, or out-of-range value falls back or clamps."""
     read = jev_docstring_audit._read_min_score  # ruff:ignore[private-member-access]
 
-    assert read({}) == 4
-    assert read(None) == 4
-    assert read({"min_score": 5}) == 5
-    assert read({"min_score": 0}) == 1
-    assert read({"min_score": 99}) == 6
-    assert read({"min_score": True}) == 4
-    assert read({"min_score": "4"}) == 4
+    assert read({}) == 3
+    assert read(None) == 3
+    assert read({"min_score": 4}) == 4
+    assert read({"min_score": -1}) == 0
+    assert read({"min_score": 99}) == 5
+    assert read({"min_score": True}) == 3
+    assert read({"min_score": "4"}) == 3
 
 
 def test_test_symbol_detection_matches_test_prefix_only() -> None:
@@ -480,7 +533,7 @@ def test_test_symbol_detection_matches_test_prefix_only() -> None:
 def test_test_bar_is_reduced_below_the_library_bar() -> None:
     """Test code is held to the lower, deliberately relaxed bar.
 
-    Raising it to 4.5 was measured and failed two verified-conformant test
+    Raising it to 3.5 was measured and failed two verified-conformant test
     classes, so the bar sits below DEFAULT_MIN_SCORE instead.
     """
     assert jev_docstring_audit.DEFAULT_TEST_MIN_SCORE < jev_docstring_audit.DEFAULT_MIN_SCORE
@@ -510,9 +563,9 @@ def test_min_score_for_selects_the_test_bar_by_name() -> None:
     assert min_for(lib, {}) == pytest.approx(jev_docstring_audit.DEFAULT_MIN_SCORE)
     assert min_for(tst, {}) == pytest.approx(jev_docstring_audit.DEFAULT_TEST_MIN_SCORE)
     # The envelope overrides both, per category.
-    data = {"min_score": 5.0, "test_min_score": 3.5}
-    assert min_for(lib, data) == pytest.approx(5.0)
-    assert min_for(tst, data) == pytest.approx(3.5)
+    data = {"min_score": 4.0, "test_min_score": 2.5}
+    assert min_for(lib, data) == pytest.approx(4.0)
+    assert min_for(tst, data) == pytest.approx(2.5)
     # A malformed override falls back to that category's own default.
     assert min_for(lib, {"min_score": "x"}) == pytest.approx(jev_docstring_audit.DEFAULT_MIN_SCORE)
     assert min_for(tst, {"test_min_score": "x"}) == pytest.approx(
@@ -525,17 +578,17 @@ def test_rubric_is_monotone_in_severity() -> None:
     levels = jev_docstring_audit._SCORE_LEVELS  # ruff:ignore[private-member-access]
 
     assert len(levels) == 6
-    # Level 1 covers both "no docstring" and the worst severity count.
+    # Level 0 covers both "no docstring" and the worst severity count.
     assert "No docstring at all" in levels[0]
     assert "2 Major" in levels[0]
-    # Each level from 2 up names the count of defects that produces it.
+    # Each level from 1 up names the count of defects that produces it.
     assert "1 Major" in levels[1]
     assert "3 or more Moderate" in levels[1]
     assert "1 or 2 Moderate" in levels[2]
     assert "3 or more Minor" in levels[3]
     assert "1 or 2 Minor" in levels[4]
     assert "no Errors, Inaccuracies, Omissions or Deviations" in levels[5]
-    # Level 6 keeps the escape hatch for comment-free code.
+    # Level 5 keeps the escape hatch for comment-free code.
     assert "fully accurate" in levels[5]
 
 

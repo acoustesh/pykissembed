@@ -199,7 +199,7 @@ def _run_similarity_test(
     min_loc = _extract_int(config, "min_loc_for_similarity", 1)
     excluded_dirs = _extract_str_list(config, "excluded_directories")
     # Three-level fallback lets a consumer override a threshold for one
-    # provider without having to also set it for the other seven: a
+    # provider without having to also set it for every other one: a
     # provider-specific key wins, then a shared key across all providers,
     # then the provider's own hardcoded default.
     threshold_pair = _extract_float(
@@ -306,10 +306,10 @@ def test_providers_parallel(
 
     errors: dict[str, BaseException] = {}
     skips: dict[str, str] = {}
-    # One worker per provider (not a bounded pool): each `_run_one` call
-    # does network I/O against a distinct API, so full parallelism here
-    # bounds wall-clock time by the slowest single provider rather than by
-    # the sum of all twelve.
+    # One worker per provider (not a bounded pool): a provider with missing
+    # embeddings populates them over its own API, so full parallelism bounds
+    # wall-clock time by the slowest single provider rather than by the sum
+    # of all of them.
     with ThreadPoolExecutor(max_workers=len(_PARALLEL_PROVIDERS)) as executor:
         futures = {executor.submit(_run_one, p): p for p in _PARALLEL_PROVIDERS}
         for future in as_completed(futures):
@@ -320,16 +320,20 @@ def test_providers_parallel(
             if isinstance(exc, pytest.skip.Exception):
                 skips[provider.label] = str(exc)
             elif isinstance(exc, (KeyboardInterrupt, SystemExit, GeneratorExit)):
+                # Interrupts and exit requests stop the run instead of being
+                # reported as one provider's failure.
                 raise exc
             else:
-                # Future.exception() exposes every provider failure without a
-                # blind exception handler; process-exit signals are re-raised.
+                # Future.exception() collects every provider failure without a
+                # blind exception handler, so all of them are reported at once.
                 errors[provider.label] = exc
 
     if errors:
         detail = "\n".join(f"  {name}: {exc}" for name, exc in errors.items())
         pytest.fail(f"Provider failures:\n{detail}", pytrace=False)
 
+    # Some providers skipping (e.g. no API key) still passes: the others were
+    # checked. Only a run where every provider skipped is reported as a skip.
     if skips and len(skips) == len(_PARALLEL_PROVIDERS):
         pytest.skip("All providers skipped:\n" + "\n".join(f"  {n}: {m}" for n, m in skips.items()))
 

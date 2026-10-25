@@ -726,8 +726,8 @@ def _build_provider_caller(
         If *provider* is not a recognised embedding provider.
     """
     if provider == "gemini":
-        # Optional cloud SDK: not a pykissembed core/cloud dependency, only
-        # needed if the caller actually requests the gemini provider.
+        # google-genai ships with pykissembed[cloud], not the core package,
+        # so it is imported only when the gemini provider is requested.
         genai = import_module("google.genai")
         types = import_module("google.genai.types")
 
@@ -814,8 +814,9 @@ def _build_provider_caller(
         return _build_openai_caller(model, timeout)
 
     if provider in {"codestral", "qwen"}:
-        # Optional cloud SDK: not a pykissembed core dependency, only needed
-        # if the caller actually requests the codestral provider.
+        # Codestral and Qwen both use OpenRouter's embeddings endpoint over
+        # plain requests (from pykissembed[cloud], not core), loaded only
+        # when one of them is requested.
         post, timeout_error, http_error = _requests_api()
 
         api_key = _require_api_key("OPENROUTER_API_KEY")

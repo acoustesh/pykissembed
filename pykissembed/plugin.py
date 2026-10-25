@@ -295,14 +295,27 @@ def pca_cache() -> dict[str, PCACacheEntry]:
 
 @pytest.hookimpl(trylast=True)
 def pytest_configure(config: pytest.Config) -> None:
-    """Register markers, inject source dirs into sys.path, and collect checks.
+    """Validate flags, register markers, extend sys.path, and inject checks.
 
-    The last action is critical: pytest only walks directories listed in
-    ``config.args`` (derived from ``testpaths`` or CLI arguments). The
-    installed ``pykissembed/checks/`` directory is never in that list by
-    default, so :func:`pytest_collect_file` would never be called for
-    those files. We append the checks directory to ``config.args`` here
-    so pytest discovers and collects the check modules automatically.
+    Steps, in order:
+
+    1. Reject ``--cached-only`` combined with ``--allow-cloud-embeddings``.
+    2. Register the ``lint``, ``complexity``, ``density``,
+       ``docstring_format``, ``jev``, ``similarity`` and ``experimental``
+       markers.
+    3. Unless ``PYQTEST_SKIP_PATH_INJECTION`` is set, prepend every
+       existing directory from :func:`resolve_paths` that is not already
+       on ``sys.path``.
+    4. If the installed checks directory exists, ask
+       :func:`_decide_injection` what to collect and append its answer
+       (the whole directory, one check file, or a file ``::NodeId``
+       string) to ``config.args`` unless it is already there. It may
+       return ``None``, in which case nothing is appended.
+
+    Step 4 is needed because pytest only walks paths listed in
+    ``config.args``, and the installed checks directory is not in that
+    list by default, so :func:`pytest_collect_file` would never see the
+    check modules.
 
     Parameters
     ----------

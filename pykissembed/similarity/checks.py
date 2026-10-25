@@ -213,13 +213,29 @@ def _skip_missing_embeddings(
     *,
     total: int,
 ) -> None:
-    """Skip the test with a diagnosis of which embeddings are missing.
+    """Skip the current test with a diagnosis of which embeddings are missing.
 
-    Reports how many of the *total* checked functions are uncached and how to
-    fill the gap. When every function is uncached, the per-function list is
-    dropped — it would just enumerate the whole codebase. For the combined
-    provider, the diagnosis names the member providers that are actually
-    incomplete instead of blaming the derived combined cache.
+    Never returns normally: it always ends in :func:`pytest.skip`. The skip
+    message starts with how many of the *total* checked functions
+    lack cached embeddings for *provider*, followed by remediation lines from
+    :func:`_missing_embeddings_advice`. For the combined provider, those lines
+    come from :func:`_combined_member_gaps` and name the member providers
+    that are incomplete. For any other provider, no member gaps are passed.
+    If only some functions are uncached, the message then lists up to
+    ``_MAX_SHOWN_UNCACHED`` of them as ``file:name``, plus an
+    ``... and N more`` line if any are left out. If every function is
+    uncached, that list is omitted.
+
+    Parameters
+    ----------
+    baselines : Baselines
+        Baselines dict holding the member caches consulted for combined.
+    uncached : list[FunctionInfo]
+        Functions with no cached embedding for *provider*.
+    provider : ProviderEntry
+        Provider whose embeddings were looked up.
+    total : int
+        Number of functions checked.
     """
     count = f"All {total}" if len(uncached) == total else f"{len(uncached)} of {total}"
     lines = [f"{count} functions lack cached {provider.label} embeddings."]

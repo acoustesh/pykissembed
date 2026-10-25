@@ -472,29 +472,46 @@ def _build_combined_row(
 class EmbeddingRegistry:
     """Index embedding providers and manage their baseline caches.
 
-    Entries retain their registration order. The registry separates cosine
-    providers from standalone caches and the combined entry, reports cache
-    coverage, removes orphaned vectors, and rebuilds combined vectors in a
-    baselines mapping.
+    Entries retain their registration order. The combined entry is the one
+    whose ``cache_key`` equals ``combined_key``; standalone entries are those
+    with ``standalone`` set (the raw Jina query/passage caches); base
+    providers are the entries that are neither. Operations on a baselines
+    mapping: ``audit`` reports valid text/AST hash totals, each base
+    provider's cache size and missing count, and the combined cache size;
+    ``remove_orphans`` deletes, in place, vectors whose hash is not a valid
+    hash from every registered cache; and ``rebuild_combined`` replaces the
+    combined cache with rows joined from the base and standalone caches.
 
     Parameters
     ----------
     providers : list[ProviderEntry]
-        Entries to register. Include an entry whose ``cache_key`` equals
-        ``combined_key`` for operations that access ``combined``.
+        Entries to register. Without an entry whose ``cache_key`` equals
+        ``combined_key``, ``combined`` (and so ``audit`` and
+        ``rebuild_combined``) raises ``StopIteration``.
     combined_key : str
         Cache key that identifies the combined entry and excludes it from
         ``base_providers``.
 
     Attributes
     ----------
+    providers : tuple[ProviderEntry, ...]
+        Every registered entry, in input order (read-only property).
+    base_providers, standalone_providers : tuple[ProviderEntry, ...]
+        The base and standalone subsets, in input order.
+    combined : ProviderEntry
+        The first entry whose ``cache_key`` equals ``combined_key``.
+    combined_dependencies, standalone_dependencies : list[str]
+        Cache keys of the base and standalone entries, respectively.
+    files : dict[str, Path]
+        ``cache_key`` -> ``file_path`` for every entry.
     _providers : tuple[ProviderEntry, ...]
         Registered entries in input order.
     _combined_key : str
         Cache key used to identify the combined entry.
     _by_cache_key : dict[str, ProviderEntry]
         Entries indexed by cache key. If keys repeat, the last entry is
-        returned by ``by_cache_key``.
+        returned by ``by_cache_key``, which raises ``KeyError`` for an
+        unknown key.
     """
 
     def __init__(self, providers: list[ProviderEntry], combined_key: str) -> None:
@@ -551,12 +568,13 @@ class EmbeddingRegistry:
 
     @property
     def combined(self) -> ProviderEntry:
-        """The single combined provider entry.
+        """The first registered entry whose ``cache_key`` is the combined key.
 
         Returns
         -------
         ProviderEntry
-            The single combined provider entry.
+            The combined provider entry. ``StopIteration`` propagates from
+            ``next`` if no such entry was registered.
         """
         return next(p for p in self._providers if p.cache_key == self._combined_key)
 
@@ -604,7 +622,9 @@ class EmbeddingRegistry:
         Returns
         -------
         ProviderEntry
-            The matching ``ProviderEntry``.
+            The matching ``ProviderEntry`` (the last one registered under
+            that key); an unknown key raises ``KeyError`` from the dict
+            lookup.
         """
         return self._by_cache_key[cache_key]
 

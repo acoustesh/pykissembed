@@ -1,7 +1,7 @@
 # Jev response cache + Jev comment audit
 
 ## Context
-`test_jev_docstring_audit` ([pykissembed/checks/jev_docstring_audit.py](pykissembed/checks/jev_docstring_audit.py), commit 0999347) makes one OpenRouter Decisions call per documented symbol on every run. The goal is to pay only for text that changed: hash the exact `state` and `question` sent to `typesafe/jev-1.13`, and reuse the stored response when both hashes match. Any edit to code, a docstring or a comment changes the state hash and so triggers a new call. A second consumer check will grade inline comments with the user's 0–4 rubric (pass only above 2.25), using the same cache.
+`test_jev_docstring_audit` ([pykissembed/checks/jev_docstring_audit.py](pykissembed/checks/jev_docstring_audit.py), commit 0999347) makes one OpenRouter Decisions call per documented symbol on every run. The goal is to pay only for text that changed: hash the exact `state` and `question` sent to `typesafe/jev-1.14`, and reuse the stored response when both hashes match. Any edit to code, a docstring or a comment changes the state hash and so triggers a new call. A second consumer check will grade inline comments with the user's 0–4 rubric (pass only above 2.25), using the same cache.
 
 Decisions made with the user:
 - **Store:** a stdlib `sqlite3` file, gitignored, shared by both checks.

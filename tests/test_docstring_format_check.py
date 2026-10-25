@@ -132,3 +132,14 @@ def test_select_d_overrides_the_project_ignore_but_not_the_convention(
     monkeypatch.setattr(docstring_format, "include_notebooks", lambda: False)
     violations = docstring_format.run_ruff_docstring_check(tmp_path, root=tmp_path)
     assert {v.code for v in violations} == {"D100", "D401"}
+
+
+def test_test_directories_are_excluded(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    """Files under ``tests/`` or ``test/`` are not checked."""
+    for name in ("tests", "test", "pkg"):
+        (tmp_path / name).mkdir()
+        _ = (tmp_path / name / "m.py").write_text("def f():\n    return 1\n")
+    monkeypatch.chdir(tmp_path)
+    monkeypatch.setattr(docstring_format, "include_notebooks", lambda: False)
+    violations = docstring_format.run_ruff_docstring_check(tmp_path, root=tmp_path)
+    assert {v.file for v in violations} == {"pkg/m.py"}

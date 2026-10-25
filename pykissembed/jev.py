@@ -14,8 +14,8 @@ from typing import TYPE_CHECKING
 
 from pykissembed._http_retry import is_retryable_http_error as _is_retryable_http_error
 from pykissembed.config import get_config
+from pykissembed.paths import is_test_path, warn_non_utf8
 from pykissembed.paths import iter_py_files as _iter_py_files
-from pykissembed.paths import warn_non_utf8
 from pykissembed.similarity.ast_helpers import compute_content_hash
 from pykissembed.similarity.embeddings import requests_api
 from pykissembed.wrapper_analysis import decorator_name
@@ -26,10 +26,15 @@ if TYPE_CHECKING:
 
     from pykissembed.config import PyqtestConfig
 
-JEV_MODEL = "typesafe/jev-1.13"
+JEV_MODEL = "typesafe/jev-1.14"
 DECISIONS_URL = "https://openrouter.ai/api/alpha/decisions"
 API_KEY_ENV = "OPENROUTER_API_KEY"
 REQUEST_TIMEOUT = 60.0
+# A below-the-bar grade held at or below this confidence passes an audit with
+# a warning instead of failing it. Live grades this low spread their
+# probability across distant levels (e.g. 0.26 on the worst level and 0.19 on
+# the best), so the expected value says little about the code.
+LOW_CONFIDENCE = 0.2
 RETRY_DELAYS = (1.0, 2.0, 4.0)
 MAX_STATE_CHARS = 12000
 
@@ -85,11 +90,14 @@ def _extract_symbol_states(base_dir: Path, *, root: Path) -> list[SymbolState]:
     -------
     list[SymbolState]
         One entry per function/class definition (``@overload`` stubs
-        excluded), in deterministic file order. Unreadable or unparsable
-        files contribute nothing.
+        excluded), in deterministic file order. Files under a test
+        directory (:data:`~pykissembed.paths.TEST_DIRS`) and unreadable or
+        unparsable files contribute nothing.
     """
     states: list[SymbolState] = []
     for py_file in _iter_py_files(base_dir):
+        if is_test_path(py_file, base_dir):
+            continue
         try:
             source = py_file.read_text(encoding="utf-8")
         except (UnicodeDecodeError, OSError) as exc:
@@ -181,6 +189,40 @@ def _load_api_key() -> str | None:
 load_api_key = _load_api_key
 
 
+def _answer_number(payload: object, question_id: str, field: str) -> float | None:
+    """Read one finite numeric field of a question's answer.
+
+    Parameters
+    ----------
+    payload : object
+        Decoded response body; untrusted shape.
+    question_id : str
+        Question whose answer entry is read.
+    field : str
+        Key inside ``payload["answers"][question_id]``.
+
+    Returns
+    -------
+    float | None
+        The value as a float, or ``None`` when any level of the path is
+        missing or not a dict, or the value is not a finite non-bool number.
+    """
+    if not isinstance(payload, dict):
+        return None
+    answers = payload.get("answers")
+    if not isinstance(answers, dict):
+        return None
+    entry = answers.get(question_id)
+    if not isinstance(entry, dict):
+        return None
+    raw = entry.get(field)
+    # bool is an int subclass, but cannot be a meaningful number here.
+    if isinstance(raw, bool) or not isinstance(raw, int | float):
+        return None
+    value = float(raw)
+    return value if math.isfinite(value) else None
+
+
 def parse_score(payload: object, question_id: str, n_levels: int) -> float | None:
     """Read a zero-based expected score from a Decisions response.
 
@@ -198,24 +240,50 @@ def parse_score(payload: object, question_id: str, n_levels: int) -> float | Non
     float | None
         Expected score in ``[0, n_levels - 1]``, or ``None`` for a malformed reply.
     """
-    if not isinstance(payload, dict):
-        return None
-    answers = payload.get("answers")
-    if not isinstance(answers, dict):
-        return None
-    entry = answers.get(question_id)
-    if not isinstance(entry, dict):
-        return None
-    raw = entry.get("score")
-    # bool is an int subclass, but cannot be a meaningful expected score.
-    if isinstance(raw, bool) or not isinstance(raw, int | float):
-        return None
-    score = float(raw)
+    score = _answer_number(payload, question_id, "score")
     # The API returns an expected value, so fractional scores are valid.
-    # Reject infinities and out-of-rubric values before they reach a baseline.
-    if not math.isfinite(score) or not 0 <= score <= n_levels - 1:
+    # Reject out-of-rubric values before they reach a baseline.
+    if score is None or not 0 <= score <= n_levels - 1:
         return None
     return score
+
+
+def parse_confidence(payload: object, question_id: str) -> float | None:
+    """Read the model's confidence in its answer to one question.
+
+    Parameters
+    ----------
+    payload : object
+        Decoded response body.
+    question_id : str
+        Question to read.
+
+    Returns
+    -------
+    float | None
+        Confidence in ``[0, 1]``, or ``None`` when absent or out of range.
+    """
+    confidence = _answer_number(payload, question_id, "confidence")
+    if confidence is None or not 0 <= confidence <= 1:
+        return None
+    return confidence
+
+
+def is_low_confidence(confidence: float | None) -> bool:
+    """Return whether a grade is too uncertain to fail an audit.
+
+    Parameters
+    ----------
+    confidence : float | None
+        The model's confidence, or ``None`` when unknown.
+
+    Returns
+    -------
+    bool
+        ``True`` when *confidence* is known and at most ``LOW_CONFIDENCE``;
+        an unknown confidence never excuses a failure.
+    """
+    return confidence is not None and confidence <= LOW_CONFIDENCE
 
 
 def state_payload(state: SymbolState) -> dict[str, str]:
@@ -286,14 +354,14 @@ def open_cache(config: PyqtestConfig) -> sqlite3.Connection:
     return conn
 
 
-def ask_jev(
+def ask_jev[T](
     state: SymbolState,
     questions: dict[str, dict[str, object]],
     *,
-    parse: Callable[[object], float | None],
+    parse: Callable[[object], T | None],
     api_key: str | None,
     conn: sqlite3.Connection,
-) -> float | None:
+) -> T | None:
     """Grade one symbol from cache, or query and cache a valid Jev response.
 
     Parameters
@@ -302,8 +370,9 @@ def ask_jev(
         Source to grade.
     questions : dict[str, dict[str, object]]
         Complete Decisions question payload.
-    parse : Callable[[object], float | None]
-        Consumer-specific score parser.
+    parse : Callable[[object], T | None]
+        Consumer-specific parser; ``None`` marks a response as invalid, and
+        only responses it accepts are cached.
     api_key : str | None
         OpenRouter key; ``None`` allows cache hits only.
     conn : sqlite3.Connection
@@ -311,8 +380,8 @@ def ask_jev(
 
     Returns
     -------
-    float | None
-        Parsed score, or ``None`` if a response is unavailable or invalid.
+    T | None
+        Parsed result, or ``None`` if a response is unavailable or invalid.
     """
     payload = state_payload(state)
     # The model belongs in the question key: a model upgrade re-grades every
@@ -333,7 +402,8 @@ def ask_jev(
         except json.JSONDecodeError:
             return None
     if not api_key:
-        # A cached grade must remain usable in an offline or cache-only run.
+        # The cache is read before the key is checked, so offline and
+        # cache-only runs still grade every cached symbol.
         return None
     try:
         post, timeout_error, _ = requests_api()
@@ -368,7 +438,8 @@ def ask_jev(
                 )
                 conn.commit()
         except (OSError, ValueError, TypeError, AttributeError) as exc:
-            # Retry only transport failures the original Jev audit retried.
+            # Retry timeouts, 429s and 5xx responses after each RETRY_DELAYS
+            # pause; any other failure leaves the symbol ungraded.
             if attempt < len(RETRY_DELAYS) and _is_retryable_http_error(exc, timeout_error):
                 time.sleep(RETRY_DELAYS[attempt])
                 continue

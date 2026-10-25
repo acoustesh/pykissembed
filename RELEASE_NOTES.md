@@ -130,7 +130,7 @@ Changes since `v0.2.5`:
 
 - Add two Jev-backed audits, `jev_docstring_audit` and `jev_comment_audit`.
   They grade docstrings and inline comments through the OpenRouter Decisions
-  API (`typesafe/jev-1.13`) and cache valid responses in
+  API (`typesafe/jev-1.14`) and cache valid responses in
   `jev_cache.sqlite3` in the baseline directory. Both run with the other
   consumer checks under the `jev` marker. Without `OPENROUTER_API_KEY` they
   grade cached responses only and skip cache misses.

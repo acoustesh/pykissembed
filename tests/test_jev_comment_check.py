@@ -18,18 +18,22 @@ if TYPE_CHECKING:
 class _Response:
     """Minimal Decisions API response double."""
 
-    def __init__(self, score: float) -> None:
+    def __init__(self, score: float, confidence: float | None = None) -> None:
         self.score = score
+        self.confidence = confidence
 
     def json(self) -> dict[str, object]:
-        """Return a score answer.
+        """Return a score answer, with a confidence only when one was given.
 
         Returns
         -------
         dict[str, object]
             Decoded Decisions response.
         """
-        return {"answers": {"comment_score": {"score": self.score}}}
+        answer: dict[str, object] = {"score": self.score}
+        if self.confidence is not None:
+            answer["confidence"] = self.confidence
+        return {"answers": {"comment_score": answer}}
 
 
 def _run_check(
@@ -38,6 +42,7 @@ def _run_check(
     source: str,
     *,
     score: float,
+    confidence: float | None = None,
 ) -> list[str]:
     """Run the consumer check on one source file with a canned score.
 
@@ -68,7 +73,7 @@ def _run_check(
         symbol = state["symbol"]
         assert isinstance(symbol, str)
         sent.append(symbol)
-        return _Response(score)
+        return _Response(score, confidence)
 
     monkeypatch.setattr(requests, "post", post)
     jev_comment_audit.TestJevCommentAudit.test_jev_comment_audit(
@@ -94,6 +99,32 @@ def test_comment_score_boundary(
             _ = _run_check(tmp_path, monkeypatch, source, score=score)
     else:
         assert _run_check(tmp_path, monkeypatch, source, score=score) == ["greet"]
+
+
+@pytest.mark.parametrize("confidence", [0.2, 0.1, 0.0])
+def test_low_confidence_failure_passes_with_warning(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    confidence: float,
+) -> None:
+    """A failing level at confidence <= 0.2 warns instead of failing."""
+    source = "def greet():\n    # Explain intent.\n    return 'hello'\n"
+
+    with pytest.warns(UserWarning, match="low confidence") as record:
+        _ = _run_check(tmp_path, monkeypatch, source, score=1.0, confidence=confidence)
+
+    assert "greet — level 1.00/4" in str(record[0].message)
+
+
+def test_confidence_just_above_the_cutoff_still_fails(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Only confidence at or below 0.2 excuses a failing level."""
+    source = "def greet():\n    # Explain intent.\n    return 'hello'\n"
+
+    with pytest.raises(pytest.fail.Exception, match=r"level 1\.00/4, confidence 0\.21"):
+        _ = _run_check(tmp_path, monkeypatch, source, score=1.0, confidence=0.21)
 
 
 def test_only_functions_and_methods_are_sent(

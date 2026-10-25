@@ -50,7 +50,24 @@ class Slot:
 
 @dataclass(frozen=True, slots=True)
 class Edit:
-    """A replacement token for an existing docstring, or an inserted line."""
+    """A text splice into a source file, applied by :func:`apply_edits`.
+
+    Either replaces an existing docstring token (``start < end``) or, with
+    ``start == end``, inserts complete docstring lines at that offset.
+
+    Attributes
+    ----------
+    owner : int
+        Owner id (index into :func:`owners`) whose docstring is edited.
+    start : int
+        Character offset in the original text where the splice begins.
+    end : int
+        Character offset where the replaced span ends; equal to ``start``
+        for an insertion.
+    text : str
+        Replacement token, or the inserted lines including their
+        indentation and final newline.
+    """
 
     owner: int
     start: int
@@ -586,14 +603,16 @@ def diff_edits(original: str, updated: str) -> dict[int, Edit] | None:
     original : str
         File text before.
     updated : str
-        File text after; its definitions must match *original* one to one.
+        File text after, defining the same owners as *original*.
 
     Returns
     -------
     dict[int, Edit] | None
-        One edit per owner whose docstring token changed or was added, with
-        offsets into *original*; ``None`` when a docstring disappeared or
-        the definitions do not line up.
+        Edits keyed by owner id, with offsets into *original*: a changed
+        docstring token is replaced, and an added docstring is inserted as
+        the whole source lines that hold it. Unchanged owners get no edit.
+        ``None`` when a docstring of *original* is missing from *updated*,
+        or when *updated* has an owner that *original* has no slot for.
     """
     before = {s.owner: s for s in locate(original, ast.parse(original))}
     after = {s.owner: s for s in locate(updated, ast.parse(updated))}

@@ -17,7 +17,7 @@ import pytest
 from pykissembed.baselines_engine import locked_envelope, read_int_map, save_envelope
 from pykissembed.checks.lint_typecheck import parse_tool_json
 from pykissembed.config import get_config
-from pykissembed.paths import include_notebooks
+from pykissembed.paths import TEST_DIRS, include_notebooks
 
 # ruff's exit status for a configuration or usage error (as opposed to
 # 1, "violations found").
@@ -75,7 +75,8 @@ def _run_ruff_docstring_check(target_dir: Path, *, root: Path) -> list[Docstring
     Notebooks (``.ipynb``) are excluded by default because they typically
     contain exploratory code that isn't held to the same hygiene standards
     as production source. Consumers can override this by setting
-    ``include_notebooks = true`` in ``[tool.pykissembed]``.
+    ``include_notebooks = true`` in ``[tool.pykissembed]``. Test directories
+    (:data:`~pykissembed.paths.TEST_DIRS`) are always excluded.
 
     Parameters
     ----------
@@ -99,7 +100,13 @@ def _run_ruff_docstring_check(target_dir: Path, *, root: Path) -> list[Docstring
     ruff = shutil.which("ruff")
     if ruff is None:
         return []
-    args = [str(target_dir), "--select=D", "--output-format=json"]
+    args = [
+        str(target_dir),
+        "--select=D",
+        "--output-format=json",
+        "--extend-exclude",
+        ",".join(TEST_DIRS),
+    ]
     if not include_notebooks():
         args[:0] = ["--extend-exclude", "*.ipynb"]
     result = _run_ruff(ruff, args, preview=False)

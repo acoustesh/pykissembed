@@ -9,7 +9,7 @@ from typing import TYPE_CHECKING
 
 import pytest
 
-from pykissembed.vscode_settings import sync_vscode_settings
+from pykissembed.vscode_settings import sync_vscode_launch, sync_vscode_settings
 
 if TYPE_CHECKING:
     from pathlib import Path
@@ -34,9 +34,7 @@ def _tolerant_load(text: str) -> dict[str, object]:
     no_block_comments = re.sub(r"/\*.*?\*/", "", no_line_comments, flags=re.DOTALL)
     no_trailing_commas = re.sub(r",(\s*[}\]])", r"\1", no_block_comments)
     parsed: object = json.loads(no_trailing_commas)
-    if not isinstance(parsed, dict) or not all(
-        isinstance(key, str) for key in parsed
-    ):
+    if not isinstance(parsed, dict) or not all(isinstance(key, str) for key in parsed):
         msg = "VS Code settings must be a JSON object with string keys"
         raise ValueError(msg)
     return {key: value for key, value in parsed.items() if isinstance(key, str)}
@@ -237,3 +235,70 @@ class TestUnparseableFile:
 
         assert settings_path.read_text() == original
         assert any("Could not parse" in m for m in messages)
+
+
+class TestSyncLaunch:
+    """``.vscode/launch.json`` gets pykissembed's debug configurations merged in."""
+
+    @staticmethod
+    def test_creates_launch_file(tmp_path: Path) -> None:
+        """A missing launch.json is created with all three configurations."""
+        sync_vscode_launch(tmp_path)
+
+        data = _tolerant_load((tmp_path / ".vscode" / "launch.json").read_text())
+        configs = data["configurations"]
+        assert isinstance(configs, list)
+        assert [c["name"] for c in configs] == [
+            "Pytest: debug test",
+            "pykissembed: all gates",
+            "pykissembed: docstring and comment audits",
+        ]
+
+    @staticmethod
+    def test_merges_into_jsonc_keeping_existing_and_is_idempotent(tmp_path: Path) -> None:
+        """Existing configs and comments survive; a second sync changes nothing."""
+        vscode_dir = tmp_path / ".vscode"
+        vscode_dir.mkdir()
+        launch_path = vscode_dir / "launch.json"
+        launch_path.write_text(
+            dedent(
+                """\
+                {
+                    // keep me
+                    "version": "0.2.0",
+                    "configurations": [
+                        {"name": "Mine", "type": "debugpy", "request": "launch",
+                         "purpose": ["debug-test"]},
+                    ]
+                }
+                """
+            )
+        )
+
+        sync_vscode_launch(tmp_path)
+        merged = launch_path.read_text()
+        sync_vscode_launch(tmp_path)
+
+        assert launch_path.read_text() == merged
+        assert "// keep me" in merged
+        configs = _tolerant_load(merged)["configurations"]
+        assert isinstance(configs, list)
+        # The existing debug-test config wins, so ours is not added.
+        assert [c["name"] for c in configs] == [
+            "pykissembed: all gates",
+            "pykissembed: docstring and comment audits",
+            "Mine",
+        ]
+
+    @staticmethod
+    def test_unparseable_launch_left_untouched(tmp_path: Path) -> None:
+        """A broken launch.json is never touched."""
+        vscode_dir = tmp_path / ".vscode"
+        vscode_dir.mkdir()
+        launch_path = vscode_dir / "launch.json"
+        launch_path.write_text("{ nope [")
+
+        messages = sync_vscode_launch(tmp_path)
+
+        assert launch_path.read_text() == "{ nope ["
+        assert any("leaving it untouched" in m for m in messages)

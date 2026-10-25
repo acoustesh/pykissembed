@@ -141,8 +141,10 @@ def _decorator_lines(
         Decorator lines in their original range-expansion order.
     """
     decorator_lines: list[str] = []
-    # Preserve overlapping ranges for multiple decorators: that is the
-    # established embedding input rather than a source-normalization step.
+    # Each decorator adds every line from itself down to the def, so with
+    # several decorators the later lines repeat. Keep the repeats: this text
+    # feeds ``text_hash``, and deduplicating would change it and orphan the
+    # cached text embeddings of every multi-decorator function.
     for decorator in node.decorator_list:
         if decorator.lineno < start_line:
             decorator_lines.extend(
@@ -239,7 +241,19 @@ def _fallback_comment_lines(lines: list[str], start_line: int, end_line: int) ->
 
 
 def _append_unique_comment_lines(parts: list[str], comment_lines: list[str]) -> None:
-    """Append comment lines that are not already represented in *parts*."""
+    """Append each comment line to *parts* in place unless it is already present.
+
+    Order is preserved. A line is skipped if an identical string is already
+    in *parts*, including one appended earlier in the same call, so repeats
+    within *comment_lines* are added once.
+
+    Parameters
+    ----------
+    parts : list[str]
+        Lines collected so far; mutated by appending.
+    comment_lines : list[str]
+        Candidate comment lines, compared by exact string equality.
+    """
     seen = set(parts)
     for comment_line in comment_lines:
         if comment_line not in seen:

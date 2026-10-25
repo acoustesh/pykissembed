@@ -71,6 +71,30 @@ def should_skip(path: Path, base: Path) -> bool:
     )
 
 
+# Directory names holding a consumer's test suite. The docstring and comment
+# audits skip them: test code documents gates, not an API.
+TEST_DIRS = ("tests", "test")
+
+
+def is_test_path(path: Path, base: Path) -> bool:
+    """Return True if *path* lies inside a test directory below *base*.
+
+    Parameters
+    ----------
+    path : Path
+        File path to check.
+    base : Path
+        Scan root containing *path*; only directories below it are checked.
+
+    Returns
+    -------
+    bool
+        ``True`` if any directory between *base* and *path* is named in
+        :data:`TEST_DIRS`.
+    """
+    return any(part in TEST_DIRS for part in path.relative_to(base).parts[:-1])
+
+
 def iter_py_files(base_dir: Path) -> Iterator[Path]:
     """Yield every ``.py`` file under *base_dir* (recursive), skipping ignored dirs.
 

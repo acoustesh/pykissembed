@@ -8,7 +8,8 @@ the ``tests`` folder does not run them unless a check is selected explicitly.
 (comments, trailing commas), which breaks strict :func:`json.loads`, so
 values are inspected via a tolerant parse but mutated via targeted text
 patches that leave the rest of the file (comments, formatting, unrelated
-keys) untouched.
+keys) untouched. :func:`sync_vscode_launch` likewise adds pykissembed's
+debug configurations to ``.vscode/launch.json`` without touching existing ones.
 """
 
 from __future__ import annotations
@@ -31,6 +32,34 @@ _LEGACY_GENERATED_PYTEST_ARGS = (
 )
 
 _DEFAULT_INDENT = "  "
+
+_PYTEST_LAUNCH: dict[str, object] = {
+    "type": "debugpy",
+    "request": "launch",
+    "module": "pytest",
+    "cwd": "${workspaceFolder}",
+    "console": "integratedTerminal",
+    "justMyCode": False,
+}
+_DEBUG_TEST_PURPOSE = "debug-test"
+# Test Explorer's "Debug Test" uses the debug-test config; the other two run
+# the gates explicitly, since a plain `tests` run leaves them out.
+_LAUNCH_CONFIGS: list[dict[str, object]] = [
+    {
+        "name": "Pytest: debug test",
+        "type": "debugpy",
+        "request": "launch",
+        "purpose": [_DEBUG_TEST_PURPOSE],
+        "console": "integratedTerminal",
+        "justMyCode": False,
+    },
+    {"name": "pykissembed: all gates", **_PYTEST_LAUNCH, "args": ["tests", "--pykissembed-all"]},
+    {
+        "name": "pykissembed: docstring and comment audits",
+        **_PYTEST_LAUNCH,
+        "args": ["tests", "-m", "docstring_format or jev"],
+    },
+]
 
 
 def sync_vscode_settings(root: Path, *, force: bool) -> list[str]:
@@ -96,6 +125,100 @@ def sync_vscode_settings(root: Path, *, force: bool) -> list[str]:
 
     _ = settings_path.write_text(text)
     return messages
+
+
+def sync_vscode_launch(root: Path) -> list[str]:
+    """Add pykissembed's debug configurations to ``.vscode/launch.json``.
+
+    Existing configurations are never changed. A pykissembed configuration
+    is skipped when one with its name exists, and the debug-test one also
+    when another configuration already claims the ``debug-test`` purpose.
+
+    Parameters
+    ----------
+    root
+        Project root (the directory containing, or to contain, ``.vscode/``).
+
+    Returns
+    -------
+    list[str]
+        One human-readable status message.
+    """
+    vscode_dir = root / ".vscode"
+    launch_path = vscode_dir / "launch.json"
+    if not launch_path.exists():
+        vscode_dir.mkdir(exist_ok=True)
+        launch = {"version": "0.2.0", "configurations": _LAUNCH_CONFIGS}
+        _ = launch_path.write_text(json.dumps(launch, indent=_DEFAULT_INDENT) + "\n")
+        return [f"Added {len(_LAUNCH_CONFIGS)} configurations to .vscode/launch.json."]
+
+    text = launch_path.read_text()
+    current = _tolerant_parse(text)
+    existing = current.get("configurations") if current is not None else None
+    anchor = re.search(r'"configurations"\s*:\s*\[', text)
+    if not isinstance(existing, list) or anchor is None:
+        return [
+            "Could not find a configurations list in .vscode/launch.json; leaving it "
+            "untouched. Add manually: " + json.dumps(_LAUNCH_CONFIGS),
+        ]
+
+    missing = _missing_launch_configs([c for c in existing if isinstance(c, dict)])
+    if not missing:
+        return [".vscode/launch.json configurations already in sync."]
+    # Prepend right after `[` so comments and formatting elsewhere survive;
+    # a comma is only needed when user configurations follow ours.
+    rendered = _render_launch_configs(missing, _detect_indent(text))
+    trailing_comma = "," if existing else ""
+    text = text[: anchor.end()] + rendered + trailing_comma + text[anchor.end() :]
+    _ = launch_path.write_text(text)
+    return [f"Added {len(missing)} configurations to .vscode/launch.json."]
+
+
+def _render_launch_configs(configs: list[dict[str, object]], unit: str) -> str:
+    """Serialise *configs* as comma-separated array elements.
+
+    Parameters
+    ----------
+    configs : list[dict[str, object]]
+        Launch configurations to render.
+    unit : str
+        The file's indentation unit.
+
+    Returns
+    -------
+    str
+        Each configuration on its own lines, indented two levels deep
+        (inside the top-level object and the ``configurations`` array).
+    """
+    blocks = (json.dumps(config, indent=unit).splitlines() for config in configs)
+    return ",".join("\n" + "\n".join(unit * 2 + line for line in block) for block in blocks)
+
+
+def _missing_launch_configs(existing: list[dict[str, object]]) -> list[dict[str, object]]:
+    """Return the pykissembed launch configurations *existing* lacks.
+
+    Parameters
+    ----------
+    existing : list[dict[str, object]]
+        Configurations already in ``launch.json``.
+
+    Returns
+    -------
+    list[dict[str, object]]
+        Entries of :data:`_LAUNCH_CONFIGS` whose name is absent, minus the
+        debug-test entry when another configuration already has that purpose.
+    """
+    names = {c.get("name") for c in existing}
+    # VS Code uses only one debug-test config, so a user's own takes precedence.
+    has_debug_test = any(
+        isinstance(purpose := c.get("purpose"), list) and _DEBUG_TEST_PURPOSE in purpose
+        for c in existing
+    )
+    return [
+        c
+        for c in _LAUNCH_CONFIGS
+        if c["name"] not in names and not (has_debug_test and "purpose" in c)
+    ]
 
 
 def _render_fresh_file() -> str:

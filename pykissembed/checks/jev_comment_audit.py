@@ -1,4 +1,9 @@
-"""Jev-backed audit of inline comments in functions and methods."""
+"""Jev-backed audit of inline comments in functions and methods.
+
+A function fails when its 0-4 comment level is at or below ``min_score`` in
+``jev_comment_audit.json``, unless the model's confidence in that grade is at
+most ``LOW_CONFIDENCE``: such a grade passes with a warning.
+"""
 
 from __future__ import annotations
 
@@ -14,10 +19,13 @@ from pykissembed.config import get_config
 from pykissembed.jev import (
     API_KEY_ENV,
     JEV_MODEL,
+    LOW_CONFIDENCE,
     ask_jev,
     extract_symbol_states,
+    is_low_confidence,
     load_api_key,
     open_cache,
+    parse_confidence,
     parse_score,
 )
 from pykissembed.jev import SymbolState as _SymbolState
@@ -29,6 +37,7 @@ if TYPE_CHECKING:
 BASELINE_FILENAME = "jev_comment_audit.json"
 DEFAULT_MIN_SCORE = 2.25
 _QUESTION_ID = "comment_score"
+_MAX_LEVEL = 4
 # Criteria are ordered worst to best because Decisions numbers them from zero.
 # Their expected value must exceed the configured bar.
 _SCORE_LEVELS: tuple[str, ...] = (
@@ -140,12 +149,33 @@ def _read_threshold(data: object) -> float:
     value = float(raw)
     if not math.isfinite(value):
         return DEFAULT_MIN_SCORE
-    return max(0.0, min(float(len(_SCORE_LEVELS) - 1), value))
+    return max(0.0, min(float(_MAX_LEVEL), value))
+
+
+def _parse_grade(payload: object) -> tuple[float, float | None] | None:
+    """Read the level and confidence of a comment score answer.
+
+    Parameters
+    ----------
+    payload : object
+        Decoded Decisions response.
+
+    Returns
+    -------
+    tuple[float, float | None] | None
+        ``(level, confidence)``, or ``None`` when the score is malformed. A
+        missing or out-of-range confidence alone does not invalidate the
+        reply; it is reported as ``None``.
+    """
+    score = parse_score(payload, _QUESTION_ID, len(_SCORE_LEVELS))
+    if score is None:
+        return None
+    return score, parse_confidence(payload, _QUESTION_ID)
 
 
 def _grade_comments(
     states: list[_SymbolState], min_score: float, api_key: str | None, conn: Connection
-) -> tuple[list[str], int]:
+) -> tuple[list[str], list[str], int]:
     """Grade function comments and collect failures and missing grades.
 
     Parameters
@@ -161,31 +191,31 @@ def _grade_comments(
 
     Returns
     -------
-    tuple[list[str], int]
-        Failure descriptions and number of ungraded symbols.
+    tuple[list[str], list[str], int]
+        Failure lines, lines for at-or-below-the-bar grades excused by low
+        confidence, and the number of ungraded symbols.
     """
     failures: list[str] = []
+    uncertain: list[str] = []
     ungraded = 0
     for state in states:
-        score = ask_jev(
-            state,
-            _QUESTIONS,
-            parse=lambda payload: parse_score(payload, _QUESTION_ID, len(_SCORE_LEVELS)),
-            api_key=api_key,
-            conn=conn,
-        )
-        if score is None:
+        grade = ask_jev(state, _QUESTIONS, parse=_parse_grade, api_key=api_key, conn=conn)
+        if grade is None:
             # Transport or cache misses are unknown grades, not failures.
             ungraded += 1
             continue
-        if score <= min_score:
-            nearest = min(len(_SCORE_LEVELS) - 1, max(0, round(score)))
-            failures.append(
-                f"{state.file_key}:{state.lineno} {state.symbol} — "
-                f"level {score:.2f}/4 (need >{min_score:g}): "
-                f"{_SCORE_LEVELS[nearest]}"
-            )
-    return failures, ungraded
+        score, confidence = grade
+        if score > min_score:
+            continue
+        nearest = min(_MAX_LEVEL, max(0, round(score)))
+        sureness = "" if confidence is None else f", confidence {confidence:.2f}"
+        line = (
+            f"{state.file_key}:{state.lineno} {state.symbol} — "
+            f"level {score:.2f}/{_MAX_LEVEL}{sureness} (need >{min_score:g}): "
+            f"{_SCORE_LEVELS[nearest]}"
+        )
+        (uncertain if is_low_confidence(confidence) else failures).append(line)
+    return failures, uncertain, ungraded
 
 
 class TestJevCommentAudit:
@@ -202,7 +232,9 @@ class TestJevCommentAudit:
         """Audit inline comments with a strict 0-4 score boundary.
 
         Functions and methods remain eligible even without docstrings because
-        their comments may still explain intent. Scores at the bar fail.
+        their comments may still explain intent. Scores at the bar fail,
+        unless their confidence is at most ``LOW_CONFIDENCE``; those are
+        reported in a warning instead.
 
         Parameters
         ----------
@@ -231,11 +263,20 @@ class TestJevCommentAudit:
                 if state.kind == "function"
             ]
             # A missing docstring is still sent: comments may explain intent
-            # for this audit, unlike the docstring audit's local level-one rule.
+            # for this audit, unlike the docstring audit's local level-zero rule.
             if not states:
                 pytest.skip("No auditable functions or methods found")
             with closing(open_cache(config)) as conn:
-                failures, ungraded = _grade_comments(states, min_score, api_key, conn)
+                failures, uncertain, ungraded = _grade_comments(states, min_score, api_key, conn)
+            # Warn before any failure so excused grades show up either way.
+            if uncertain:
+                warnings.warn(
+                    f"Jev comment audit: {len(uncertain)} symbol(s) at or below level "
+                    f"{min_score:g} passed on low confidence (<= {LOW_CONFIDENCE:g}):\n"
+                    + "\n".join(uncertain),
+                    UserWarning,
+                    stacklevel=2,
+                )
             if failures:
                 pytest.fail(
                     "Jev comment audit: "

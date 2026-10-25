@@ -36,7 +36,7 @@ from pykissembed.providers.registry import discover_all
 from pykissembed.tools.docfix import DEFAULT_MODEL as DEFAULT_DOCFIX_MODEL
 from pykissembed.tools.docfix import Request as DocfixRequest
 from pykissembed.tools.docfix import main as run_docfix
-from pykissembed.vscode_settings import sync_vscode_settings
+from pykissembed.vscode_settings import sync_vscode_launch, sync_vscode_settings
 
 app = typer.Typer(
     name="pykissembed",
@@ -54,8 +54,8 @@ def _main_callback(
     version: Annotated[
         bool,
         typer.Option(
-        "--version",
-        help="Show pykissembed version and exit.",
+            "--version",
+            help="Show pykissembed version and exit.",
         ),
     ] = False,
 ) -> None:
@@ -244,7 +244,7 @@ def providers_list() -> None:
     for provider in registry.all():
         try:
             configured = provider.is_configured()
-        except (OSError, RuntimeError, TypeError, ValueError):
+        except OSError, RuntimeError, TypeError, ValueError:
             configured = False
         table.add_row(
             provider.name,
@@ -336,7 +336,9 @@ def populate_embeddings(
 def type_review(
     report: Annotated[
         Path,
-        typer.Option("--json", help="Path to a lint_typecheck_report.json produced by the lint gate."),
+        typer.Option(
+            "--json", help="Path to a lint_typecheck_report.json produced by the lint gate."
+        ),
     ],
 ) -> None:
     """Re-run ``pyright`` on each file that has pyright diagnostics in *report*.
@@ -399,7 +401,8 @@ def init(
     ``pyproject.toml`` block. Independently, adds
     ``python.testing.pytestArgs``/``pytestEnabled`` to
     ``.vscode/settings.json`` so VS Code's Test Explorer discovers the
-    project's tests and pykissembed's checks; checks only run when selected. Each step is idempotent and only needs ``--force`` to overwrite
+    project's tests and pykissembed's checks; checks only run when selected. It also
+    adds debug and gate-run configurations to ``.vscode/launch.json``. Each step is idempotent and only needs ``--force`` to overwrite
     a value that already differs from pykissembed's own.
 
     Parameters
@@ -453,7 +456,10 @@ def init(
         _ = pyproject.write_text(text)
         typer.echo(f"Added [tool.pykissembed] to {pyproject} (paths={detected_paths}).")
 
-    for message in sync_vscode_settings(config.root, force=force):
+    for message in [
+        *sync_vscode_settings(config.root, force=force),
+        *sync_vscode_launch(config.root),
+    ]:
         typer.echo(message)
 
 
@@ -639,7 +645,9 @@ def docfix(
     ] = None,
     *,
     write: Annotated[bool, typer.Option("--write", help="Write verified fixes to disk.")] = False,
-    diff: Annotated[bool, typer.Option("--diff", help="Show unified diffs of the changes.")] = False,
+    diff: Annotated[
+        bool, typer.Option("--diff", help="Show unified diffs of the changes.")
+    ] = False,
     check: Annotated[
         bool, typer.Option("--check", help="Exit 1 when fixable findings remain (CI mode).")
     ] = False,

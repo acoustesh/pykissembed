@@ -18,7 +18,12 @@ from typing import TYPE_CHECKING
 
 from pykissembed._http_retry import is_retryable_http_error
 from pykissembed.baselines_engine import load_envelope
-from pykissembed.checks.jev_docstring_audit import BASELINE_FILENAME, min_score_for, symbol_level
+from pykissembed.checks.jev_docstring_audit import (
+    BASELINE_FILENAME,
+    is_failing,
+    min_score_for,
+    symbol_grade,
+)
 from pykissembed.jev import (
     MAX_STATE_CHARS,
     RETRY_DELAYS,
@@ -303,8 +308,14 @@ class JevGrader:
             ``""`` to keep the rewrite; otherwise a reason naming both levels.
         """
         state = state_for(new, updated, key)
-        before = symbol_level(state_for(old, original, key), api_key=self.api_key, conn=self.conn)
-        after = symbol_level(state, api_key=self.api_key, conn=self.conn)
+        # Only levels are compared: low confidence excuses a gate failure,
+        # not a regression introduced by the rewrite.
+        old_grade = symbol_grade(
+            state_for(old, original, key), api_key=self.api_key, conn=self.conn
+        )
+        new_grade = symbol_grade(state, api_key=self.api_key, conn=self.conn)
+        before = None if old_grade is None else old_grade[0]
+        after = None if new_grade is None else new_grade[0]
         bar = min_score_for(state, self.baseline)
         # Without a grade there is no proof of non-regression, so refuse.
         if after is None:
@@ -353,8 +364,9 @@ def failing_targets(
     Returns
     -------
     tuple[frozenset[tuple[str, int]], int]
-        ``(file_key, line)`` of every symbol below its bar, and the number
-        of symbols with no cached grade (those are not targeted).
+        ``(file_key, line)`` of every symbol the gate fails (below its bar
+        and not excused by low confidence), and the number of symbols with
+        no cached grade (those are not targeted).
     """
     data = gate_baseline(config)
     targets: set[tuple[str, int]] = set()
@@ -362,9 +374,9 @@ def failing_targets(
     for base in paths:
         for state in extract_symbol_states(base, root=config.root):
             # Cache only: targeting must be free and must not change the cache.
-            level = symbol_level(state, api_key=None, conn=conn)
-            if level is None:
+            grade = symbol_grade(state, api_key=None, conn=conn)
+            if grade is None:
                 ungraded += 1
-            elif level < min_score_for(state, data):
+            elif is_failing(grade, min_score_for(state, data)):
                 targets.add((state.file_key, state.lineno))
     return frozenset(targets), ungraded

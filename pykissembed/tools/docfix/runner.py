@@ -46,7 +46,43 @@ _FILE_ERRORS = (
 
 @dataclass(frozen=True, slots=True)
 class Request:
-    """The command-line choices for one docfix run."""
+    """The command-line choices for one docfix run, consumed by :func:`main`.
+
+    Attributes
+    ----------
+    paths : list[Path]
+        Files or directories to process; empty uses :func:`resolve_paths`.
+    write : bool
+        Write fixes that pass every guard to disk.
+    diff : bool
+        Include unified diffs in the report.
+    check : bool
+        Exit with status 1 while deterministic fixes remain unapplied.
+    select : str
+        Comma-separated codes to run; empty means the defaults.
+    ignore : str
+        Comma-separated codes to drop.
+    symbols : tuple[str, ...]
+        ``FILE::NAME`` filters; empty means no symbol filter.
+    only_failing : bool
+        Target only symbols whose cached Jev docstring grade fails the gate.
+    allow_dirty : bool
+        Also write files with uncommitted git changes.
+    draft : bool
+        Draft missing prose with an OpenRouter model; needs
+        ``OPENROUTER_API_KEY``.
+    grade : bool
+        Revert edits that lower the Jev docstring level; needs
+        ``OPENROUTER_API_KEY``.
+    model : str
+        OpenRouter model id used for drafting.
+    max_calls : int
+        Budget of live drafting requests.
+    line_length : int
+        Line width that drafted text is wrapped to.
+    grade_tolerance : float
+        Jev level drop that ``grade`` treats as noise.
+    """
 
     paths: list[Path]
     write: bool = False
