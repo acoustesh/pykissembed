@@ -1,3 +1,27 @@
+# v0.3.0 release notes
+
+Changes since `v0.2.14`:
+
+- **Breaking:** the Jev docstring audit now reports levels on the API's own
+  0-5 scale (was 1-6), so failures read `level 2.79/5`. The default bars
+  move down by one to match: `min_score` 3.0 and `test_min_score` 2.5. If
+  your `jev_docstring_audit.json` sets them explicitly (e.g. `4.0` / `3.5`),
+  subtract 1, or the gate becomes one level stricter. Cached grades stay
+  valid.
+- Both Jev audits now read the model's confidence. A grade below the bar
+  with confidence at or below 0.2 passes with a warning listing it, instead
+  of failing the test. Failure lines show the confidence.
+- Jev audits use `typesafe/jev-1.14` (was `jev-1.13`), so every symbol is
+  graded again once.
+- The docstring format gate and the Jev audits skip code under `tests/`
+  and `test/` directories.
+- `pykissembed init` also adds debug and gate-run configurations to
+  `.vscode/launch.json`.
+
+- [pykissembed 0.3.0](https://test.pypi.org/project/pykissembed/0.3.0/)
+- [pykissembed-cloud 0.3.0](https://test.pypi.org/project/pykissembed-cloud/0.3.0/)
+- [Full comparison](https://github.com/acoustesh/pykissembed/compare/v0.2.14...v0.3.0)
+
 # v0.2.14 release notes
 
 Changes since `v0.2.13`:
