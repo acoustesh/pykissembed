@@ -8,9 +8,12 @@ import math
 import os
 import sqlite3
 import time
+import warnings
 from dataclasses import dataclass
 from datetime import UTC, datetime
 from typing import TYPE_CHECKING
+
+import pytest
 
 from pykissembed._http_retry import is_retryable_http_error as _is_retryable_http_error
 from pykissembed.config import get_config
@@ -21,7 +24,7 @@ from pykissembed.similarity.embeddings import requests_api
 from pykissembed.wrapper_analysis import decorator_name
 
 if TYPE_CHECKING:
-    from collections.abc import Callable
+    from collections.abc import Callable, Sequence
     from pathlib import Path
 
     from pykissembed.config import PyqtestConfig
@@ -37,6 +40,8 @@ REQUEST_TIMEOUT = 60.0
 LOW_CONFIDENCE = 0.2
 RETRY_DELAYS = (1.0, 2.0, 4.0)
 MAX_STATE_CHARS = 12000
+
+type Grade = tuple[float, float | None]
 
 
 @dataclass(frozen=True, slots=True)
@@ -284,6 +289,135 @@ def is_low_confidence(confidence: float | None) -> bool:
         an unknown confidence never excuses a failure.
     """
     return confidence is not None and confidence <= LOW_CONFIDENCE
+
+
+def parse_grade(payload: object, question_id: str, n_levels: int) -> Grade | None:
+    """Read the level and confidence of one score answer.
+
+    Parameters
+    ----------
+    payload : object
+        Decoded Decisions response.
+    question_id : str
+        Score question to read.
+    n_levels : int
+        Number of ordered criteria.
+
+    Returns
+    -------
+    Grade | None
+        ``(level, confidence)``, or ``None`` when the score is malformed. A
+        missing or out-of-range confidence alone does not invalidate the
+        reply; it is reported as ``None``.
+    """
+    score = parse_score(payload, question_id, n_levels)
+    if score is None:
+        return None
+    return score, parse_confidence(payload, question_id)
+
+
+def read_threshold(data: object, key: str, default: float, max_level: float) -> float:
+    """Read one minimum passing level, falling back to *default*.
+
+    Parameters
+    ----------
+    data : object
+        Baseline payload; untrusted shape.
+    key : str
+        Envelope key to read.
+    default : float
+        Value used when *key* is absent or unusable.
+    max_level : float
+        Highest level of the rubric.
+
+    Returns
+    -------
+    float
+        The configured minimum level, clamped into ``[0, max_level]`` so a
+        hand-edited file cannot demand a level outside the rubric.
+    """
+    mapping = data if isinstance(data, dict) else {}
+    raw = mapping.get(key, default)
+    if isinstance(raw, bool) or not isinstance(raw, int | float):
+        return float(default)
+    value = float(raw)
+    if not math.isfinite(value):
+        return float(default)
+    return max(0.0, min(max_level, value))
+
+
+def grade_summary(grade: Grade, levels: Sequence[str], need: str) -> str:
+    """Render a grade as ``level X/N, confidence C (need M): text``.
+
+    Parameters
+    ----------
+    grade : Grade
+        ``(level, confidence)`` of one symbol.
+    levels : Sequence[str]
+        Rubric text per whole level, worst first.
+    need : str
+        Pass condition as shown to the reader.
+
+    Returns
+    -------
+    str
+        The summary; the confidence part is omitted when unknown. The text is
+        taken from the nearest whole level, since the rubric is written per
+        level.
+    """
+    level, confidence = grade
+    top = len(levels) - 1
+    sureness = "" if confidence is None else f", confidence {confidence:.2f}"
+    text = levels[round(min(top, max(0.0, level)))]
+    return f"level {level:.2f}/{top}{sureness} (need {need}): {text}"
+
+
+def report_audit(
+    label: str,
+    *,
+    failures: list[str],
+    uncertain: list[str],
+    ungraded: int,
+    graded: int,
+    api_key: str | None,
+    uncertain_detail: str,
+    failure_header: str,
+) -> None:
+    """Warn, fail or skip an audit from its graded symbol lines.
+
+    Parameters
+    ----------
+    label : str
+        Audit name prefixed to every message.
+    failures : list[str]
+        Lines for symbols that failed the bar.
+    uncertain : list[str]
+        Lines for failing grades excused by low confidence.
+    ungraded : int
+        Symbols with no available grade.
+    graded : int
+        Symbols that received a grade.
+    api_key : str | None
+        OpenRouter key; without one, a run that graded nothing is skipped.
+    uncertain_detail : str
+        Phrase completing "symbol(s) ... passed on low confidence".
+    failure_header : str
+        First line of the failure message.
+    """
+    # Warn before any failure so excused grades show up either way.
+    if uncertain:
+        warnings.warn(
+            f"{label}: {len(uncertain)} symbol(s) {uncertain_detail} passed on low "
+            f"confidence (<= {LOW_CONFIDENCE:g}):\n" + "\n".join(uncertain),
+            UserWarning,
+            stacklevel=3,
+        )
+    if failures:
+        pytest.fail(failure_header + "\n" + "\n".join(failures), pytrace=False)
+    if not api_key and not graded:
+        pytest.skip(f"{API_KEY_ENV} unavailable; {ungraded} symbol(s) ungraded")
+    if ungraded:
+        warnings.warn(f"{label}: {ungraded} symbol(s) ungraded", UserWarning, stacklevel=3)
 
 
 def state_payload(state: SymbolState) -> dict[str, str]:

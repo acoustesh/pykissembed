@@ -348,25 +348,65 @@ def _require_api_key(env_var: str) -> str:
     return api_key
 
 
-def _build_jina_caller(
-    model: str,
-    timeout: float,
-    task: str,
-) -> tuple[Callable[[list[str]], list[list[float]]], Callable[[Exception], bool]]:
-    """Build the request/retry callables for the Jina embeddings endpoint.
+type _Payload = dict[str, str | bool | list[str]]
 
-    Jina has its own (non-OpenRouter) endpoint and API key, and takes a per-call
-    ``task`` (``code2code.*`` / ``nl2code.*``) plus ``truncate`` in the request
-    body — hence a dedicated builder rather than the shared OpenRouter branch.
+
+def _jina_payload(model: str, task: str, truncated: list[str]) -> _Payload:
+    """Build the Jina request body.
+
+    Jina has its own (non-OpenRouter) endpoint and API key, and takes a
+    per-call ``task`` (``code2code.*`` / ``nl2code.*``) plus ``truncate`` in
+    the request body.
 
     Parameters
     ----------
     model : str
         Jina embedding model identifier.
+    task : str
+        Jina task code, e.g. ``code2code.query``; omitted when empty.
+    truncated : list[str]
+        Input texts already truncated to the token limit.
+
+    Returns
+    -------
+    _Payload
+        JSON request body.
+    """
+    payload: _Payload = {
+        "model": model,
+        # Truncation is handled upstream via tiktoken; asking the model not
+        # to truncate makes an over-limit input error out instead of being
+        # silently shortened (and mis-embedded).
+        "truncate": False,
+        "input": truncated,
+    }
+    if task:
+        payload["task"] = task
+    return payload
+
+
+def _build_bearer_caller(
+    api_key_env: str,
+    url: str,
+    build_payload: Callable[[list[str]], _Payload],
+    timeout: float,
+) -> tuple[Callable[[list[str]], list[list[float]]], Callable[[Exception], bool]]:
+    """Build request/retry callables for a bearer-authenticated JSON endpoint.
+
+    Serves every provider whose response lists input-ordered vectors under
+    ``data`` (OpenRouter-hosted models and Jina); the requests library comes
+    from ``pykissembed[cloud]`` and is loaded only when one is requested.
+
+    Parameters
+    ----------
+    api_key_env : str
+        Environment variable holding the API key.
+    url : str
+        Embedding endpoint.
+    build_payload : Callable[[list[str]], _Payload]
+        Builds the JSON request body from the truncated input texts.
     timeout : float
         Per-request timeout in seconds.
-    task : str
-        Jina task code, e.g. ``code2code.query``.
 
     Returns
     -------
@@ -374,12 +414,11 @@ def _build_jina_caller(
         ``(make_request, is_retryable)`` callables.
     """
     post, timeout_error, http_error = _requests_api()
-
-    api_key = _require_api_key("JINA_API_KEY")
+    api_key = _require_api_key(api_key_env)
     headers = {"Authorization": f"Bearer {api_key}", "Content-Type": "application/json"}
 
-    def _jina_request(truncated: list[str]) -> list[list[float]]:
-        """Send an embedding request to the Jina API.
+    def _request(truncated: list[str]) -> list[list[float]]:
+        """Send an embedding request and parse its input-ordered response.
 
         Parameters
         ----------
@@ -396,27 +435,14 @@ def _build_jina_caller(
         ValueError
             If the JSON response does not contain a ``data`` field.
         """
-        payload: dict[str, str | bool | list[str]] = {
-            "model": model,
-            # Truncation is handled upstream via tiktoken; asking the model not
-            # to truncate makes an over-limit input error out instead of being
-            # silently shortened (and mis-embedded).
-            "truncate": False,
-            "input": truncated,
-        }
-        if task:
-            payload["task"] = task
-        response = post(JINA_API_URL, headers=headers, json=payload, timeout=timeout)
+        response = post(url, headers=headers, json=build_payload(truncated), timeout=timeout)
         data = _response_json(response)
         if not _is_str_object_dict(data) or "data" not in data:
             msg = f"Unexpected API response: {data}"
             raise ValueError(msg)
         return _parse_unindexed_response(data)
 
-    return (
-        _jina_request,
-        lambda e: isinstance(e, (timeout_error, http_error)),
-    )
+    return (_request, lambda e: isinstance(e, (timeout_error, http_error)))
 
 
 def _parse_unindexed_response(payload: object) -> list[list[float]]:
@@ -814,63 +840,17 @@ def _build_provider_caller(
         return _build_openai_caller(model, timeout)
 
     if provider in {"codestral", "qwen"}:
-        # Codestral and Qwen both use OpenRouter's embeddings endpoint over
-        # plain requests (from pykissembed[cloud], not core), loaded only
-        # when one of them is requested.
-        post, timeout_error, http_error = _requests_api()
-
-        api_key = _require_api_key("OPENROUTER_API_KEY")
-        headers = {
-            "Authorization": f"Bearer {api_key}",
-            "Content-Type": "application/json",
-        }
-
-        def _openrouter_request(
-            truncated: list[str],
-        ) -> list[list[float]]:
-            """Send an embedding request to OpenRouter.
-
-            Parameters
-            ----------
-            truncated : list[str]
-                Pre-truncated input texts.
-
-            Returns
-            -------
-            list[list[float]]
-                Embedding vectors extracted from the ``data`` field of the
-                JSON response.
-
-            Raises
-            ------
-            ValueError
-                If the JSON response does not contain a ``data`` field.
-            """
-            response = post(
-                OPENROUTER_API_URL,
-                headers=headers,
-                json={"model": model, "input": truncated},
-                timeout=timeout,
-            )
-            data = _response_json(response)
-            if not _is_str_object_dict(data) or "data" not in data:
-                msg = f"Unexpected API response: {data}"
-                raise ValueError(msg)
-            return _parse_unindexed_response(data)
-
-        return (
-            _openrouter_request,
-            lambda e: isinstance(
-                e,
-                (
-                    timeout_error,
-                    http_error,
-                ),
-            ),
+        return _build_bearer_caller(
+            "OPENROUTER_API_KEY",
+            OPENROUTER_API_URL,
+            lambda truncated: {"model": model, "input": truncated},
+            timeout,
         )
 
     if provider == "jina":
-        return _build_jina_caller(model, timeout, task)
+        return _build_bearer_caller(
+            "JINA_API_KEY", JINA_API_URL, _partial(_jina_payload, model, task), timeout
+        )
 
     if provider == "voyage":
         return _build_voyage_caller(model, timeout)

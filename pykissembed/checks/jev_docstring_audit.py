@@ -18,9 +18,8 @@ OpenRouter key it grades cached responses and skips cache misses.
 from __future__ import annotations
 
 import contextlib
-import math
-import warnings
 from contextlib import closing
+from functools import partial
 from typing import TYPE_CHECKING
 
 import pytest
@@ -32,17 +31,18 @@ from pykissembed.baselines_engine import (
 )
 from pykissembed.config import get_config
 from pykissembed.jev import (
-    API_KEY_ENV,
     JEV_MODEL,
-    LOW_CONFIDENCE,
+    Grade,
     SymbolState,
     ask_jev,
     extract_symbol_states,
+    grade_summary,
     is_low_confidence,
     load_api_key,
     open_cache,
-    parse_confidence,
-    parse_score,
+    parse_grade,
+    read_threshold,
+    report_audit,
 )
 
 if TYPE_CHECKING:
@@ -110,7 +110,6 @@ _LEVEL_NO_DOCTRING = 0.0
 
 # (level, confidence); confidence is None when the reply carries none, and
 # for a missing docstring, which is graded locally.
-type Grade = tuple[float, float | None]
 
 
 def is_test_symbol(symbol: str) -> bool:
@@ -293,25 +292,7 @@ def _evaluate_symbol(level: float, min_score: float) -> bool:
     return level >= min_score
 
 
-def _parse_grade(payload: object) -> Grade | None:
-    """Read the level and confidence of a docstring score answer.
-
-    Parameters
-    ----------
-    payload : object
-        Decoded Decisions response.
-
-    Returns
-    -------
-    Grade | None
-        ``(level, confidence)``, or ``None`` when the score is malformed. A
-        missing or out-of-range confidence alone does not invalidate the
-        reply; it is reported as ``None``.
-    """
-    level = parse_score(payload, _SCORE_QUESTION_ID, len(_SCORE_LEVELS))
-    if level is None:
-        return None
-    return level, parse_confidence(payload, _SCORE_QUESTION_ID)
+_parse_grade = partial(parse_grade, question_id=_SCORE_QUESTION_ID, n_levels=len(_SCORE_LEVELS))
 
 
 @contextlib.contextmanager
@@ -335,32 +316,7 @@ def _locked_envelope() -> Generator[tuple[Path, BaselineEnvelope]]:
         yield path, envelope
 
 
-def _read_threshold(data: object, key: str, default: float) -> float:
-    """Read one minimum passing level, falling back to *default*.
-
-    Parameters
-    ----------
-    data : object
-        Baseline payload; untrusted shape.
-    key : str
-        Envelope key to read.
-    default : float
-        Value used when *key* is absent or unusable.
-
-    Returns
-    -------
-    float
-        The configured minimum level, clamped into ``[0, _MAX_LEVEL]`` so a
-        hand-edited file cannot demand a level outside the rubric.
-    """
-    mapping = data if isinstance(data, dict) else {}
-    raw = mapping.get(key, default)
-    if isinstance(raw, bool) or not isinstance(raw, (int, float)):
-        return float(default)
-    value = float(raw)
-    if not math.isfinite(value):
-        return float(default)
-    return max(0.0, min(_MAX_LEVEL, value))
+_read_threshold = partial(read_threshold, max_level=_MAX_LEVEL)
 
 
 def _read_min_score(data: object) -> float:
@@ -417,16 +373,9 @@ def _format_symbol_failure(state: SymbolState, grade: Grade, min_score: float) -
     str
         A single ``file:line symbol(kind) — level X/5, confidence C
         (need M): text`` line; the confidence part is omitted when unknown.
-        The description is taken from the nearest whole level, since the
-        rubric text is written per level.
     """
-    level, confidence = grade
-    text = _SCORE_LEVELS[round(min(_MAX_LEVEL, max(0.0, level)))]
-    sureness = "" if confidence is None else f", confidence {confidence:.2f}"
-    return (
-        f"{state.file_key}:{state.lineno} {state.symbol}({state.kind}) — "
-        f"level {level:.2f}/{_MAX_LEVEL:g}{sureness} (need {min_score:g}): {text}"
-    )
+    summary = grade_summary(grade, _SCORE_LEVELS, f"{min_score:g}")
+    return f"{state.file_key}:{state.lineno} {state.symbol}({state.kind}) — {summary}"
 
 
 def symbol_grade(state: SymbolState, *, api_key: str | None, conn: Connection) -> Grade | None:
@@ -563,30 +512,22 @@ class TestJevDocstringAudit:
                 failures, uncertain, ungraded, graded = _grade_docstrings(
                     states, envelope.data, api_key, conn
                 )
-            # Warn before any failure so excused grades show up either way.
-            if uncertain:
-                warnings.warn(
-                    f"Jev docstring audit: {len(uncertain)} symbol(s) below the minimum "
-                    f"passed on low confidence (<= {LOW_CONFIDENCE:g}):\n" + "\n".join(uncertain),
-                    UserWarning,
-                    stacklevel=2,
-                )
-            if failures:
-                header = (
-                    "Jev docstring audit: "
-                    f"{len(failures)} symbol(s) scored below the minimum "
-                    f"({ungraded} ungraded; model {JEV_MODEL}, "
-                    f"need level {base_min:g} for library code "
-                    f"and {test_min:g} for tests). "
-                    f"Adjust {_MIN_SCORE_KEY!r} / {_TEST_MIN_SCORE_KEY!r} in "
-                    f"{BASELINE_FILENAME} to change the bars."
-                )
-                pytest.fail(header + "\n" + "\n".join(failures), pytrace=False)
-            if not api_key and not graded:
-                pytest.skip(f"{API_KEY_ENV} unavailable; {ungraded} symbol(s) ungraded")
-            if ungraded:
-                warnings.warn(
-                    f"Jev docstring audit: {ungraded} symbol(s) ungraded",
-                    UserWarning,
-                    stacklevel=2,
-                )
+            failure_header = (
+                "Jev docstring audit: "
+                f"{len(failures)} symbol(s) scored below the minimum "
+                f"({ungraded} ungraded; model {JEV_MODEL}, "
+                f"need level {base_min:g} for library code "
+                f"and {test_min:g} for tests). "
+                f"Adjust {_MIN_SCORE_KEY!r} / {_TEST_MIN_SCORE_KEY!r} in "
+                f"{BASELINE_FILENAME} to change the bars."
+            )
+            report_audit(
+                "Jev docstring audit",
+                failures=failures,
+                uncertain=uncertain,
+                ungraded=ungraded,
+                graded=graded,
+                api_key=api_key,
+                uncertain_detail="below the minimum",
+                failure_header=failure_header,
+            )

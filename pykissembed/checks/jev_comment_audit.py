@@ -7,9 +7,8 @@ most ``LOW_CONFIDENCE``: such a grade passes with a warning.
 
 from __future__ import annotations
 
-import math
-import warnings
 from contextlib import closing
+from functools import partial
 from typing import TYPE_CHECKING
 
 import pytest
@@ -17,16 +16,16 @@ import pytest
 from pykissembed.baselines_engine import locked_envelope, save_envelope
 from pykissembed.config import get_config
 from pykissembed.jev import (
-    API_KEY_ENV,
     JEV_MODEL,
-    LOW_CONFIDENCE,
     ask_jev,
     extract_symbol_states,
+    grade_summary,
     is_low_confidence,
     load_api_key,
     open_cache,
-    parse_confidence,
-    parse_score,
+    parse_grade,
+    read_threshold,
+    report_audit,
 )
 from pykissembed.jev import SymbolState as _SymbolState
 
@@ -127,50 +126,12 @@ _QUESTIONS: dict[str, dict[str, object]] = {
 }
 
 
-def _read_threshold(data: object) -> float:
-    """Read the strict minimum comment level, clamped to ``[0, 4]``.
-
-    Parameters
-    ----------
-    data : object
-        Baseline payload of untrusted shape.
-
-    Returns
-    -------
-    float
-        Passing score threshold.
-    """
-    mapping = data if isinstance(data, dict) else {}
-    raw = mapping.get("min_score", DEFAULT_MIN_SCORE)
-    # Invalid hand-edited values fall back to the chosen default; a numeric
-    # override remains useful but cannot demand an impossible level.
-    if isinstance(raw, bool) or not isinstance(raw, int | float):
-        return DEFAULT_MIN_SCORE
-    value = float(raw)
-    if not math.isfinite(value):
-        return DEFAULT_MIN_SCORE
-    return max(0.0, min(float(_MAX_LEVEL), value))
-
-
-def _parse_grade(payload: object) -> tuple[float, float | None] | None:
-    """Read the level and confidence of a comment score answer.
-
-    Parameters
-    ----------
-    payload : object
-        Decoded Decisions response.
-
-    Returns
-    -------
-    tuple[float, float | None] | None
-        ``(level, confidence)``, or ``None`` when the score is malformed. A
-        missing or out-of-range confidence alone does not invalidate the
-        reply; it is reported as ``None``.
-    """
-    score = parse_score(payload, _QUESTION_ID, len(_SCORE_LEVELS))
-    if score is None:
-        return None
-    return score, parse_confidence(payload, _QUESTION_ID)
+# ask_jev and the baseline reader take one positional argument, so the shared
+# helpers are bound to this audit's rubric once, here.
+_read_threshold = partial(
+    read_threshold, key="min_score", default=DEFAULT_MIN_SCORE, max_level=float(_MAX_LEVEL)
+)
+_parse_grade = partial(parse_grade, question_id=_QUESTION_ID, n_levels=len(_SCORE_LEVELS))
 
 
 def _grade_comments(
@@ -207,13 +168,8 @@ def _grade_comments(
         score, confidence = grade
         if score > min_score:
             continue
-        nearest = min(_MAX_LEVEL, max(0, round(score)))
-        sureness = "" if confidence is None else f", confidence {confidence:.2f}"
-        line = (
-            f"{state.file_key}:{state.lineno} {state.symbol} — "
-            f"level {score:.2f}/{_MAX_LEVEL}{sureness} (need >{min_score:g}): "
-            f"{_SCORE_LEVELS[nearest]}"
-        )
+        summary = grade_summary(grade, _SCORE_LEVELS, f">{min_score:g}")
+        line = f"{state.file_key}:{state.lineno} {state.symbol} — {summary}"
         (uncertain if is_low_confidence(confidence) else failures).append(line)
     return failures, uncertain, ungraded
 
@@ -268,27 +224,19 @@ class TestJevCommentAudit:
                 pytest.skip("No auditable functions or methods found")
             with closing(open_cache(config)) as conn:
                 failures, uncertain, ungraded = _grade_comments(states, min_score, api_key, conn)
-            # Warn before any failure so excused grades show up either way.
-            if uncertain:
-                warnings.warn(
-                    f"Jev comment audit: {len(uncertain)} symbol(s) at or below level "
-                    f"{min_score:g} passed on low confidence (<= {LOW_CONFIDENCE:g}):\n"
-                    + "\n".join(uncertain),
-                    UserWarning,
-                    stacklevel=2,
-                )
-            if failures:
-                pytest.fail(
-                    "Jev comment audit: "
-                    f"{len(failures)} symbol(s) at or below level {min_score:g} "
-                    f"({ungraded} ungraded; model {JEV_MODEL}).\n" + "\n".join(failures),
-                    pytrace=False,
-                )
-            if not api_key and ungraded == len(states):
-                pytest.skip(f"{API_KEY_ENV} unavailable; {ungraded} symbol(s) ungraded")
-            if ungraded:
-                warnings.warn(
-                    f"Jev comment audit: {ungraded} symbol(s) ungraded",
-                    UserWarning,
-                    stacklevel=2,
-                )
+            # The bar is strict (a score equal to it fails), hence "at or below".
+            failure_header = (
+                "Jev comment audit: "
+                f"{len(failures)} symbol(s) at or below level {min_score:g} "
+                f"({ungraded} ungraded; model {JEV_MODEL})."
+            )
+            report_audit(
+                "Jev comment audit",
+                failures=failures,
+                uncertain=uncertain,
+                ungraded=ungraded,
+                graded=len(states) - ungraded,
+                api_key=api_key,
+                uncertain_detail=f"at or below level {min_score:g}",
+                failure_header=failure_header,
+            )
