@@ -1,3 +1,20 @@
+# v0.3.1 release notes
+
+Changes since `v0.3.0`:
+
+- Populating embeddings skips the Combined rebuild and cache save when no
+  vectors were fetched, function hashes are unchanged, and Combined is
+  already complete.
+- Jina, Codestral and Qwen embedding calls now share one bearer-token
+  caller; the Jev audits share their grade parsing, threshold reading and
+  reporting helpers.
+- Similarity baselines moved to `0.97` (neighbor and pair), with new
+  combined thresholds of `0.80` and `0.87`.
+
+- [pykissembed 0.3.1](https://test.pypi.org/project/pykissembed/0.3.1/)
+- [pykissembed-cloud 0.3.1](https://test.pypi.org/project/pykissembed-cloud/0.3.1/)
+- [Full comparison](https://github.com/acoustesh/pykissembed/compare/v0.3.0...v0.3.1)
+
 # v0.3.0 release notes
 
 Changes since `v0.2.14`:
