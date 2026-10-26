@@ -1114,9 +1114,122 @@ class TestPopulateEmbeddingsCommand:
         monkeypatch.setattr(module, "_combined_member_gaps", lambda *_args: {"openai-text": 1})
         monkeypatch.setattr(module, "_missing_for_provider", lambda *_args: 1)
 
-        total, performed = _populate_all({}, [_combined_member_func("text", "ast")])
+        fetched, rebuilt, performed = _populate_all({}, [_combined_member_func("text", "ast")])
 
-        assert (total, performed) == (1, True)
+        assert (fetched, rebuilt, performed) == (1, 0, True)
+
+    @staticmethod
+    def _stub_population(
+        monkeypatch: pytest.MonkeyPatch,
+        *,
+        fetched: int = 0,
+        combined_missing: int = 0,
+        sync_changes_hashes: bool = False,
+    ) -> dict[str, int]:
+        """Stub the population flow and return rebuild/save call counters."""
+        module = importlib.import_module("pykissembed.similarity.populate_embeddings")
+        calls = {"rebuild": 0, "save": 0}
+        baselines: dict[str, object] = {"function_hashes": {}}
+
+        def sync(*_args: object) -> None:
+            if sync_changes_hashes:
+                baselines["function_hashes"] = {"f.py:f:1": {"hash": "a", "text_hash": "t"}}
+
+        def rebuild(*_args: object, **_kwargs: object) -> int:
+            calls["rebuild"] += 1
+            return 7
+
+        def save(_baselines: object) -> None:
+            calls["save"] += 1
+
+        monkeypatch.setattr(module, "load_baselines", lambda: baselines)
+        monkeypatch.setattr(
+            module,
+            "extract_all_function_infos",
+            lambda **_kwargs: [_combined_member_func("text", "ast")],
+        )
+        monkeypatch.setattr(module, "_synchronize_scanned_function_hashes", sync)
+        monkeypatch.setattr(
+            module,
+            "_attempt_network_provider",
+            lambda _provider, *_args: (fetched, None),
+        )
+        monkeypatch.setattr(module, "_combined_member_gaps", lambda *_args: {})
+        monkeypatch.setattr(
+            module,
+            "_missing_for_provider",
+            lambda _baselines, _functions, provider: (
+                combined_missing if provider == "combined" else 0
+            ),
+        )
+        monkeypatch.setattr(module, "_populate_combined_scoped", rebuild)
+        monkeypatch.setattr(module, "save_baselines", save)
+        return calls
+
+    @staticmethod
+    def test_all_is_noop_when_everything_is_cached(
+        monkeypatch: pytest.MonkeyPatch,
+        capsys: pytest.CaptureFixture[str],
+    ) -> None:
+        """Complete caches and unchanged hashes skip the rebuild and the save."""
+        calls = TestPopulateEmbeddingsCommand._stub_population(monkeypatch)
+
+        populate_provider_embeddings("all")
+
+        out = capsys.readouterr().out
+        assert calls == {"rebuild": 0, "save": 0}
+        assert "combined: all scanned functions already cached" in out
+        assert "No cache changes to save." in out
+
+    @staticmethod
+    def test_all_rebuilds_when_combined_is_incomplete(
+        monkeypatch: pytest.MonkeyPatch,
+    ) -> None:
+        """A Combined cache missing a scanned function is rebuilt and saved."""
+        calls = TestPopulateEmbeddingsCommand._stub_population(monkeypatch, combined_missing=1)
+
+        populate_provider_embeddings("all")
+
+        assert calls == {"rebuild": 1, "save": 1}
+
+    @staticmethod
+    def test_all_rebuilds_when_function_hashes_change(
+        monkeypatch: pytest.MonkeyPatch,
+    ) -> None:
+        """A changed function-hash map forces the rebuild and the save."""
+        calls = TestPopulateEmbeddingsCommand._stub_population(monkeypatch, sync_changes_hashes=True)
+
+        populate_provider_embeddings("all")
+
+        assert calls == {"rebuild": 1, "save": 1}
+
+    @staticmethod
+    def test_all_reports_fetched_vectors_not_combined_size(
+        monkeypatch: pytest.MonkeyPatch,
+        capsys: pytest.CaptureFixture[str],
+    ) -> None:
+        """Newly fetched vectors force the rebuild and are counted separately."""
+        calls = TestPopulateEmbeddingsCommand._stub_population(monkeypatch, fetched=2)
+
+        populate_provider_embeddings("all")
+
+        assert calls == {"rebuild": 1, "save": 1}
+        module = importlib.import_module("pykissembed.similarity.populate_embeddings")
+        fetched = 2 * len(module._NETWORK_PROVIDERS)
+        assert f"Saving cache state ({fetched} fetched, 7 combined rebuilt)" in (
+            capsys.readouterr().out
+        )
+
+    @staticmethod
+    def test_combined_provider_always_rebuilds(
+        monkeypatch: pytest.MonkeyPatch,
+    ) -> None:
+        """An explicit `combined` request rebuilds even when caches are complete."""
+        calls = TestPopulateEmbeddingsCommand._stub_population(monkeypatch)
+
+        populate_provider_embeddings("combined")
+
+        assert calls == {"rebuild": 1, "save": 1}
 
     @staticmethod
     def test_all_canonical_variants_retain_expected_transport_families(

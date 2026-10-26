@@ -1139,8 +1139,13 @@ def _populate_all(
     functions: list[FunctionInfo],
     *,
     replace_combined_hashes: set[str] | None = None,
-) -> tuple[int, bool]:
+    hashes_changed: bool = False,
+) -> tuple[int, int, bool]:
     """Populate every available cloud provider and rebuild Combined.
+
+    The Combined rebuild is skipped, and the caller has nothing to save, when
+    no provider fetched vectors or failed, *hashes_changed* is false, and the
+    Combined cache already covers every scanned function.
 
     Parameters
     ----------
@@ -1151,24 +1156,28 @@ def _populate_all(
     replace_combined_hashes : set[str] | None
         Text hashes whose Combined vectors may be replaced during the
         rebuild, or ``None`` for a full rebuild scope.
+    hashes_changed : bool
+        Whether synchronizing function hashes added or removed entries.
 
     Returns
     -------
-    tuple[int, bool]
-        Total number of newly embedded functions across providers (including
-        the Combined rebuild) and whether any requested work completed.
+    tuple[int, int, bool]
+        Number of vectors fetched from providers, number of Combined rows
+        rebuilt (zero when the rebuild was skipped), and whether any requested
+        work completed.
 
     Raises
     ------
     PopulationError
         If caches are incomplete and no requested work could be completed.
     """
-    total_new = 0
+    fetched = 0
+    rebuilt = 0
     performed = False
     unresolved: list[str] = []
     for provider in _NETWORK_PROVIDERS:
         new_count, error = _attempt_network_provider(provider, baselines, functions)
-        total_new += new_count
+        fetched += new_count
         performed = performed or new_count > 0
         if error:
             unresolved.append(error)
@@ -1178,13 +1187,20 @@ def _populate_all(
     if member_gaps:
         details = ", ".join(f"{name}: {count}" for name, count in member_gaps.items())
         unresolved.append(f"combined: member caches incomplete ({details})")
-    else:
-        total_new += _populate_combined_scoped(
+    elif not (
+        fetched == 0
+        and not unresolved
+        and not hashes_changed
+        and _missing_for_provider(baselines, functions, "combined") == 0
+    ):
+        rebuilt = _populate_combined_scoped(
             baselines,
             functions,
             replace_text_hashes=replace_combined_hashes,
         )
         performed = True
+    else:
+        _emit("combined: all scanned functions already cached")
 
     any_missing = any(
         _missing_for_provider(baselines, functions, provider) for provider in _ALL_PROVIDERS
@@ -1196,7 +1212,7 @@ def _populate_all(
         raise PopulationError(
             "No requested cache work could be completed. " + "; ".join(unresolved),
         )
-    return total_new, performed
+    return fetched, rebuilt, performed
 
 
 def _resolve_scan_directories(paths: list[_Path] | None) -> list[_Path] | None:
@@ -1246,6 +1262,12 @@ def populate_provider_embeddings(
     cached_only : bool
         Inspect cache coverage without API calls or writes.
 
+    Notes
+    -----
+    ``provider="all"`` skips the Combined rebuild and the save when nothing
+    was fetched, function hashes are unchanged, and Combined is complete.
+    ``provider="combined"`` always rebuilds.
+
     Raises
     ------
     PopulationError
@@ -1285,10 +1307,11 @@ def populate_provider_embeddings(
     )
     hashes_changed = hashes_before != _get_function_hashes(baselines)
     if provider == "all":
-        total_new, performed = _populate_all(
+        fetched, rebuilt, performed = _populate_all(
             baselines,
             functions,
             replace_combined_hashes=replace_combined_hashes,
+            hashes_changed=hashes_changed,
         )
     elif provider == "combined":
         member_gaps = _combined_member_gaps(baselines, functions)
@@ -1296,21 +1319,23 @@ def populate_provider_embeddings(
             details = ", ".join(f"{name}: {count}" for name, count in member_gaps.items())
             msg = f"Cannot rebuild combined; member caches are incomplete: {details}"
             raise PopulationError(msg)
-        total_new = _populate_combined_scoped(
+        fetched = 0
+        rebuilt = _populate_combined_scoped(
             baselines,
             functions,
             replace_text_hashes=replace_combined_hashes,
         )
         performed = True
     else:
-        total_new, error = _attempt_network_provider(provider, baselines, functions)
+        fetched, error = _attempt_network_provider(provider, baselines, functions)
         if error:
             raise PopulationError(error)
-        performed = total_new > 0
+        rebuilt = 0
+        performed = fetched > 0
 
-    if total_new > 0 or hashes_changed or performed:
+    if fetched > 0 or rebuilt > 0 or hashes_changed or performed:
         _emit(
-            f"\nSaving cache state ({total_new} provider result(s))...",
+            f"\nSaving cache state ({fetched} fetched, {rebuilt} combined rebuilt)...",
         )
         save_baselines(baselines)
         _emit("Done!")
