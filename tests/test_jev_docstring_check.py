@@ -407,7 +407,7 @@ def test_request_targets_decisions_api_with_score_question(
     assert call["url"] == "https://openrouter.ai/api/alpha/decisions"
     body = call["json"]
     assert isinstance(body, dict)
-    assert body["model"] == "typesafe/jev-1.14"
+    assert body["model"] == "nace-ai/drex-max"
     state = body["state"]
     assert isinstance(state, dict)
     assert "source" in state
