@@ -1,3 +1,14 @@
+# v0.3.2 release notes
+
+Changes since `v0.3.1`:
+
+- Jev audits use `nace-ai/drex-max` (was `typesafe/jev-1.14`), so every symbol
+  is graded again once.
+
+- [pykissembed 0.3.2](https://test.pypi.org/project/pykissembed/0.3.2/)
+- [pykissembed-cloud 0.3.2](https://test.pypi.org/project/pykissembed-cloud/0.3.2/)
+- [Full comparison](https://github.com/acoustesh/pykissembed/compare/v0.3.1...v0.3.2)
+
 # v0.3.1 release notes
 
 Changes since `v0.3.0`:
