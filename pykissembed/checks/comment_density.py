@@ -76,24 +76,23 @@ def _comment_density_from_source(source: str) -> CommentStats:
     -------
     CommentStats
         Source lines of code, comment count, and comment density as a
-        percentage of code lines (``0.0`` if there are no code lines).
+        percentage of nonblank code lines, excluding bare string statements
+        (``0.0`` if there are no code lines).
     """
     metrics = analyze(source)
     loc = _get_int_attr(metrics, "loc")
+    blank = _get_int_attr(metrics, "blank")
     comments = _get_int_attr(metrics, "comments")
-    # Denominator excludes every line a docstring spans and pure `#` comment
-    # lines, but deliberately keeps blank lines outside docstrings — unlike
-    # radon's own `sloc` below, which excludes blanks too. That's why
-    # `density` and the reported `sloc` in violation messages don't line
-    # up if you try to recompute one from the other by hand.
-    code_lines = loc - comments - _string_statement_lines(source, metrics)
+    # Radon's blank count includes blank lines inside docstrings, so the
+    # string-statement count excludes blanks to avoid subtracting them twice.
+    code_lines = loc - blank - comments - _string_statement_lines(source, metrics)
     sloc = _get_int_attr(metrics, "sloc")
     density = 0.0 if code_lines <= 0 else 100.0 * (comments / code_lines)
     return CommentStats(sloc=sloc, comments=comments, density_pct=density)
 
 
 def _string_statement_lines(source: str, metrics: object) -> int:
-    """Count the physical lines spanned by bare string statements.
+    """Count nonblank physical lines spanned by bare string statements.
 
     Bare string statements are docstrings plus any other string literal used
     as a statement. Radon splits these lines across ``multi`` (non-blank lines
@@ -110,7 +109,7 @@ def _string_statement_lines(source: str, metrics: object) -> int:
     Returns
     -------
     int
-        Number of distinct lines covered by bare string statements, or
+        Number of distinct nonblank lines covered by bare string statements, or
         radon's ``multi`` count when *source* does not parse.
     """
     try:
@@ -125,7 +124,9 @@ def _string_statement_lines(source: str, metrics: object) -> int:
             and isinstance(node.value.value, str)
         ):
             covered.update(range(node.lineno, (node.end_lineno or node.lineno) + 1))
-    return len(covered)
+    return sum(
+        1 for lineno, line in enumerate(source.splitlines(), 1) if lineno in covered and line.strip()
+    )
 
 
 def _code_body_lines(node: ast.FunctionDef | ast.AsyncFunctionDef) -> int:
