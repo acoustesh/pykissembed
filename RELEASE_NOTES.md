@@ -1,3 +1,17 @@
+# v0.3.3 release notes
+
+Changes since `v0.3.2`:
+
+- The Maintainability Index gate skips consumer `tests/` and `test/`
+  directories at any depth below the project root, including explicitly
+  configured test directories. Baseline updates also omit those files.
+- Refresh locked dependencies and update Ruff rule names and test clock
+  stubs for compatibility with the current lint checks.
+
+- [pykissembed 0.3.3](https://test.pypi.org/project/pykissembed/0.3.3/)
+- [pykissembed-cloud 0.3.3](https://test.pypi.org/project/pykissembed-cloud/0.3.3/)
+- [Full comparison](https://github.com/acoustesh/pykissembed/compare/v0.3.2...v0.3.3)
+
 # v0.3.2 release notes
 
 Changes since `v0.3.1`:
