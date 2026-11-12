@@ -175,7 +175,9 @@ The complexity gate (`pytest -m complexity`) enforces:
 - **Cognitive complexity (COG)** — per-function cognitive complexity via
   `complexipy`, fails if above threshold (default 15) or per-function baseline.
 - **Maintainability Index (MI)** — per-file MI via `radon`, fails if below
-  threshold (default 13) or per-file baseline.
+  threshold (default 13) or per-file baseline. Consumer directories named
+  `tests` or `test` are excluded at any depth below the project root,
+  including explicitly configured test directories.
 - **Wrapper proliferation** — exact one-statement pass-through wrappers fail
   when their project-wide static call count is at or below
   `wrapper_max_call_sites` (default 1). Counts use the terminal call name

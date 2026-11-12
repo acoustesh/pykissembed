@@ -28,8 +28,8 @@ from pykissembed.baselines_engine import (
     save_envelope,
 )
 from pykissembed.config import get_config
+from pykissembed.paths import is_test_path, warn_non_utf8
 from pykissembed.paths import iter_py_files as _iter_py_files
-from pykissembed.paths import warn_non_utf8
 from pykissembed.similarity.complexity import AnalyzerError, call_analyzer
 from pykissembed.wrapper_analysis import (
     decorator_name,
@@ -674,7 +674,10 @@ class TestMaintainabilityIndex:
         *,
         update_baselines: bool,
     ) -> None:
-        """Fail if any file's MI drops below threshold or its baseline.
+        """Fail if a non-test file's MI drops below threshold or its baseline.
+
+        Directories named ``tests`` or ``test`` below the consumer project
+        root are excluded, including explicitly configured test directories.
 
         Parameters
         ----------
@@ -687,6 +690,7 @@ class TestMaintainabilityIndex:
         """
         if not pykissembed_paths:
             pytest.skip("No [tool.pykissembed] paths configured")
+        config = get_config()
         with _locked_envelope() as (baseline_file, envelope):
             threshold = read_float(envelope.data, "mi_threshold", _DEFAULT_CONFIG["mi_threshold"])
             mi_baselines = read_float_map(envelope.data, "mi_baselines")
@@ -694,7 +698,9 @@ class TestMaintainabilityIndex:
             current_mi: dict[str, float] = {}
             for base_dir in pykissembed_paths:
                 for py_file in _iter_py_files(base_dir):
-                    rel = py_file.relative_to(get_config().root)
+                    if is_test_path(py_file, config.root):
+                        continue
+                    rel = py_file.relative_to(config.root)
                     key = str(rel)
                     mi = round(_get_mi(py_file), 2)
                     current_mi[key] = mi

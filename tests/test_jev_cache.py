@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from contextlib import closing
 from dataclasses import replace
+from types import SimpleNamespace
 from typing import TYPE_CHECKING
 
 import pytest
@@ -112,7 +113,7 @@ def test_jev_retries_only_transient_http_failures(
         return _Response({"answers": {"score": {"score": 1}}})
 
     monkeypatch.setattr(requests, "post", post)
-    monkeypatch.setattr(jev.time, "sleep", lambda _seconds: None)
+    monkeypatch.setattr(jev, "time", SimpleNamespace(sleep=lambda _seconds: None))
     with closing(jev.open_cache(PyqtestConfig(root=tmp_path))) as conn:
         assert _ask(conn, _state()) == (1 if retry else None)
         assert _row_count(conn) == int(retry)

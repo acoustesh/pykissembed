@@ -203,7 +203,7 @@ runtime-evaluated-decorators = ["typer.Typer.callback", "typer.Typer.command"]
 # regression is documented in tests/test_similarity_parity.py). Verified by
 # testing the __init__.py addition directly: it broke `from
 # _similarity_backend import ...`'s bare-name resolution — see git history.
-"tests/**" = ["missing-type-function-argument", "missing-return-type-undocumented-public-function", "missing-return-type-private-function", "assert", "magic-value-comparison", "suspicious-subprocess-import", "implicit-namespace-package", "import-private-name", "no-self-use"]
+"tests/**" = ["missing-type-function-argument", "missing-return-type-public-function", "missing-return-type-private-function", "assert", "magic-value-comparison", "suspicious-subprocess-import", "implicit-namespace-package", "import-private-name", "no-self-use"]
 "pykissembed/tests/fixtures/**" = ["ALL"]
 # S603 (subprocess-without-shell-equals-true) — approved for these exact files:
 # each call passes an argv sequence to a known executable without invoking a shell.

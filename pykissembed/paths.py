@@ -72,7 +72,7 @@ def should_skip(path: Path, base: Path) -> bool:
 
 
 # Directory names holding a consumer's test suite. The docstring and comment
-# audits skip them: test code documents gates, not an API.
+# audits and maintainability index skip them: test code documents gates, not an API.
 TEST_DIRS = ("tests", "test")
 
 

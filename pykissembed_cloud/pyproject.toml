@@ -122,7 +122,7 @@ ignore = [
     "blind-except",  # blind-except — catching broad Exception is OK at CLI/provider boundaries
     "implicit-namespace-package",  # implicit-namespace-package — test/fixture dirs intentionally have no __init__.py
     "function-call-in-default-argument",    # function-call-in-default-argument — calls in defaults OK for module-level Path constants
-    "missing-return-type-undocumented-public-function",  # missing-return-type-undocumented-public-function — return annotations optional on helpers
+    "missing-return-type-public-function",  # missing-return-type-public-function — return annotations optional on helpers
     "any-type",  # any-type — typing.Any allowed at dynamic boundaries (kwargs, JSON payloads)
     "f-string-in-exception",   # f-string-in-exception — f-string literals directly in `raise X(f"…")` accepted without a msg variable
     "try-except-continue",    # try-except-continue — continuing past per-item errors is deliberate in scan loops
@@ -141,7 +141,7 @@ ignore = [
 convention = "numpy"
 
 [tool.ruff.lint.per-file-ignores]
-"tests/**" = ["missing-type-function-argument", "missing-return-type-undocumented-public-function", "missing-return-type-private-function", "assert", "magic-value-comparison", "no-self-use"]
+"tests/**" = ["missing-type-function-argument", "missing-return-type-public-function", "missing-return-type-private-function", "assert", "magic-value-comparison", "no-self-use"]
 
 [tool.ty.analysis]
 respect-type-ignore-comments = false

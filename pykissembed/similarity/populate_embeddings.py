@@ -1262,17 +1262,17 @@ def populate_provider_embeddings(
     cached_only : bool
         Inspect cache coverage without API calls or writes.
 
-    Notes
-    -----
-    ``provider="all"`` skips the Combined rebuild and the save when nothing
-    was fetched, function hashes are unchanged, and Combined is complete.
-    ``provider="combined"`` always rebuilds.
-
     Raises
     ------
     PopulationError
         If the provider or paths are invalid, credentials are unavailable for
         a selected incomplete provider, or population leaves it incomplete.
+
+    Notes
+    -----
+    ``provider="all"`` skips the Combined rebuild and the save when nothing
+    was fetched, function hashes are unchanged, and Combined is complete.
+    ``provider="combined"`` always rebuilds.
     """
     _require_canonical_provider(provider)
     directories = _resolve_scan_directories(paths)

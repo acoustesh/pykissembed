@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+from types import SimpleNamespace
+
 import pytest
 import requests
 
@@ -178,7 +180,7 @@ def test_voyage_retries_rate_limits_and_server_errors(
         return next(responses)
 
     monkeypatch.setattr(requests, "post", fake_post)
-    monkeypatch.setattr(embeddings.time, "sleep", sleeps.append)
+    monkeypatch.setattr(embeddings, "time", SimpleNamespace(sleep=sleeps.append))
 
     result = embeddings.get_embeddings_batch(
         ["text"],
@@ -207,7 +209,7 @@ def test_voyage_retries_timeouts(
         return _Response(_success_payload(["text"]))
 
     monkeypatch.setattr(requests, "post", fake_post)
-    monkeypatch.setattr(embeddings.time, "sleep", sleeps.append)
+    monkeypatch.setattr(embeddings, "time", SimpleNamespace(sleep=sleeps.append))
 
     assert embeddings.get_embeddings_batch(
         ["text"],
@@ -237,9 +239,9 @@ def test_voyage_does_not_retry_terminal_or_malformed_responses(
 
     monkeypatch.setattr(requests, "post", fake_post)
     monkeypatch.setattr(
-        embeddings.time,
-        "sleep",
-        lambda _delay: pytest.fail("terminal Voyage failure was retried"),
+        embeddings,
+        "time",
+        SimpleNamespace(sleep=lambda _delay: pytest.fail("terminal Voyage failure was retried")),
     )
 
     with pytest.raises((requests.exceptions.HTTPError, ValueError)):

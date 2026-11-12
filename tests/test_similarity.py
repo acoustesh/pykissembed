@@ -40,6 +40,7 @@ from pykissembed.similarity.exclusions import is_excluded_pair
 from pykissembed.similarity.jina_similarity import build_symmetrized_matrix
 from pykissembed.similarity.populate_embeddings import (
     _JINA_TEXT_CFG,
+    _NETWORK_PROVIDERS,
     _PROVIDER_MAP,
     PopulationError,
     _get_embedding_cache,
@@ -1126,7 +1127,13 @@ class TestPopulateEmbeddingsCommand:
         combined_missing: int = 0,
         sync_changes_hashes: bool = False,
     ) -> dict[str, int]:
-        """Stub the population flow and return rebuild/save call counters."""
+        """Stub the population flow and return rebuild/save call counters.
+
+        Returns
+        -------
+        dict[str, int]
+            Mutable counters for Combined rebuilds and baseline saves.
+        """
         module = importlib.import_module("pykissembed.similarity.populate_embeddings")
         calls = {"rebuild": 0, "save": 0}
         baselines: dict[str, object] = {"function_hashes": {}}
@@ -1214,8 +1221,7 @@ class TestPopulateEmbeddingsCommand:
         populate_provider_embeddings("all")
 
         assert calls == {"rebuild": 1, "save": 1}
-        module = importlib.import_module("pykissembed.similarity.populate_embeddings")
-        fetched = 2 * len(module._NETWORK_PROVIDERS)
+        fetched = 2 * len(_NETWORK_PROVIDERS)
         assert f"Saving cache state ({fetched} fetched, 7 combined rebuilt)" in (
             capsys.readouterr().out
         )

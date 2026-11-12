@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from types import SimpleNamespace
 from typing import TYPE_CHECKING
 
 import pytest
@@ -172,7 +173,7 @@ def test_perfect_score_passes(
     """A level-5 score clears the default minimum without failure."""
     monkeypatch.setenv("OPENROUTER_API_KEY", "openrouter-test-key-long-enough")
     monkeypatch.setattr(requests, "post", _post_returning(_answers_response(_PASS_LEVEL)))
-    monkeypatch.setattr(jev.time, "sleep", lambda _s: None)
+    monkeypatch.setattr(jev, "time", SimpleNamespace(sleep=lambda _s: None))
 
     _run_check(tmp_path, monkeypatch)
 
@@ -184,7 +185,7 @@ def test_minor_issues_score_passes(
     """Level 4 (one or two very minor EIOD) is the intended pass band."""
     monkeypatch.setenv("OPENROUTER_API_KEY", "openrouter-test-key-long-enough")
     monkeypatch.setattr(requests, "post", _post_returning(_answers_response(4)))
-    monkeypatch.setattr(jev.time, "sleep", lambda _s: None)
+    monkeypatch.setattr(jev, "time", SimpleNamespace(sleep=lambda _s: None))
 
     _run_check(tmp_path, monkeypatch)
 
@@ -196,7 +197,7 @@ def test_important_errors_fail_with_level_in_message(
     """Level 2 fails and the message names the level and the required bar."""
     monkeypatch.setenv("OPENROUTER_API_KEY", "openrouter-test-key-long-enough")
     monkeypatch.setattr(requests, "post", _post_returning(_answers_response(2)))
-    monkeypatch.setattr(jev.time, "sleep", lambda _s: None)
+    monkeypatch.setattr(jev, "time", SimpleNamespace(sleep=lambda _s: None))
 
     with pytest.raises(pytest.fail.Exception) as exc_info:
         _run_check(tmp_path, monkeypatch)
@@ -214,7 +215,7 @@ def test_level_three_passes_at_the_minimum(
     """Level 3 clears the bar, so the pass band is 3-5 inclusive."""
     monkeypatch.setenv("OPENROUTER_API_KEY", "openrouter-test-key-long-enough")
     monkeypatch.setattr(requests, "post", _post_returning(_answers_response(3)))
-    monkeypatch.setattr(jev.time, "sleep", lambda _s: None)
+    monkeypatch.setattr(jev, "time", SimpleNamespace(sleep=lambda _s: None))
 
     _run_check(tmp_path, monkeypatch)
 
@@ -226,7 +227,7 @@ def test_level_two_is_the_first_failing_level(
     """Level 2 is one below the bar and therefore the first failure."""
     monkeypatch.setenv("OPENROUTER_API_KEY", "openrouter-test-key-long-enough")
     monkeypatch.setattr(requests, "post", _post_returning(_answers_response(2)))
-    monkeypatch.setattr(jev.time, "sleep", lambda _s: None)
+    monkeypatch.setattr(jev, "time", SimpleNamespace(sleep=lambda _s: None))
 
     with pytest.raises(pytest.fail.Exception) as exc_info:
         _run_check(tmp_path, monkeypatch)
@@ -243,7 +244,7 @@ def test_low_confidence_failure_passes_with_warning(
     """A below-the-bar grade at confidence <= 0.2 warns instead of failing."""
     monkeypatch.setenv("OPENROUTER_API_KEY", "openrouter-test-key-long-enough")
     monkeypatch.setattr(requests, "post", _post_returning(_answers_response(1, confidence)))
-    monkeypatch.setattr(jev.time, "sleep", lambda _s: None)
+    monkeypatch.setattr(jev, "time", SimpleNamespace(sleep=lambda _s: None))
 
     with pytest.warns(UserWarning, match="low confidence") as record:
         _run_check(tmp_path, monkeypatch)
@@ -258,7 +259,7 @@ def test_confidence_just_above_the_cutoff_still_fails(
     """Only confidence at or below 0.2 excuses a failing grade."""
     monkeypatch.setenv("OPENROUTER_API_KEY", "openrouter-test-key-long-enough")
     monkeypatch.setattr(requests, "post", _post_returning(_answers_response(1, 0.21)))
-    monkeypatch.setattr(jev.time, "sleep", lambda _s: None)
+    monkeypatch.setattr(jev, "time", SimpleNamespace(sleep=lambda _s: None))
 
     with pytest.raises(pytest.fail.Exception, match=r"confidence 0\.21"):
         _run_check(tmp_path, monkeypatch)
@@ -337,7 +338,7 @@ def test_malformed_answers_are_skipped_not_failed(
     """A malformed Jev reply skips the symbol instead of failing the gate."""
     monkeypatch.setenv("OPENROUTER_API_KEY", "openrouter-test-key-long-enough")
     monkeypatch.setattr(requests, "post", lambda *_a, **_k: _Response({"answers": {}}))
-    monkeypatch.setattr(jev.time, "sleep", lambda _s: None)
+    monkeypatch.setattr(jev, "time", SimpleNamespace(sleep=lambda _s: None))
 
     # The reply is unparseable, so the symbol is never graded: the gate must
     # neither fail nor skip the run, but it does warn that it graded nothing.
@@ -398,7 +399,7 @@ def test_request_targets_decisions_api_with_score_question(
 
     monkeypatch.setenv("OPENROUTER_API_KEY", "openrouter-test-key-long-enough")
     monkeypatch.setattr(requests, "post", fake_post)
-    monkeypatch.setattr(jev.time, "sleep", lambda _s: None)
+    monkeypatch.setattr(jev, "time", SimpleNamespace(sleep=lambda _s: None))
 
     _run_check(tmp_path, monkeypatch)
 
@@ -482,7 +483,7 @@ def test_out_of_range_score_is_skipped_not_failed(
 
     monkeypatch.setenv("OPENROUTER_API_KEY", "openrouter-test-key-long-enough")
     monkeypatch.setattr(requests, "post", _post_returning(payload))
-    monkeypatch.setattr(jev.time, "sleep", lambda _s: None)
+    monkeypatch.setattr(jev, "time", SimpleNamespace(sleep=lambda _s: None))
 
     # A score of 99 is outside the 0-5 wire range, so it is rejected as
     # malformed and the symbol goes ungraded rather than failing the gate.
