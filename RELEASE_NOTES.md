@@ -1,3 +1,18 @@
+# v0.3.4 release notes
+
+Changes since `v0.3.3`:
+
+- Jev audits now use `perplexity/pplx-decider-v1.3:free`. The model change
+  requires fresh grades for previously cached symbols.
+- Comment density excludes blank lines from the denominator.
+- Clarify documentation for integer configuration defaults, analyzer
+  exception chaining, and embedding cache key mapping.
+- Refresh locked dependencies.
+
+- [pykissembed 0.3.4](https://test.pypi.org/project/pykissembed/0.3.4/)
+- [pykissembed-cloud 0.3.4](https://test.pypi.org/project/pykissembed-cloud/0.3.4/)
+- [Full comparison](https://github.com/acoustesh/pykissembed/compare/v0.3.3...v0.3.4)
+
 # v0.3.3 release notes
 
 Changes since `v0.3.2`:
