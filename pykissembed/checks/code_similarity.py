@@ -67,7 +67,7 @@ type SimilarityPcaCache = dict[str, tuple[PCAModel | None, int, bool]]
 
 
 def _extract_int(config: dict[str, object], key: str, default: int) -> int:
-    """Extract an int from config, falling back to *default*.
+    """Read an integer configuration value, defaulting only for a missing key.
 
     Parameters
     ----------
@@ -76,17 +76,22 @@ def _extract_int(config: dict[str, object], key: str, default: int) -> int:
     key : str
         Key to look up.
     default : int
-        Fallback value if key is missing or not an int.
+        Fallback value if the key is missing; invalid values raise instead.
 
     Returns
     -------
     int
-        The extracted integer value.
+        The configured value or missing-key default, without coercion.
 
     Raises
     ------
     TypeError
-        If the value exists but is not an int.
+        If the selected value is not an instance of ``int``.
+
+    Notes
+    -----
+    Booleans pass the ``isinstance`` check because ``bool`` subclasses ``int``
+    and are returned unchanged.
     """
     raw_value = config.get(key, default)
     if not isinstance(raw_value, int):

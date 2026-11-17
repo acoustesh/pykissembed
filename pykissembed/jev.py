@@ -29,7 +29,7 @@ if TYPE_CHECKING:
 
     from pykissembed.config import PyqtestConfig
 
-JEV_MODEL = "nace-ai/drex-max"
+JEV_MODEL = "perplexity/pplx-decider-v1.3:free"
 DECISIONS_URL = "https://openrouter.ai/api/alpha/decisions"
 API_KEY_ENV = "OPENROUTER_API_KEY"
 REQUEST_TIMEOUT = 60.0

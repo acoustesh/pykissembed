@@ -51,10 +51,8 @@ def call_analyzer(
     try:
         return analyzer(*args, **kwargs)
     except Exception as exc:
-        # Deliberately broad: a third-party analyzer with no stubs can fail in
-        # any way at all, and the callers here only need a single predictable
-        # error type to fall back on. The original text is kept on the raised
-        # message so a malformed source is still diagnosable from the traceback.
+        # Analyzer exception types vary; callers use AnalyzerError for fallback.
+        # Chaining preserves the original failure in the traceback.
         msg = f"{getattr(analyzer, '__name__', 'analyzer')} failed"
         raise AnalyzerError(msg) from exc
 

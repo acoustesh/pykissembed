@@ -618,9 +618,8 @@ def cli_provider_name(cache_key: str) -> str:
         Provider name accepted by ``pykissembed populate-embeddings --provider``.
     """
     return (
-        # The suffix order matters: a Jina query key must shed "_query" before
-        # the generic "_embeddings" strip can see it, otherwise the result
-        # would keep a "jina-text-query" stem that is not a valid provider.
+        # Strip the outer "_embeddings" suffix first to expose Jina's role
+        # suffix; both roles map to the same CLI provider.
         cache_key
         .removesuffix("_embeddings")
         .removesuffix("_query")
