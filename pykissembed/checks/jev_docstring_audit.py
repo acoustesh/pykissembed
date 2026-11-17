@@ -1,4 +1,4 @@
-"""Jev-backed docstring quality audit (TypeSafe ``jev-1.13``).
+"""Jev-backed docstring quality audit (model set by ``pykissembed.jev.JEV_MODEL``).
 
 Sends each documented function/class source to the OpenRouter Decisions API
 and asks a score question on an ordered 0-5 docstring rubric. The code is the
