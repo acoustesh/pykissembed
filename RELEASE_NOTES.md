@@ -1,3 +1,31 @@
+# v0.3.5 release notes
+
+Changes since `v0.3.4`:
+
+- Similarity failures now go through a Jev consolidation review. It scores each
+  flagged pair from 0 (keep separate) to 3 (consolidate), and a pair fails at
+  `consolidation_fail_score` or above (default `1.0`). Each failure explains the
+  decision with the score distribution, the shared-rule, caller-contract and
+  flag evidence, and the providers that flagged the pair.
+- A graded pair with confidence below `0.35` passes with a warning. A pair stays
+  failed when no grade is available, or when it scores below the bar without a
+  confidence.
+- `test_combined_similarity` uses the same review, and now reports provider
+  crashes and skips in the same format as `test_providers_parallel`.
+- The Jev comment and docstring audits share one workflow. Their rubrics and
+  thresholds are unchanged.
+- Fix a `ty` diagnostic in the docstring fixer and refresh locked dependencies.
+
+**Behavior change:** projects that set `OPENROUTER_API_KEY` now send the source
+of each flagged function and a few of its call sites to
+`perplexity/pplx-decider-v1.3:free`. To keep the review offline, run
+`pytest -m "not jev"`, use `--cached-only`, or set `cached_only = true`. Pairs
+without a stored decision then stay failed.
+
+- [pykissembed 0.3.5](https://test.pypi.org/project/pykissembed/0.3.5/)
+- [pykissembed-cloud 0.3.5](https://test.pypi.org/project/pykissembed-cloud/0.3.5/)
+- [Full comparison](https://github.com/acoustesh/pykissembed/compare/v0.3.4...v0.3.5)
+
 # v0.3.4 release notes
 
 Changes since `v0.3.3`:
