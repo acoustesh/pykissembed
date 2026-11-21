@@ -23,6 +23,7 @@ from pathlib import Path
 from typing import TYPE_CHECKING, Literal, TypeGuard
 
 import pytest
+from _pytest.mark.expression import Expression
 from _pytest.stash import StashKey
 
 from pykissembed.config import get_config
@@ -197,6 +198,74 @@ def cached_only(request: pytest.FixtureRequest) -> bool:
     if request.config.getoption("--allow-cloud-embeddings"):
         return False
     return bool(request.config.getoption("--cached-only") or get_config().cached_only)
+
+
+def _excludes_jev(expression: str, markers: set[str]) -> bool:
+    """Return whether a ``-m`` expression rejects a test once it counts as Jev.
+
+    Parameters
+    ----------
+    expression : str
+        The active marker expression, empty when none is set.
+    markers : set[str]
+        Marker names already on the test.
+
+    Returns
+    -------
+    bool
+        ``True`` when adding ``jev`` to *markers* would deselect the test.
+    """
+    if not expression:
+        return False
+    selectable = markers | {"jev"}
+
+    def matches(name: str, /, **kwargs: str | int | bool | None) -> bool:
+        """Match a plain marker name against the test's markers.
+
+        Parameters
+        ----------
+        name : str
+            Marker name from the expression.
+        **kwargs : str | int | bool | None
+            Marker arguments from the expression, which never match here.
+
+        Returns
+        -------
+        bool
+            Whether the marker counts as present.
+        """
+        return not kwargs and name in selectable
+
+    return not Expression.compile(expression).evaluate(matches)
+
+
+@pytest.fixture
+def jev_review_cached_only(request: pytest.FixtureRequest, *, cached_only: bool) -> bool:
+    """Fixture deciding whether the similarity review may send source to Jev.
+
+    The review is not marked ``jev``, because ``-m "not jev"`` would then
+    deselect the whole similarity gate, so the opt-out is honored here.
+
+    Parameters
+    ----------
+    request : pytest.FixtureRequest
+        Active pytest request.
+    cached_only : bool
+        Effective cache-only setting for embeddings.
+
+    Returns
+    -------
+    bool
+        ``True`` when the run is cache-only, project config sets
+        ``cached_only`` (``--allow-cloud-embeddings`` covers embeddings only),
+        or the ``-m`` expression excludes ``jev``.
+    """
+    markers = {marker.name for marker in request.node.iter_markers()}
+    return (
+        cached_only
+        or get_config().cached_only
+        or _excludes_jev(str(request.config.getoption("markexpr")), markers)
+    )
 
 
 @pytest.fixture(scope="session")

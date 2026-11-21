@@ -274,6 +274,27 @@ def parse_confidence(payload: object, question_id: str) -> float | None:
     return confidence
 
 
+def parse_noul(payload: object, question_id: str) -> float | None:
+    """Read the probability of "yes" from one yes/no answer.
+
+    Parameters
+    ----------
+    payload : object
+        Decoded response body.
+    question_id : str
+        Yes/no question to read.
+
+    Returns
+    -------
+    float | None
+        Probability in ``[0, 1]``, or ``None`` when absent or out of range.
+    """
+    probability = _answer_number(payload, question_id, "noul")
+    if probability is None or not 0 <= probability <= 1:
+        return None
+    return probability
+
+
 def is_low_confidence(confidence: float | None) -> bool:
     """Return whether a grade is too uncertain to fail an audit.
 

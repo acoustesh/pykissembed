@@ -67,3 +67,6 @@ class FunctionInfo:
     ast_text: str = ""  # ast.unparse() output
     docstring: str = ""  # Docstring text (natural-language intent for Jina nl2code)
     embedding: list[float] | None = field(default=None, repr=False)
+
+
+type FlaggedEdge = tuple[FunctionInfo, FunctionInfo, float]

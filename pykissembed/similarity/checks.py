@@ -42,7 +42,7 @@ from pykissembed.similarity.storage import (
 if TYPE_CHECKING:
     from collections.abc import Callable
 
-    from pykissembed.similarity.types import FunctionInfo, PCAModel
+    from pykissembed.similarity.types import FlaggedEdge, FunctionInfo, PCAModel
 
 type Baselines = dict[str, object]
 type NeighborEntry = tuple[str, str, int, float]
@@ -387,6 +387,7 @@ def run_provider_similarity_checks(
     load_complexity_maps_fn: Callable[[], tuple[dict[str, int], dict[str, int]]],
     pca_cache: PcaCache | None = None,
     class_function_proximity: int = 0,
+    flagged: list[FlaggedEdge] | None = None,
 ) -> None:
     """Unified workflow for similarity tests across all embedding providers.
 
@@ -412,6 +413,7 @@ def run_provider_similarity_checks(
     pca_cache: Optional session-scoped cache for fitted PCA models.
     class_function_proximity: Maximum non-blank, non-comment source lines
         allowed between a class and a function in the same file.
+    flagged: Receives each pair behind a violation, when given.
     """
     _ = update_baselines
     if len(functions) < _MIN_FUNCTIONS_TO_COMPARE:
@@ -473,6 +475,7 @@ def run_provider_similarity_checks(
         excluded_file_pairs,
         excluded_function_pairs,
         class_function_proximity,
+        flagged,
     )
     _report_violations(
         pair_violations,
@@ -530,6 +533,7 @@ def _find_matrix_violations(
     excluded_file_pairs: list[list[str]] | None = None,
     excluded_function_pairs: list[list[str]] | None = None,
     class_function_proximity: int = 0,
+    flagged: list[FlaggedEdge] | None = None,
 ) -> tuple[list[str], list[str]]:
     """Find pair/neighbor violations from a precomputed similarity matrix.
 
@@ -557,6 +561,8 @@ def _find_matrix_violations(
     class_function_proximity : int
         Max source lines allowed between a class and a nearby function
         when applying proximity exclusions.
+    flagged : list[FlaggedEdge] | None
+        Receives each pair behind a violation exactly once, when given.
 
     Returns
     -------
@@ -575,6 +581,7 @@ def _find_matrix_violations(
 
     for i, func_a in enumerate(functions):
         neighbor_entries: list[NeighborEntry] = []
+        edges: list[FlaggedEdge] = []
         # Upper triangle only: each pair is scored once, as (i, j) with j > i.
         # Ascending order is preserved, which _format_neighbor_violation relies
         # on when it truncates to the first three neighbors.
@@ -584,12 +591,17 @@ def _find_matrix_violations(
             if is_excluded_pair(func_a, func_b, efp, efnp, class_function_proximity):
                 continue
             score = float(similarity[i, j])
+            edges.append((func_a, func_b, score))
             if score >= threshold_pair:
                 pair_violations.append(_format_pair_violation(func_a, func_b, score))
             if score >= threshold_neighbor:
                 neighbor_entries.append((func_b.file, func_b.name, func_b.start_line, score))
-        if len(neighbor_entries) >= _MIN_NEIGHBORS_FOR_VIOLATION:
+        has_cluster = len(neighbor_entries) >= _MIN_NEIGHBORS_FOR_VIOLATION
+        if has_cluster:
             neighbor_violations.append(_format_neighbor_violation(func_a, neighbor_entries))
+        if flagged is not None:
+            # A lone neighbor below the pair threshold is not a violation.
+            flagged.extend(edge for edge in edges if has_cluster or edge[2] >= threshold_pair)
 
     return pair_violations, neighbor_violations
 
@@ -608,6 +620,7 @@ def run_jina_similarity_checks(
     pca_cache: PcaCache | None = None,
     # asymmetric cross-score is not a single-vector cosine); accepted for symmetry.
     class_function_proximity: int = 0,
+    flagged: list[FlaggedEdge] | None = None,
 ) -> None:
     """Similarity workflow for a Jina provider (symmetrized query/passage path).
 
@@ -638,6 +651,8 @@ def run_jina_similarity_checks(
         Accepted for symmetry; unused (Jina bypasses PCA).
     class_function_proximity : int
         Max source lines allowed between a class and a nearby function pair.
+    flagged : list[FlaggedEdge] | None
+        Receives each pair behind a violation, when given.
     """
     _ = update_baselines, pca_cache
     if len(functions) < _MIN_FUNCTIONS_TO_COMPARE:
@@ -687,6 +702,7 @@ def run_jina_similarity_checks(
         excluded_file_pairs,
         excluded_function_pairs,
         class_function_proximity,
+        flagged,
     )
     _report_violations(
         pair_violations,

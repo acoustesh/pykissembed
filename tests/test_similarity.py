@@ -15,9 +15,11 @@ import numpy as np
 import numpy.typing as npt
 import pytest
 
+from pykissembed.checks import code_similarity
 from pykissembed.plugin import (
     _CHECK_STEMS,
     _checks_dir,
+    _excludes_jev,
 )
 from pykissembed.similarity import checks as similarity_checks
 from pykissembed.similarity import complexity as similarity_complexity
@@ -71,7 +73,7 @@ from pykissembed.similarity.storage import (
     merge_embedding_caches,
     save_baselines,
 )
-from pykissembed.similarity.types import FunctionInfo
+from pykissembed.similarity.types import FlaggedEdge, FunctionInfo
 
 
 class TestComputeContentHash:
@@ -1838,6 +1840,252 @@ class TestFindViolationsMatchesPerPairCosine:
         assert any(f.embedding is None for f in funcs)
         matrix = compute_similarity_matrix(funcs)
         assert matrix.shape == (6, 6)
+
+
+class TestFlaggedEdges:
+    """Tests for the structured pairs recorded alongside violation messages."""
+
+    @staticmethod
+    @pytest.mark.parametrize(
+        ("cos_ab", "cos_ac", "expected"),
+        [
+            (0.95, 0.1, [("a", "b")]),
+            (0.85, 0.85, [("a", "b"), ("a", "c")]),
+            (0.95, 0.85, [("a", "b"), ("a", "c")]),
+            (0.85, 0.1, []),
+        ],
+        ids=["pair", "neighbors", "pair-inside-neighbors-once", "single-neighbor"],
+    )
+    def test_records_each_violating_edge_once(
+        monkeypatch: pytest.MonkeyPatch,
+        cos_ab: float,
+        cos_ac: float,
+        expected: list[tuple[str, str]],
+    ) -> None:
+        """Pair edges and clustered neighbor edges are recorded without repeats."""
+        # b and c sit on opposite sides of a, so they are never similar themselves.
+        vectors = {
+            "a": [1.0, 0.0],
+            "b": [cos_ab, float(np.sqrt(1 - cos_ab**2))],
+            "c": [cos_ac, -float(np.sqrt(1 - cos_ac**2))],
+        }
+        functions = [
+            FunctionInfo(
+                name=name,
+                file=f"{name}.py",
+                start_line=1,
+                end_line=2,
+                loc=2,
+                hash=f"hash-{name}",
+                text="pass",
+                text_hash=f"text-{name}",
+            )
+            for name in vectors
+        ]
+        baselines: dict[str, object] = {
+            "config": {},
+            OPENAI_TEXT_PROVIDER.cache_key: {
+                f"text-{name}": vector for name, vector in vectors.items()
+            },
+        }
+        monkeypatch.setattr(similarity_checks, "load_provider_embeddings", lambda *_: None)
+        monkeypatch.setattr(similarity_checks, "fit_pca", lambda *_, **__: (None, 0, False))
+        monkeypatch.setattr(similarity_checks, "_report_violations", lambda *_, **__: None)
+        flagged: list[FlaggedEdge] = []
+
+        similarity_checks.run_provider_similarity_checks(
+            baselines=baselines,
+            functions=functions,
+            update_baselines=False,
+            cached_only=True,
+            provider=OPENAI_TEXT_PROVIDER,
+            threshold_pair=0.9,
+            threshold_neighbor=0.8,
+            load_complexity_maps_fn=lambda: ({}, {}),
+            flagged=flagged,
+        )
+
+        assert [(first.name, second.name) for first, second, _ in flagged] == expected
+
+
+class TestProviderConsolidationReview:
+    """Tests for routing provider failures through the Jev review."""
+
+    FUNCTION = FunctionInfo(
+        name="alpha",
+        file="alpha.py",
+        start_line=1,
+        end_line=2,
+        loc=2,
+        hash="hash-alpha",
+        text="pass",
+    )
+
+    @classmethod
+    def install_providers(
+        cls,
+        monkeypatch: pytest.MonkeyPatch,
+        *,
+        record_edge: bool = True,
+        crash: bool = False,
+    ) -> None:
+        """Make OpenAI-Text fail on a pair and optionally crash Voyage-Text."""
+
+        def fake_run(
+            provider: ProviderEntry,
+            *_: object,
+            flagged: list[FlaggedEdge] | None = None,
+            **__: object,
+        ) -> None:
+            if crash and provider.label == "Voyage-Text":
+                message = "voyage exploded"
+                raise RuntimeError(message)
+            if provider.label == "OpenAI-Text":
+                if record_edge and flagged is not None:
+                    flagged.append((cls.FUNCTION, cls.FUNCTION, 0.99))
+                pytest.fail("embedding detail with refactor priority", pytrace=False)
+
+        monkeypatch.setattr(code_similarity, "_run_similarity_test", fake_run)
+
+    @classmethod
+    def run_gate(cls, baselines: dict[str, object] | None = None) -> None:
+        """Call the parallel provider test directly."""
+        code_similarity.test_providers_parallel(
+            {"config": {}} if baselines is None else baselines,
+            [cls.FUNCTION],
+            {},
+            [],
+            update_baselines=False,
+            cached_only=True,
+            jev_review_cached_only=True,
+        )
+
+    @staticmethod
+    @pytest.mark.parametrize(
+        ("expression", "excluded"),
+        [
+            ("", False),
+            ("not live and not slow", False),
+            ("similarity", False),
+            ("not jev", True),
+            ("similarity and not jev", True),
+            ("not (jev or lint)", True),
+        ],
+    )
+    def test_marker_expression_detects_jev_opt_out(expression: str, excluded: bool) -> None:
+        """Only an expression that rejects ``jev`` opts this test out of Jev."""
+        assert _excludes_jev(expression, {"similarity"}) is excluded
+
+    @classmethod
+    def test_jev_opt_out_keeps_review_offline(cls, monkeypatch: pytest.MonkeyPatch) -> None:
+        """Embedding population can stay on while the review makes no requests."""
+        cls.install_providers(monkeypatch)
+        modes: list[bool] = []
+
+        def fake_triage(*_: object, cached_only: bool, **__: object) -> None:
+            modes.append(cached_only)
+
+        monkeypatch.setattr(code_similarity, "triage_flagged_pairs", fake_triage)
+
+        code_similarity.test_providers_parallel(
+            {"config": {}},
+            [cls.FUNCTION],
+            {},
+            [],
+            update_baselines=False,
+            cached_only=False,
+            jev_review_cached_only=True,
+        )
+
+        assert modes == [True]
+
+    @classmethod
+    def test_cleared_pairs_pass_the_gate(cls, monkeypatch: pytest.MonkeyPatch) -> None:
+        """A provider failure disappears when every flagged pair clears."""
+        cls.install_providers(monkeypatch)
+        monkeypatch.setattr(code_similarity, "triage_flagged_pairs", lambda *_, **__: None)
+
+        cls.run_gate()
+
+    @classmethod
+    def test_confirmed_pair_fails_with_report(cls, monkeypatch: pytest.MonkeyPatch) -> None:
+        """A confirmed pair shows the review and the original provider detail."""
+        cls.install_providers(monkeypatch)
+        monkeypatch.setattr(
+            code_similarity, "triage_flagged_pairs", lambda *_, **__: "REVIEW REPORT"
+        )
+
+        with pytest.raises(pytest.fail.Exception) as failure:
+            cls.run_gate()
+
+        assert "REVIEW REPORT" in str(failure.value)
+        assert "embedding detail with refactor priority" in str(failure.value)
+
+    @classmethod
+    def test_configured_fail_score_reaches_the_review(
+        cls, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """The bar comes from the similarity config and is clamped to the rubric."""
+        cls.install_providers(monkeypatch)
+        scores: list[float] = []
+
+        def fake_triage(*_: object, fail_score: float, **__: object) -> None:
+            scores.append(fail_score)
+
+        monkeypatch.setattr(code_similarity, "triage_flagged_pairs", fake_triage)
+
+        cls.run_gate({"config": {"consolidation_fail_score": 2.5}})
+        cls.run_gate({"config": {"consolidation_fail_score": 9}})
+        cls.run_gate({"config": {}})
+
+        assert scores == [2.5, 3.0, 1.0]
+
+    @classmethod
+    def test_provider_crash_survives_cleared_pairs(
+        cls, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """A crashed provider still fails the gate after pairs clear."""
+        cls.install_providers(monkeypatch, crash=True)
+        monkeypatch.setattr(code_similarity, "triage_flagged_pairs", lambda *_, **__: None)
+
+        with pytest.raises(pytest.fail.Exception, match="Provider failures") as failure:
+            cls.run_gate()
+
+        assert "voyage exploded" in str(failure.value)
+
+    @classmethod
+    def test_failure_without_edges_is_a_provider_error(
+        cls, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """A failure with no recorded pair cannot be cleared by the review."""
+        cls.install_providers(monkeypatch, record_edge=False)
+        monkeypatch.setattr(code_similarity, "triage_flagged_pairs", lambda *_, **__: None)
+
+        with pytest.raises(pytest.fail.Exception, match="Provider failures"):
+            cls.run_gate()
+
+    @classmethod
+    def test_combined_similarity_skips_review(cls, monkeypatch: pytest.MonkeyPatch) -> None:
+        """The combined check keeps its original failure and never calls Jev."""
+
+        def forbidden(*_: object, **__: object) -> None:
+            message = "combined similarity must not call the review"
+            raise AssertionError(message)
+
+        def fake_run(*_: object, **__: object) -> None:
+            pytest.fail("combined detail", pytrace=False)
+
+        monkeypatch.setattr(code_similarity, "triage_flagged_pairs", forbidden)
+        monkeypatch.setattr(code_similarity, "_run_similarity_test", fake_run)
+
+        with pytest.raises(pytest.fail.Exception, match="combined detail"):
+            code_similarity.test_combined_similarity(
+                {"config": {}},
+                [cls.FUNCTION],
+                {},
+                update_baselines=False,
+                cached_only=True,
+            )
 
 
 class TestSimilarityConfiguration:
