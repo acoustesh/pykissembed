@@ -127,6 +127,22 @@ def test_confidence_just_above_the_cutoff_still_fails(
         _ = _run_check(tmp_path, monkeypatch, source, score=1.0, confidence=0.21)
 
 
+def test_failure_header_names_bar_and_model(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """The failure message opens with the audit's exact summary line."""
+    source = "def greet():\n    # Explain intent.\n    return 'hello'\n"
+
+    with pytest.raises(pytest.fail.Exception) as failure:
+        _ = _run_check(tmp_path, monkeypatch, source, score=1.0, confidence=0.9)
+
+    assert str(failure.value).splitlines()[0] == (
+        "Jev comment audit: 1 symbol(s) at or below level 2.25 "
+        f"(0 ungraded; model {jev.JEV_MODEL})."
+    )
+
+
 def test_only_functions_and_methods_are_sent(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,

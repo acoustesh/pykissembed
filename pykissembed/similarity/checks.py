@@ -7,6 +7,7 @@ adaptation is that imports use ``pykissembed.similarity.*`` instead of
 
 from __future__ import annotations
 
+from functools import partial
 from typing import TYPE_CHECKING
 
 import numpy as np
@@ -373,6 +374,251 @@ def _report_violations(
         pytest.fail(error_msg, pytrace=False)
 
 
+def _ensure_embeddings(
+    baselines: Baselines,
+    functions: list[FunctionInfo],
+    provider: ProviderEntry,
+    find_uncached: Callable[[], list[FunctionInfo]],
+    *,
+    cached_only: bool,
+) -> None:
+    """Populate missing embeddings, or skip the test when they stay missing.
+
+    Parameters
+    ----------
+    baselines : Baselines
+        Baselines dict holding the provider caches.
+    functions : list[FunctionInfo]
+        Functions that need embeddings.
+    provider : ProviderEntry
+        Provider whose populator fills the gap.
+    find_uncached : Callable[[], list[FunctionInfo]]
+        Re-reads the caches and returns the functions still missing a vector.
+    cached_only : bool
+        If True, skip the test instead of populating.
+    """
+    uncached = find_uncached()
+    if not uncached:
+        return
+    if cached_only:
+        _skip_missing_embeddings(baselines, uncached, provider, total=len(functions))
+        return
+    # Auto-populate missing embeddings: base providers via API,
+    # combined provider from already-loaded base caches.
+    populate_fn = get_provider_populator(provider.label.lower())
+    if populate_fn is None:
+        pytest.skip(f"Unknown provider: {provider.label}")
+    if populate_fn(baselines, functions) > 0:
+        save_baselines(baselines)
+    # Reload embeddings after populating
+    uncached = find_uncached()
+    if uncached:
+        _skip_missing_embeddings(baselines, uncached, provider, total=len(functions))
+
+
+def _report_matrix_violations(
+    functions: list[FunctionInfo],
+    build_similarity: Callable[[], Float32Array],
+    config: dict[str, object],
+    refactor_settings: tuple[float, int],
+    threshold_pair: float,
+    threshold_neighbor: float,
+    load_complexity_maps_fn: Callable[[], tuple[dict[str, int], dict[str, int]]],
+    class_function_proximity: int,
+    flagged: list[FlaggedEdge] | None,
+) -> None:
+    """Score all pairs with a provider's matrix and report any violations.
+
+    Parameters
+    ----------
+    functions : list[FunctionInfo]
+        Functions under comparison.
+    build_similarity : Callable[[], Float32Array]
+        Builds the provider's square similarity matrix.
+    config : dict[str, object]
+        Similarity configuration holding the exclusion lists.
+    refactor_settings : tuple[float, int]
+        Refactor-index threshold and number of recommendations.
+    threshold_pair : float
+        Pair violation threshold.
+    threshold_neighbor : float
+        Neighbor violation threshold.
+    load_complexity_maps_fn : Callable
+        Returns ``(cc_map, cog_map)`` for the refactor-index message.
+    class_function_proximity : int
+        Max source lines allowed between a class and a nearby function.
+    flagged : list[FlaggedEdge] | None
+        Receives each pair behind a violation, when given.
+    """
+    # Load exclusion lists (intentionally similar pairs to skip)
+    excluded_file_pairs = _extract_excluded_pairs(config, "excluded_file_pairs")
+    excluded_function_pairs = _extract_excluded_pairs(config, "excluded_function_pairs")
+    pair_violations, neighbor_violations = _find_matrix_violations(
+        functions,
+        build_similarity(),
+        threshold_pair,
+        threshold_neighbor,
+        excluded_file_pairs,
+        excluded_function_pairs,
+        class_function_proximity,
+        flagged,
+    )
+    refactor_index_threshold, refactor_index_top_n = refactor_settings
+    _report_violations(
+        pair_violations,
+        neighbor_violations,
+        threshold_pair,
+        threshold_neighbor,
+        functions,
+        load_complexity_maps_fn,
+        excluded_file_pairs,
+        excluded_function_pairs,
+        class_function_proximity,
+        refactor_index_threshold=refactor_index_threshold,
+        refactor_index_top_n=refactor_index_top_n,
+    )
+
+
+def _pca_similarity(
+    baselines: Baselines,
+    functions: list[FunctionInfo],
+    provider: ProviderEntry,
+    pca_cache: PcaCache | None,
+) -> Float32Array:
+    """Project functions with the provider's PCA and build their cosine matrix.
+
+    Parameters
+    ----------
+    baselines : Baselines
+        Baselines dict holding the configuration and provider cache.
+    functions : list[FunctionInfo]
+        Functions with loaded embeddings; PCA replaces them in place.
+    provider : ProviderEntry
+        Single-vector provider being checked.
+    pca_cache : PcaCache | None
+        Optional session-scoped cache for fitted PCA models.
+
+    Returns
+    -------
+    Float32Array
+        Square cosine similarity matrix.
+    """
+    # Apply PCA dimensionality reduction using the provider-specific override,
+    # the generic baseline setting, or the provider default, in that order.
+    pca_variance = _extract_pca_variance(_extract_config(baselines), provider)
+    embeddings_cache = _extract_embedding_cache(baselines, provider.cache_key)
+
+    # Use cached PCA if available, otherwise fit fresh
+    pca_model, n_components, is_gpu = fit_pca(
+        embeddings_cache,
+        pca_variance,
+        pca_cache=pca_cache,
+        cache_key=provider.cache_key if pca_cache is not None else "",
+    )
+    if pca_model is not None:
+        transform_embeddings_with_pca(functions, pca_model, n_components, is_gpu=is_gpu)
+
+    # Score every pair with one normalise-and-matmul.
+    return compute_similarity_matrix(functions)
+
+
+def _jina_similarity(
+    baselines: Baselines,
+    functions: list[FunctionInfo],
+    provider: ProviderEntry,
+) -> Float32Array:
+    """Build a Jina provider's symmetrized query/passage matrix.
+
+    Parameters
+    ----------
+    baselines : Baselines
+        Baselines dict holding the raw query and passage caches.
+    functions : list[FunctionInfo]
+        Functions under comparison.
+    provider : ProviderEntry
+        Standalone Jina provider.
+
+    Returns
+    -------
+    Float32Array
+        Square symmetrized similarity matrix.
+    """
+    query_key, passage_key = _jina_cache_keys(provider)
+    return build_symmetrized_matrix(
+        functions,
+        _extract_embedding_cache(baselines, query_key),
+        _extract_embedding_cache(baselines, passage_key),
+        provider.hash_field,
+    )
+
+
+def _run_matrix_workflow(
+    baselines: Baselines,
+    functions: list[FunctionInfo],
+    provider: ProviderEntry,
+    cache_keys: tuple[str, ...],
+    find_uncached: Callable[[], list[FunctionInfo]],
+    build_similarity: Callable[[], Float32Array],
+    *,
+    cached_only: bool,
+    threshold_pair: float,
+    threshold_neighbor: float,
+    load_complexity_maps_fn: Callable[[], tuple[dict[str, int], dict[str, int]]],
+    class_function_proximity: int,
+    flagged: list[FlaggedEdge] | None,
+) -> None:
+    """Load embeddings, score every pair, and report violations for a provider.
+
+    Parameters
+    ----------
+    baselines : Baselines
+        Baselines dict with function hashes, config, and embeddings.
+    functions : list[FunctionInfo]
+        Functions to check.
+    provider : ProviderEntry
+        Provider being checked.
+    cache_keys : tuple[str, ...]
+        Embedding caches to lazy-load for this provider.
+    find_uncached : Callable[[], list[FunctionInfo]]
+        Re-reads the caches and returns the functions still missing a vector.
+    build_similarity : Callable[[], Float32Array]
+        Builds the provider's square similarity matrix.
+    cached_only : bool
+        If True, skip the test when embeddings are missing.
+    threshold_pair : float
+        Pair violation threshold.
+    threshold_neighbor : float
+        Neighbor violation threshold.
+    load_complexity_maps_fn : Callable
+        Returns ``(cc_map, cog_map)`` for the refactor-index message.
+    class_function_proximity : int
+        Max source lines allowed between a class and a nearby function.
+    flagged : list[FlaggedEdge] | None
+        Receives each pair behind a violation, when given.
+    """
+    if len(functions) < _MIN_FUNCTIONS_TO_COMPARE:
+        pytest.skip("Not enough functions to compare")
+    for cache_key in cache_keys:
+        _ = load_provider_embeddings(baselines, cache_key)
+    _ensure_embeddings(baselines, functions, provider, find_uncached, cached_only=cached_only)
+    config = _extract_config(baselines)
+    refactor_settings = (
+        _extract_refactor_index_threshold(config),
+        _extract_refactor_index_top_n(config),
+    )
+    _report_matrix_violations(
+        functions,
+        build_similarity,
+        config,
+        refactor_settings,
+        threshold_pair,
+        threshold_neighbor,
+        load_complexity_maps_fn,
+        class_function_proximity,
+        flagged,
+    )
+
+
 def run_provider_similarity_checks(
     *,
     baselines: Baselines,
@@ -416,106 +662,62 @@ def run_provider_similarity_checks(
     flagged: Receives each pair behind a violation, when given.
     """
     _ = update_baselines
-    if len(functions) < _MIN_FUNCTIONS_TO_COMPARE:
-        pytest.skip("Not enough functions to compare")
-
-    # Lazy-load this provider's embeddings if not already loaded
-    _ = load_provider_embeddings(baselines, provider.cache_key)
-
-    # Load cached embeddings
-    uncached = _load_cached_embeddings(baselines, functions, provider)
-
-    if uncached:
-        if cached_only:
-            _skip_missing_embeddings(baselines, uncached, provider, total=len(functions))
-        else:
-            # Auto-populate missing embeddings: base providers via API,
-            # combined provider from already-loaded base caches.
-            populate_fn = get_provider_populator(provider.label.lower())
-            if populate_fn is None:
-                pytest.skip(f"Unknown provider: {provider.label}")
-                return
-            new_count = populate_fn(baselines, functions)
-            if new_count > 0:
-                save_baselines(baselines)
-            # Reload embeddings after populating
-            uncached = _load_cached_embeddings(baselines, functions, provider)
-            if uncached:
-                _skip_missing_embeddings(baselines, uncached, provider, total=len(functions))
-
-    # Apply PCA dimensionality reduction using the provider-specific override,
-    # the generic baseline setting, or the provider default, in that order.
-    config = _extract_config(baselines)
-    pca_variance = _extract_pca_variance(config, provider)
-    refactor_index_threshold = _extract_refactor_index_threshold(config)
-    refactor_index_top_n = _extract_refactor_index_top_n(config)
-    embeddings_cache = _extract_embedding_cache(baselines, provider.cache_key)
-
-    # Use cached PCA if available, otherwise fit fresh
-    pca_model, n_components, is_gpu = fit_pca(
-        embeddings_cache,
-        pca_variance,
-        pca_cache=pca_cache,
-        cache_key=provider.cache_key if pca_cache is not None else "",
-    )
-    if pca_model is not None:
-        transform_embeddings_with_pca(functions, pca_model, n_components, is_gpu=is_gpu)
-
-    # Load exclusion lists (intentionally similar pairs to skip)
-    excluded_file_pairs = _extract_excluded_pairs(config, "excluded_file_pairs")
-    excluded_function_pairs = _extract_excluded_pairs(config, "excluded_function_pairs")
-
-    # Score every pair with one normalise-and-matmul, then read the
-    # violations off that matrix.
-    pair_violations, neighbor_violations = _find_matrix_violations(
+    _run_matrix_workflow(
+        baselines,
         functions,
-        compute_similarity_matrix(functions),
-        threshold_pair,
-        threshold_neighbor,
-        excluded_file_pairs,
-        excluded_function_pairs,
-        class_function_proximity,
-        flagged,
+        provider,
+        (provider.cache_key,),
+        partial(_load_cached_embeddings, baselines, functions, provider),
+        partial(_pca_similarity, baselines, functions, provider, pca_cache),
+        cached_only=cached_only,
+        threshold_pair=threshold_pair,
+        threshold_neighbor=threshold_neighbor,
+        load_complexity_maps_fn=load_complexity_maps_fn,
+        class_function_proximity=class_function_proximity,
+        flagged=flagged,
     )
-    _report_violations(
-        pair_violations,
-        neighbor_violations,
-        threshold_pair,
-        threshold_neighbor,
-        functions,
-        load_complexity_maps_fn,
-        excluded_file_pairs,
-        excluded_function_pairs,
-        class_function_proximity,
-        refactor_index_threshold=refactor_index_threshold,
-        refactor_index_top_n=refactor_index_top_n,
-    )
+
+
+def _jina_cache_keys(provider: ProviderEntry) -> tuple[str, str]:
+    """Return the raw query and passage cache keys of a Jina provider.
+
+    Parameters
+    ----------
+    provider : ProviderEntry
+        Standalone Jina provider.
+
+    Returns
+    -------
+    tuple[str, str]
+        ``(query_key, passage_key)``.
+    """
+    return f"{provider.name}_query_embeddings", f"{provider.name}_passage_embeddings"
 
 
 def _jina_uncached(
+    baselines: Baselines,
     functions: list[FunctionInfo],
     provider: ProviderEntry,
-    query_cache: dict[str, list[float]],
-    passage_cache: dict[str, list[float]],
 ) -> list[FunctionInfo]:
     """Return functions missing either a query or a passage Jina embedding.
 
     Parameters
     ----------
+    baselines : Baselines
+        Baselines dict holding the raw query and passage caches.
     functions : list[FunctionInfo]
         Functions to check.
     provider : ProviderEntry
         Standalone Jina provider whose ``hash_field`` keys the caches.
-    query_cache : dict[str, list[float]]
-        Raw query embeddings keyed by content hash.
-    passage_cache : dict[str, list[float]]
-        Raw passage embeddings keyed by content hash.
 
     Returns
     -------
     list[FunctionInfo]
         Functions for which at least one of the two raw caches has no entry.
     """
+    query_key, passage_key = _jina_cache_keys(provider)
+    query_cache = _extract_embedding_cache(baselines, query_key)
+    passage_cache = _extract_embedding_cache(baselines, passage_key)
     hash_field = provider.hash_field
     return [
         func
@@ -655,67 +857,19 @@ def run_jina_similarity_checks(
         Receives each pair behind a violation, when given.
     """
     _ = update_baselines, pca_cache
-    if len(functions) < _MIN_FUNCTIONS_TO_COMPARE:
-        pytest.skip("Not enough functions to compare")
-
-    query_key = f"{provider.name}_query_embeddings"
-    passage_key = f"{provider.name}_passage_embeddings"
-    _ = load_provider_embeddings(baselines, query_key)
-    _ = load_provider_embeddings(baselines, passage_key)
-    query_cache = _extract_embedding_cache(baselines, query_key)
-    passage_cache = _extract_embedding_cache(baselines, passage_key)
-
-    uncached = _jina_uncached(functions, provider, query_cache, passage_cache)
-    if uncached:
-        if cached_only:
-            _skip_missing_embeddings(baselines, uncached, provider, total=len(functions))
-        else:
-            populate_fn = get_provider_populator(provider.label.lower())
-            if populate_fn is None:
-                pytest.skip(f"Unknown provider: {provider.label}")
-                return
-            if populate_fn(baselines, functions) > 0:
-                save_baselines(baselines)
-            query_cache = _extract_embedding_cache(baselines, query_key)
-            passage_cache = _extract_embedding_cache(baselines, passage_key)
-            uncached = _jina_uncached(functions, provider, query_cache, passage_cache)
-            if uncached:
-                _skip_missing_embeddings(baselines, uncached, provider, total=len(functions))
-
-    config = _extract_config(baselines)
-    refactor_index_threshold = _extract_refactor_index_threshold(config)
-    refactor_index_top_n = _extract_refactor_index_top_n(config)
-    excluded_file_pairs = _extract_excluded_pairs(config, "excluded_file_pairs")
-    excluded_function_pairs = _extract_excluded_pairs(config, "excluded_function_pairs")
-
-    similarity = build_symmetrized_matrix(
+    _run_matrix_workflow(
+        baselines,
         functions,
-        query_cache,
-        passage_cache,
-        provider.hash_field,
-    )
-    pair_violations, neighbor_violations = _find_matrix_violations(
-        functions,
-        similarity,
-        threshold_pair,
-        threshold_neighbor,
-        excluded_file_pairs,
-        excluded_function_pairs,
-        class_function_proximity,
-        flagged,
-    )
-    _report_violations(
-        pair_violations,
-        neighbor_violations,
-        threshold_pair,
-        threshold_neighbor,
-        functions,
-        load_complexity_maps_fn,
-        excluded_file_pairs,
-        excluded_function_pairs,
-        class_function_proximity,
-        refactor_index_threshold=refactor_index_threshold,
-        refactor_index_top_n=refactor_index_top_n,
+        provider,
+        _jina_cache_keys(provider),
+        partial(_jina_uncached, baselines, functions, provider),
+        partial(_jina_similarity, baselines, functions, provider),
+        cached_only=cached_only,
+        threshold_pair=threshold_pair,
+        threshold_neighbor=threshold_neighbor,
+        load_complexity_maps_fn=load_complexity_maps_fn,
+        class_function_proximity=class_function_proximity,
+        flagged=flagged,
     )
 
 

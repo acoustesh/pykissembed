@@ -1,8 +1,10 @@
 """Jev review of the function pairs flagged by the similarity gate.
 
 Embeddings find pairs that look alike; this review asks whether sharing their
-code would simplify future changes. A flagged pair stays failed unless Jev
-confidently scores it below the bar, so an outage cannot turn the gate green.
+code would simplify future changes. A grade with confidence below
+``_WARN_ONLY_CONFIDENCE`` passes with a warning at any level. Otherwise a pair
+fails at or above the bar. A missing grade always fails, and so does a score
+below the bar with no confidence, so an outage cannot turn the gate green.
 """
 
 from __future__ import annotations
@@ -22,7 +24,6 @@ from pykissembed.jev import (
     SymbolState,
     ask_jev,
     grade_summary,
-    is_low_confidence,
     load_api_key,
     open_cache,
     parse_grade,
@@ -56,6 +57,9 @@ _NEEDS_CHANGE = "Needs change"
 _UNCERTAIN = "Uncertain"
 _UNGRADED = "Ungraded"
 _CLEARED = "Cleared"
+_WARN_ONLY = "Low confidence"
+# A grade this unsure warns at any level instead of deciding the gate.
+_WARN_ONLY_CONFIDENCE = 0.35
 # Report order: actionable pairs first, then pairs a person must judge.
 _FAILED_BUCKETS = (_NEEDS_CHANGE, _UNCERTAIN, _UNGRADED)
 # Criteria are ordered because Decisions numbers them from zero.
@@ -82,6 +86,8 @@ _INSTRUCTIONS = (
     "What level of consolidation would simplify future changes to these two functions? "
     "Use the rules that must change together, each function's contract with its callers, "
     "and the branches or flags the shared implementation would require.\n\n"
+    "If both functions already delegate to the same shared implementation and only thin "
+    "entry points remain, score 0: that consolidation is already done.\n\n"
     "The state holds both functions and their known callers. The caller lists come from a "
     "static search and may be incomplete, so a missing caller does not prove there is none."
 )
@@ -457,7 +463,7 @@ def _parse_verdict(payload: object) -> _Verdict | None:
 
 
 def _bucket(verdict: _Verdict | None, fail_score: float) -> str:
-    """Classify a verdict; only a confident score below the bar clears a pair.
+    """Classify a verdict by its score, the bar, and Jev's confidence.
 
     Parameters
     ----------
@@ -474,12 +480,12 @@ def _bucket(verdict: _Verdict | None, fail_score: float) -> str:
     if verdict is None:
         return _UNGRADED
     score, confidence = verdict.grade
-    if is_low_confidence(confidence):
-        return _UNCERTAIN
-    if score >= fail_score:
-        return _NEEDS_CHANGE
-    # is_low_confidence accepts a missing confidence, but that cannot clear a pair.
-    return _CLEARED if confidence is not None else _UNCERTAIN
+    # An unknown confidence is not evidence of doubt, and it cannot clear a pair.
+    if confidence is None:
+        return _NEEDS_CHANGE if score >= fail_score else _UNCERTAIN
+    if confidence < _WARN_ONLY_CONFIDENCE:
+        return _WARN_ONLY
+    return _NEEDS_CHANGE if score >= fail_score else _CLEARED
 
 
 def _pair_title(pair: _Pair) -> str:
@@ -568,8 +574,46 @@ def _row_score(row: _Row) -> float:
     return 0.0 if verdict is None else verdict.grade[0]
 
 
+def _warn_passing_pairs(grouped: dict[str, list[_Row]], fail_score: float) -> None:
+    """Warn about the pairs that passed, so a green run still shows them.
+
+    Parameters
+    ----------
+    grouped : dict[str, list[_Row]]
+        Reviewed pairs by report bucket.
+    fail_score : float
+        Lowest score that requires a change.
+    """
+    messages: list[str] = []
+    if grouped[_CLEARED]:
+        cleared = [
+            f"{_pair_title(pair)} — {grade_summary(verdict.grade, _LEVELS, f'<{fail_score:g}')}"
+            for pair, verdict in grouped[_CLEARED]
+            # Cleared rows always have a verdict; this only narrows the type.
+            if verdict is not None
+        ]
+        messages.append(
+            f"Jev consolidation review: {len(cleared)} flagged pair(s) cleared:\n"
+            + "\n".join(cleared)
+        )
+    if grouped[_WARN_ONLY]:
+        entries = "\n\n".join(
+            _format_pair(pair, verdict, fail_score) for pair, verdict in grouped[_WARN_ONLY]
+        )
+        messages.append(
+            f"Jev consolidation review: {len(grouped[_WARN_ONLY])} flagged pair(s) "
+            f"passed on low confidence (< {_WARN_ONLY_CONFIDENCE:g}):\n{entries}"
+        )
+    # These pairs passed, so override any ``-W error`` filter while reporting them.
+    with warnings.catch_warnings():
+        warnings.simplefilter("always", UserWarning)
+        for message in messages:
+            # Level 4 attributes the warning to the caller of triage_flagged_pairs.
+            warnings.warn(message, UserWarning, stacklevel=4)
+
+
 def _build_report(rows: list[_Row], fail_score: float, note: str | None) -> str | None:
-    """Warn about cleared pairs and render the failed ones.
+    """Warn about passing pairs and render the failed ones.
 
     Parameters
     ----------
@@ -583,28 +627,13 @@ def _build_report(rows: list[_Row], fail_score: float, note: str | None) -> str 
     Returns
     -------
     str | None
-        The failure report, or ``None`` when every pair cleared.
+        The failure report, or ``None`` when no pair failed.
     """
-    grouped: dict[str, list[_Row]] = {name: [] for name in (*_FAILED_BUCKETS, _CLEARED)}
+    grouped: dict[str, list[_Row]] = {name: [] for name in (*_FAILED_BUCKETS, _CLEARED, _WARN_ONLY)}
     for row in rows:
         grouped[_bucket(row[1], fail_score)].append(row)
     grouped[_NEEDS_CHANGE].sort(key=_row_score, reverse=True)
-    # Warn rather than stay silent so a passing run still shows what was excused.
-    if grouped[_CLEARED]:
-        cleared = [
-            f"{_pair_title(pair)} — {grade_summary(verdict.grade, _LEVELS, f'<{fail_score:g}')}"
-            for pair, verdict in grouped[_CLEARED]
-            if verdict is not None
-        ]
-        # A cleared pair is a pass, so warnings-as-errors must not fail it.
-        with warnings.catch_warnings():
-            warnings.simplefilter("always", UserWarning)
-            warnings.warn(
-                f"Jev consolidation review: {len(cleared)} flagged pair(s) cleared:\n"
-                + "\n".join(cleared),
-                UserWarning,
-                stacklevel=3,
-            )
+    _warn_passing_pairs(grouped, fail_score)
     failed = sum(len(grouped[name]) for name in _FAILED_BUCKETS)
     if not failed:
         return None
@@ -689,7 +718,7 @@ def triage_flagged_pairs(
     Returns
     -------
     str | None
-        The failure report, or ``None`` when every pair cleared.
+        The failure report, or ``None`` when no pair failed.
     """
     pairs = _merge_edges(flagged)
     if not pairs:

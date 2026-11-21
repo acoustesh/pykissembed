@@ -268,7 +268,7 @@ def render_token(slot: Slot, text: str, newline: str) -> str | None:
             return None
         prefix = "r" + prefix
     lines = text.split("\n")
-    raw_lines = (slot.value or "").split("\n")
+    raw_lines = slot.value.split("\n") if slot.value else [""]
     next_line = len(raw_lines) > 1 and not raw_lines[0].strip()
     if len(lines) == 1 and not next_line:
         return f"{prefix}{quote}{text}{quote}"

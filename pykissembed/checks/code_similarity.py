@@ -62,6 +62,7 @@ from pykissembed.similarity.consolidation import triage_flagged_pairs
 from pykissembed.similarity.embeddings import is_str_object_dict
 
 if TYPE_CHECKING:
+    from collections.abc import Callable
     from pathlib import Path
 
     from pykissembed.similarity.types import FlaggedEdge, PCAModel
@@ -324,42 +325,95 @@ _PARALLEL_PROVIDERS: list[ProviderEntry] = [
 ]
 
 
-@pytest.mark.similarity
-def test_providers_parallel(
+def _collect_provider_outcomes(
+    providers: list[ProviderEntry],
+    run_one: Callable[[ProviderEntry], None],
+    flagged: dict[str, list[FlaggedEdge]],
+) -> tuple[dict[str, BaseException], dict[str, BaseException], dict[str, str]]:
+    """Run providers concurrently and sort their outcomes.
+
+    Interrupts and exit requests are re-raised instead of being recorded.
+
+    Parameters
+    ----------
+    providers : list[ProviderEntry]
+        Providers to run.
+    run_one : Callable[[ProviderEntry], None]
+        Runs the similarity check for one provider.
+    flagged : dict[str, list[FlaggedEdge]]
+        Pairs recorded by each provider while it runs.
+
+    Returns
+    -------
+    tuple[dict[str, BaseException], dict[str, BaseException], dict[str, str]]
+        Provider errors, similarity failures with recorded pairs, and skip
+        messages, each keyed by provider label.
+    """
+    errors: dict[str, BaseException] = {}
+    similarity_failures: dict[str, BaseException] = {}
+    skips: dict[str, str] = {}
+    # One worker per provider (not a bounded pool): a provider with missing
+    # embeddings populates them over its own API, so full parallelism bounds
+    # wall-clock time by the slowest single provider rather than by the sum
+    # of all of them.
+    with ThreadPoolExecutor(max_workers=len(providers)) as executor:
+        futures = {executor.submit(run_one, p): p for p in providers}
+        for future in as_completed(futures):
+            provider = futures[future]
+            exc = future.exception()
+            if exc is None:
+                continue
+            if isinstance(exc, pytest.skip.Exception):
+                skips[provider.label] = str(exc)
+            elif isinstance(exc, (KeyboardInterrupt, SystemExit, GeneratorExit)):
+                # Interrupts and exit requests stop the run instead of being
+                # reported as one provider's failure.
+                raise exc
+            elif isinstance(exc, pytest.fail.Exception) and flagged[provider.label]:
+                similarity_failures[provider.label] = exc
+            else:
+                # Future.exception() collects every provider failure without a
+                # blind exception handler, so all of them are reported at once.
+                errors[provider.label] = exc
+    return errors, similarity_failures, skips
+
+
+def _run_provider_gate(
+    providers: list[ProviderEntry],
     shared_baselines: SharedBaselines,
     shared_functions: list[FunctionInfo],
     pca_cache: SimilarityPcaCache,
-    pykissembed_paths: list[Path],
+    paths: list[Path],
     *,
     update_baselines: bool,
     cached_only: bool,
     jev_review_cached_only: bool,
 ) -> None:
-    """Run all non-combined providers, then review flagged pairs with Jev.
-
-    A flagged pair fails unless Jev confidently scores it below the
-    consolidation bar. Provider errors always fail the test.
+    """Run providers, review their flagged pairs, and fail or skip the test.
 
     Parameters
     ----------
-    update_baselines : bool
-        Whether to update baselines instead of checking.
-    cached_only : bool
-        If True, skip when embeddings are missing.
-    jev_review_cached_only : bool
-        If True, the review uses stored Jev decisions and sends no source.
+    providers : list[ProviderEntry]
+        Providers this gate checks.
     shared_baselines : SharedBaselines
         Session-scoped baselines dict.
     shared_functions : list[FunctionInfo]
         Session-scoped list of extracted functions.
     pca_cache : SimilarityPcaCache
         Session-scoped PCA model cache.
-    pykissembed_paths : list[Path]
+    paths : list[Path]
         Source directories searched for callers of flagged functions.
-
+    update_baselines : bool
+        Whether to update baselines instead of checking.
+    cached_only : bool
+        If True, skip when embeddings are missing.
+    jev_review_cached_only : bool
+        If True, the review uses stored Jev decisions and sends no source.
     """
     if not shared_functions:
         pytest.skip("No [tool.pykissembed] paths configured")
+    # Each worker appends only to its own provider's list.
+    flagged: dict[str, list[FlaggedEdge]] = {p.label: [] for p in providers}
 
     def _run_one(provider: ProviderEntry) -> None:
         """Run the similarity test for one provider with the shared fixtures.
@@ -379,41 +433,13 @@ def test_providers_parallel(
             flagged=flagged[provider.label],
         )
 
-    # Each worker appends only to its own provider's list.
-    flagged: dict[str, list[FlaggedEdge]] = {p.label: [] for p in _PARALLEL_PROVIDERS}
-    errors: dict[str, BaseException] = {}
-    similarity_failures: dict[str, BaseException] = {}
-    skips: dict[str, str] = {}
-    # One worker per provider (not a bounded pool): a provider with missing
-    # embeddings populates them over its own API, so full parallelism bounds
-    # wall-clock time by the slowest single provider rather than by the sum
-    # of all of them.
-    with ThreadPoolExecutor(max_workers=len(_PARALLEL_PROVIDERS)) as executor:
-        futures = {executor.submit(_run_one, p): p for p in _PARALLEL_PROVIDERS}
-        for future in as_completed(futures):
-            provider = futures[future]
-            exc = future.exception()
-            if exc is None:
-                continue
-            if isinstance(exc, pytest.skip.Exception):
-                skips[provider.label] = str(exc)
-            elif isinstance(exc, (KeyboardInterrupt, SystemExit, GeneratorExit)):
-                # Interrupts and exit requests stop the run instead of being
-                # reported as one provider's failure.
-                raise exc
-            elif isinstance(exc, pytest.fail.Exception) and flagged[provider.label]:
-                similarity_failures[provider.label] = exc
-            else:
-                # Future.exception() collects every provider failure without a
-                # blind exception handler, so all of them are reported at once.
-                errors[provider.label] = exc
-
+    errors, similarity_failures, skips = _collect_provider_outcomes(providers, _run_one, flagged)
     # Review after the pool exits: the Jev cache connection is thread-bound.
     failure_parts = _review_similarity_failures(
         similarity_failures,
         flagged,
         shared_baselines,
-        pykissembed_paths,
+        paths,
         cached_only=jev_review_cached_only,
     )
     if errors:
@@ -424,8 +450,54 @@ def test_providers_parallel(
 
     # Some providers skipping (e.g. no API key) still passes: the others were
     # checked. Only a run where every provider skipped is reported as a skip.
-    if skips and len(skips) == len(_PARALLEL_PROVIDERS):
+    if skips and len(skips) == len(providers):
         pytest.skip("All providers skipped:\n" + "\n".join(f"  {n}: {m}" for n, m in skips.items()))
+
+
+@pytest.mark.similarity
+def test_providers_parallel(
+    shared_baselines: SharedBaselines,
+    shared_functions: list[FunctionInfo],
+    pca_cache: SimilarityPcaCache,
+    pykissembed_paths: list[Path],
+    *,
+    update_baselines: bool,
+    cached_only: bool,
+    jev_review_cached_only: bool,
+) -> None:
+    """Run all non-combined providers, then review flagged pairs with Jev.
+
+    The Jev review decides each flagged pair; a grade with confidence below
+    0.35 only warns. Provider errors always fail the test.
+
+    Parameters
+    ----------
+    update_baselines : bool
+        Whether to update baselines instead of checking.
+    cached_only : bool
+        If True, skip when embeddings are missing.
+    jev_review_cached_only : bool
+        If True, the review uses stored Jev decisions and sends no source.
+    shared_baselines : SharedBaselines
+        Session-scoped baselines dict.
+    shared_functions : list[FunctionInfo]
+        Session-scoped list of extracted functions.
+    pca_cache : SimilarityPcaCache
+        Session-scoped PCA model cache.
+    pykissembed_paths : list[Path]
+        Source directories searched for callers of flagged functions.
+
+    """
+    _run_provider_gate(
+        _PARALLEL_PROVIDERS,
+        shared_baselines,
+        shared_functions,
+        pca_cache,
+        pykissembed_paths,
+        update_baselines=update_baselines,
+        cached_only=cached_only,
+        jev_review_cached_only=jev_review_cached_only,
+    )
 
 
 @pytest.mark.similarity
@@ -434,11 +506,13 @@ def test_combined_similarity(
     shared_baselines: SharedBaselines,
     shared_functions: list[FunctionInfo],
     pca_cache: SimilarityPcaCache,
+    pykissembed_paths: list[Path],
     *,
     update_baselines: bool,
     cached_only: bool,
+    jev_review_cached_only: bool,
 ) -> None:
-    """Run combined provider after all individual providers have finished.
+    """Run the combined provider, then review its flagged pairs with Jev.
 
     Parameters
     ----------
@@ -446,20 +520,24 @@ def test_combined_similarity(
         Whether to update baselines instead of checking.
     cached_only : bool
         If True, skip when embeddings are missing.
+    jev_review_cached_only : bool
+        If True, the review uses stored Jev decisions and sends no source.
     shared_baselines : SharedBaselines
         Session-scoped baselines dict.
     shared_functions : list[FunctionInfo]
         Session-scoped list of extracted functions.
     pca_cache : SimilarityPcaCache
         Session-scoped PCA model cache.
+    pykissembed_paths : list[Path]
+        Source directories searched for callers of flagged functions.
     """
-    if not shared_functions:
-        pytest.skip("No [tool.pykissembed] paths configured")
-    _run_similarity_test(
-        COMBINED_PROVIDER,
+    _run_provider_gate(
+        [COMBINED_PROVIDER],
         shared_baselines,
         shared_functions,
         pca_cache,
+        pykissembed_paths,
         update_baselines=update_baselines,
         cached_only=cached_only,
+        jev_review_cached_only=jev_review_cached_only,
     )

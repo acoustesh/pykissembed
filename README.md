@@ -226,12 +226,15 @@ Each provider detects:
 - **Neighbor clustering** — finds functions with ≥2 similar counterparts
 - **Refactor index** — combines complexity + similarity for priority ranking
 
-Pairs flagged by `test_providers_parallel` then go to a Jev consolidation
+Pairs flagged by the similarity checks then go to a Jev consolidation
 review, which scores them from 0 to 3: keep separate, extract shared logic,
-share the core workflow, or consolidate. A pair fails at or above
+share the core workflow, or consolidate. Thin entry points that already delegate
+to the same implementation score 0. A pair fails at or above
 `consolidation_fail_score` in `tests/baselines/similarity.json` (default `1.0`),
-and the failure explains the decision. A pair also stays failed when Jev is
-unavailable or not confident, so set `OPENROUTER_API_KEY` to review new pairs.
+and the failure explains the decision. A grade with confidence below `0.35`
+only warns, at any score. A pair stays failed when Jev is unavailable, or when
+it scores below the bar without a confidence, so set `OPENROUTER_API_KEY` to
+review new pairs.
 
 The review sends each flagged function's source and a few call sites to
 OpenRouter's `perplexity/pplx-decider-v1.3:free` model. It sends nothing when

@@ -13,40 +13,40 @@ locally as level 0.
 
 The check runs with the other consumer checks (marked ``jev``). Without an
 OpenRouter key it grades cached responses and skips cache misses.
+
+Notes
+-----
+The test-code bar was swept against the live 2026-09-27 run, with scores
+converted to 0-5::
+
+    test_min_score   flagged   noise   real kept
+         3.50         148      13        135
+         3.00         146      11        135
+         2.75         144       9        135
+         2.50         142       7        135   <- chosen
+         2.00         141       6        135
 """
 
 from __future__ import annotations
 
-import contextlib
-from contextlib import closing
 from functools import partial
 from typing import TYPE_CHECKING
 
 import pytest
 
-from pykissembed.baselines_engine import (
-    BaselineEnvelope,
-    locked_envelope,
-    save_envelope,
-)
 from pykissembed.config import get_config
 from pykissembed.jev import (
-    JEV_MODEL,
     Grade,
     SymbolState,
     ask_jev,
-    extract_symbol_states,
     grade_summary,
     is_low_confidence,
-    load_api_key,
-    open_cache,
     parse_grade,
     read_threshold,
-    report_audit,
 )
+from pykissembed.jev_audit import AuditSpec, run_audit
 
 if TYPE_CHECKING:
-    from collections.abc import Generator
     from pathlib import Path
     from sqlite3 import Connection
 
@@ -88,15 +88,7 @@ DEFAULT_MIN_SCORE = 3.0
 # eight `Test*` classes here span 2.18-3.95, so a 3.5 bar failed the two that
 # sit in [3.0, 3.5) -- TestCyclomaticComplexity (3.08) and TestDocstringFormat
 # (3.39) -- both verified conformant by AST inspection, i.e. false positives
-# by construction. Swept against the live 2026-09-27 run (converted to 0-5):
-#
-#   test_min_score   flagged   noise   real kept
-#        3.50         148      13        135
-#        3.00         146      11        135
-#        2.75         144       9        135
-#        2.50         142       7        135   <- chosen
-#        2.00         141       6        135
-#
+# by construction. The sweep in the module docstring's Notes picked the bar:
 # 2.5 clears six of the seven test false positives while keeping every real
 # finding: the lowest-scoring genuine defect outside tests is a 0.00 (three
 # symbols with no docstring at all), so there is no recall to trade. Only
@@ -295,27 +287,6 @@ def _evaluate_symbol(level: float, min_score: float) -> bool:
 _parse_grade = partial(parse_grade, question_id=_SCORE_QUESTION_ID, n_levels=len(_SCORE_LEVELS))
 
 
-@contextlib.contextmanager
-def _locked_envelope() -> Generator[tuple[Path, BaselineEnvelope]]:
-    """Load ``jev_docstring_audit.json`` under a cross-process lock.
-
-    The default ``min_score`` and ``test_min_score`` are merged in so the
-    committed file stays self-documenting; the file holds configuration only,
-    never per-symbol scores.
-
-    Yields
-    ------
-    tuple[Path, BaselineEnvelope]
-        The baseline path and its locked, default-populated envelope.
-    """
-    config = get_config()
-    path = config.baseline_path / BASELINE_FILENAME
-    with locked_envelope(path, kind="jev_docstring_audit") as envelope:
-        _ = envelope.data.setdefault(_MIN_SCORE_KEY, DEFAULT_MIN_SCORE)
-        _ = envelope.data.setdefault(_TEST_MIN_SCORE_KEY, DEFAULT_TEST_MIN_SCORE)
-        yield path, envelope
-
-
 _read_threshold = partial(read_threshold, max_level=_MAX_LEVEL)
 
 
@@ -426,44 +397,69 @@ def is_failing(grade: Grade, min_score: float) -> bool:
 min_score_for = _min_score_for
 
 
-def _grade_docstrings(
-    states: list[SymbolState], baseline_data: object, api_key: str | None, conn: Connection
-) -> tuple[list[str], list[str], int, int]:
-    """Grade docstrings, assigning level zero locally when they are absent.
+def _docstring_failure_line(state: SymbolState, grade: Grade, baseline_data: object) -> str | None:
+    """Render a docstring grade below the bar for its symbol type.
 
     Parameters
     ----------
-    states : list[SymbolState]
-        Function and class source states to grade.
+    state : SymbolState
+        Graded function or class.
+    grade : Grade
+        ``(level, confidence)`` of the symbol.
     baseline_data : object
         Baseline payload containing the library and test thresholds.
-    api_key : str | None
-        OpenRouter key, or ``None`` for cached responses only.
-    conn : Connection
-        Shared Jev response cache connection.
 
     Returns
     -------
-    tuple[list[str], list[str], int, int]
-        Failure lines, lines for below-the-bar grades excused by low
-        confidence, ungraded count, and graded count.
+    str | None
+        The report line, or ``None`` when the level clears the bar.
     """
-    failures: list[str] = []
-    uncertain: list[str] = []
-    ungraded = 0
-    graded = 0
-    for state in states:
-        min_score = _min_score_for(state, baseline_data)
-        grade = symbol_grade(state, api_key=api_key, conn=conn)
-        if grade is None:
-            ungraded += 1
-            continue
-        graded += 1
-        if _evaluate_symbol(grade[0], min_score):
-            continue
-        line = _format_symbol_failure(state, grade, min_score)
-        (failures if is_failing(grade, min_score) else uncertain).append(line)
-    return failures, uncertain, ungraded, graded
+    min_score = _min_score_for(state, baseline_data)
+    if _evaluate_symbol(grade[0], min_score):
+        return None
+    return _format_symbol_failure(state, grade, min_score)
+
+
+def _docstring_bar_text(baseline_data: object) -> tuple[str, str]:
+    """Describe a miss of the docstring audit's library and test bars.
+
+    Parameters
+    ----------
+    baseline_data : object
+        Baseline payload containing the library and test thresholds.
+
+    Returns
+    -------
+    tuple[str, str]
+        The miss description and the note naming both bars.
+    """
+    base_min = _read_min_score(baseline_data)
+    test_min = _read_threshold(baseline_data, _TEST_MIN_SCORE_KEY, DEFAULT_TEST_MIN_SCORE)
+    return (
+        "below the minimum",
+        f", need level {base_min:g} for library code and {test_min:g} for tests",
+    )
+
+
+_AUDIT = AuditSpec(
+    label="Jev docstring audit",
+    baseline_filename=BASELINE_FILENAME,
+    baseline_kind="jev_docstring_audit",
+    default_thresholds={
+        _MIN_SCORE_KEY: DEFAULT_MIN_SCORE,
+        _TEST_MIN_SCORE_KEY: DEFAULT_TEST_MIN_SCORE,
+    },
+    symbol_kinds=frozenset({"function", "class"}),
+    empty_message="No auditable functions or classes found",
+    grade=symbol_grade,
+    failure_line=_docstring_failure_line,
+    bar_text=_docstring_bar_text,
+    failure_verb="scored ",
+    failure_footer=(
+        f" Adjust {_MIN_SCORE_KEY!r} / {_TEST_MIN_SCORE_KEY!r} in "
+        f"{BASELINE_FILENAME} to change the bars."
+    ),
+)
 
 
 class TestJevDocstringAudit:
@@ -493,41 +489,10 @@ class TestJevDocstringAudit:
         cached_only : bool
             Use stored Jev decisions without requesting grades for cache misses.
         """
-        if not pykissembed_paths:
-            pytest.skip("No [tool.pykissembed] paths configured")
-        api_key = None if cached_only else load_api_key()
-        config = get_config()
-        with _locked_envelope() as (baseline_file, envelope):
-            if update_baselines:
-                save_envelope(baseline_file, envelope)
-                pytest.skip("Updated Jev docstring audit baselines")
-            base_min = _read_min_score(envelope.data)
-            test_min = _read_threshold(envelope.data, _TEST_MIN_SCORE_KEY, DEFAULT_TEST_MIN_SCORE)
-            states: list[SymbolState] = []
-            for base_dir in pykissembed_paths:
-                states.extend(extract_symbol_states(base_dir, root=config.root))
-            if not states:
-                pytest.skip("No auditable functions or classes found")
-            with closing(open_cache(config)) as conn:
-                failures, uncertain, ungraded, graded = _grade_docstrings(
-                    states, envelope.data, api_key, conn
-                )
-            failure_header = (
-                "Jev docstring audit: "
-                f"{len(failures)} symbol(s) scored below the minimum "
-                f"({ungraded} ungraded; model {JEV_MODEL}, "
-                f"need level {base_min:g} for library code "
-                f"and {test_min:g} for tests). "
-                f"Adjust {_MIN_SCORE_KEY!r} / {_TEST_MIN_SCORE_KEY!r} in "
-                f"{BASELINE_FILENAME} to change the bars."
-            )
-            report_audit(
-                "Jev docstring audit",
-                failures=failures,
-                uncertain=uncertain,
-                ungraded=ungraded,
-                graded=graded,
-                api_key=api_key,
-                uncertain_detail="below the minimum",
-                failure_header=failure_header,
-            )
+        run_audit(
+            _AUDIT,
+            pykissembed_paths,
+            get_config,
+            update_baselines=update_baselines,
+            cached_only=cached_only,
+        )

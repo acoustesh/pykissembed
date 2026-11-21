@@ -1,7 +1,7 @@
 {
   "config": {
     "combined_similarity_threshold_neighbor": 0.8,
-    "combined_similarity_threshold_pair": 0.87,
+    "combined_similarity_threshold_pair": 0.88,
     "min_loc_for_similarity": 6,
     "pca_variance_threshold": 0.99,
     "refactor_index_threshold": 18.0,

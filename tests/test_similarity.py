@@ -1972,7 +1972,7 @@ class TestProviderConsolidationReview:
             ("not (jev or lint)", True),
         ],
     )
-    def test_marker_expression_detects_jev_opt_out(expression: str, excluded: bool) -> None:
+    def test_marker_expression_detects_jev_opt_out(expression: str, *, excluded: bool) -> None:
         """Only an expression that rejects ``jev`` opts this test out of Jev."""
         assert _excludes_jev(expression, {"similarity"}) is excluded
 
@@ -2065,27 +2065,118 @@ class TestProviderConsolidationReview:
             cls.run_gate()
 
     @classmethod
-    def test_combined_similarity_skips_review(cls, monkeypatch: pytest.MonkeyPatch) -> None:
-        """The combined check keeps its original failure and never calls Jev."""
+    def install_combined(
+        cls, monkeypatch: pytest.MonkeyPatch, *, record_edge: bool = True
+    ) -> None:
+        """Make the combined provider fail, optionally with a flagged pair."""
 
-        def forbidden(*_: object, **__: object) -> None:
-            message = "combined similarity must not call the review"
-            raise AssertionError(message)
-
-        def fake_run(*_: object, **__: object) -> None:
+        def fake_run(
+            *_: object,
+            flagged: list[FlaggedEdge] | None = None,
+            **__: object,
+        ) -> None:
+            if record_edge and flagged is not None:
+                flagged.append((cls.FUNCTION, cls.FUNCTION, 0.99))
             pytest.fail("combined detail", pytrace=False)
 
-        monkeypatch.setattr(code_similarity, "triage_flagged_pairs", forbidden)
         monkeypatch.setattr(code_similarity, "_run_similarity_test", fake_run)
 
+    @classmethod
+    def run_combined(cls, *, jev_review_cached_only: bool = True) -> None:
+        """Call the combined similarity test directly."""
+        code_similarity.test_combined_similarity(
+            {"config": {}},
+            [cls.FUNCTION],
+            {},
+            [],
+            update_baselines=False,
+            cached_only=False,
+            jev_review_cached_only=jev_review_cached_only,
+        )
+
+    @classmethod
+    def test_combined_cleared_pairs_pass(cls, monkeypatch: pytest.MonkeyPatch) -> None:
+        """A combined failure disappears when every flagged pair clears."""
+        cls.install_combined(monkeypatch)
+        monkeypatch.setattr(code_similarity, "triage_flagged_pairs", lambda *_, **__: None)
+
+        cls.run_combined()
+
+    @classmethod
+    def test_combined_confirmed_pair_fails_with_report(
+        cls, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """A confirmed combined pair shows the review and the original detail."""
+        cls.install_combined(monkeypatch)
+        monkeypatch.setattr(
+            code_similarity, "triage_flagged_pairs", lambda *_, **__: "REVIEW REPORT"
+        )
+
+        with pytest.raises(pytest.fail.Exception) as failure:
+            cls.run_combined()
+
+        assert "REVIEW REPORT" in str(failure.value)
+        assert "combined detail" in str(failure.value)
+
+    @classmethod
+    def test_combined_failure_without_edges_is_kept(
+        cls, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """A combined failure with no recorded pair cannot be cleared."""
+        cls.install_combined(monkeypatch, record_edge=False)
+        monkeypatch.setattr(code_similarity, "triage_flagged_pairs", lambda *_, **__: None)
+
         with pytest.raises(pytest.fail.Exception, match="combined detail"):
-            code_similarity.test_combined_similarity(
-                {"config": {}},
-                [cls.FUNCTION],
-                {},
-                update_baselines=False,
-                cached_only=True,
-            )
+            cls.run_combined()
+
+    @classmethod
+    def test_combined_crash_is_reported_as_provider_failure(
+        cls, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """The combined check reports a crash the same way as the other providers."""
+
+        def crash(*_: object, **__: object) -> None:
+            message = "combined exploded"
+            raise RuntimeError(message)
+
+        monkeypatch.setattr(code_similarity, "_run_similarity_test", crash)
+
+        with pytest.raises(pytest.fail.Exception, match="Provider failures") as failure:
+            cls.run_combined()
+
+        assert "Combined: combined exploded" in str(failure.value)
+
+    @classmethod
+    def test_combined_skip_keeps_its_reason(cls, monkeypatch: pytest.MonkeyPatch) -> None:
+        """A skipped combined provider skips the test and names why."""
+
+        def skip(*_: object, **__: object) -> None:
+            pytest.skip("combined embeddings missing")
+
+        monkeypatch.setattr(code_similarity, "_run_similarity_test", skip)
+
+        with pytest.raises(pytest.skip.Exception, match="combined embeddings missing") as outcome:
+            cls.run_combined()
+
+        assert "All providers skipped" in str(outcome.value)
+
+    @classmethod
+    @pytest.mark.parametrize("offline", [True, False])
+    def test_combined_review_honors_jev_opt_out(
+        cls, monkeypatch: pytest.MonkeyPatch, *, offline: bool
+    ) -> None:
+        """The combined review follows the Jev opt-out, not the embedding setting."""
+        cls.install_combined(monkeypatch)
+        modes: list[bool] = []
+
+        def fake_triage(*_: object, cached_only: bool, **__: object) -> None:
+            modes.append(cached_only)
+
+        monkeypatch.setattr(code_similarity, "triage_flagged_pairs", fake_triage)
+
+        cls.run_combined(jev_review_cached_only=offline)
+
+        assert modes == [offline]
 
 
 class TestSimilarityConfiguration:

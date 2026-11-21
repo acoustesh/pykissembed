@@ -425,20 +425,21 @@ def report_audit(
     failure_header : str
         First line of the failure message.
     """
+    # Warnings skip this function, run_audit and the test to name pytest's call.
     # Warn before any failure so excused grades show up either way.
     if uncertain:
         warnings.warn(
             f"{label}: {len(uncertain)} symbol(s) {uncertain_detail} passed on low "
             f"confidence (<= {LOW_CONFIDENCE:g}):\n" + "\n".join(uncertain),
             UserWarning,
-            stacklevel=3,
+            stacklevel=4,
         )
     if failures:
         pytest.fail(failure_header + "\n" + "\n".join(failures), pytrace=False)
     if not api_key and not graded:
         pytest.skip(f"{API_KEY_ENV} unavailable; {ungraded} symbol(s) ungraded")
     if ungraded:
-        warnings.warn(f"{label}: {ungraded} symbol(s) ungraded", UserWarning, stacklevel=3)
+        warnings.warn(f"{label}: {ungraded} symbol(s) ungraded", UserWarning, stacklevel=4)
 
 
 def state_payload(state: SymbolState) -> dict[str, str]:

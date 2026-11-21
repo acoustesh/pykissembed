@@ -166,6 +166,28 @@ def _run_check(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     )
 
 
+def test_failure_header_names_bars_and_model(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """The failure message opens with the audit's exact summary line."""
+    monkeypatch.setenv("OPENROUTER_API_KEY", "openrouter-test-key-long-enough")
+    monkeypatch.setattr(requests, "post", _post_returning(_answers_response(1)))
+    monkeypatch.setattr(jev, "time", SimpleNamespace(sleep=lambda _s: None))
+
+    with pytest.raises(pytest.fail.Exception) as failure:
+        _run_check(tmp_path, monkeypatch)
+
+    prefix, summary = str(failure.value).splitlines()[0].split(" symbol(s) ", maxsplit=1)
+    assert prefix.startswith("Jev docstring audit: ")
+    assert summary == (
+        f"scored below the minimum (0 ungraded; model {jev.JEV_MODEL}, "
+        "need level 3 for library code and 2.5 for tests). "
+        "Adjust 'min_score' / 'test_min_score' in jev_docstring_audit.json "
+        "to change the bars."
+    )
+
+
 def test_perfect_score_passes(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,

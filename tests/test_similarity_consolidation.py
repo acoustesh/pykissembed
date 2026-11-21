@@ -201,6 +201,23 @@ def test_rubric_matches_decision_table(
     }
 
 
+def test_question_scores_finished_consolidation_as_zero(
+    tmp_path: Path, stub_jev: Callable[[Body], list[Body]]
+) -> None:
+    """A pair that already shares its implementation is not asked to change again."""
+    bodies = stub_jev(_answers())
+
+    _ = _triage(tmp_path)
+
+    questions = bodies[0]["questions"]
+    assert isinstance(questions, dict)
+    instructions = questions["consolidation_score"]["instructions"]
+    assert (
+        "If both functions already delegate to the same shared implementation and only "
+        "thin entry points remain, score 0" in instructions
+    )
+
+
 def test_fail_bar_clears_just_below(
     tmp_path: Path, stub_jev: Callable[[Body], list[Body]]
 ) -> None:
@@ -223,33 +240,74 @@ def test_fail_bar_fails_at_the_bar(
     assert "Needs change (1)" in report
 
 
-@pytest.mark.parametrize("confidence", [0.2, None])
-def test_low_or_missing_confidence_never_clears(
+def test_missing_confidence_below_bar_stays_failed(
+    tmp_path: Path, stub_jev: Callable[[Body], list[Body]]
+) -> None:
+    """A low score cannot clear a pair when the model reports no confidence."""
+    _ = stub_jev(_answers(0.4, None))
+
+    report = _triage(tmp_path)
+
+    assert report is not None
+    assert "Uncertain (1)" in report
+    assert "Needs change" not in report
+
+
+def test_low_score_at_confidence_floor_clears(
+    tmp_path: Path, stub_jev: Callable[[Body], list[Body]]
+) -> None:
+    """Confidence exactly at the floor is enough to clear a low score."""
+    _ = stub_jev(_answers(0.4, 0.35))
+
+    with pytest.warns(UserWarning, match="flagged pair\\(s\\) cleared"):
+        assert _triage(tmp_path) is None
+
+
+@pytest.mark.parametrize(
+    ("score", "confidence"),
+    [(1.38, 0.28), (1.0, 0.34), (3.0, 0.0), (0.4, 0.34), (0.4, 0.2), (0.0, 0.0)],
+)
+def test_any_score_below_confidence_floor_warns(
+    tmp_path: Path,
+    stub_jev: Callable[[Body], list[Body]],
+    score: float,
+    confidence: float,
+) -> None:
+    """An unsure grade passes at any level and still shows its explanation."""
+    _ = stub_jev(_answers(score, confidence))
+
+    with pytest.warns(UserWarning, match=r"passed on low confidence \(< 0\.35\)") as record:
+        assert _triage(tmp_path) is None
+
+    message = str(record[0].message)
+    assert "src/a.py:alpha vs src/b.py:beta" in message
+    assert "shared rule: yes (84%)" in message
+
+
+@pytest.mark.parametrize("confidence", [0.35, 0.7, None])
+def test_high_score_at_confidence_floor_fails(
     tmp_path: Path,
     stub_jev: Callable[[Body], list[Body]],
     confidence: float | None,
 ) -> None:
-    """A low score cannot clear a pair unless the model is confident in it."""
-    _ = stub_jev(_answers(0.4, confidence))
+    """Confidence at the floor, above it, or unknown keeps the failure."""
+    _ = stub_jev(_answers(1.38, confidence))
 
     report = _triage(tmp_path)
 
     assert report is not None
-    assert "Uncertain (1)" in report
-    assert "Needs change" not in report
+    assert "Needs change (1)" in report
 
 
-def test_high_score_with_low_confidence_is_uncertain(
+def test_low_confidence_warning_survives_warnings_as_errors(
     tmp_path: Path, stub_jev: Callable[[Body], list[Body]]
 ) -> None:
-    """An unsure recommendation fails without claiming a change is needed."""
-    _ = stub_jev(_answers(2.0, 0.1))
+    """A warn-only pair is a pass even under ``-W error``."""
+    _ = stub_jev(_answers(1.38, 0.28))
 
-    report = _triage(tmp_path)
-
-    assert report is not None
-    assert "Uncertain (1)" in report
-    assert "Needs change" not in report
+    with warnings.catch_warnings():
+        warnings.simplefilter("error")
+        assert _triage(tmp_path) is None
 
 
 def test_unavailable_grade_stays_failed(

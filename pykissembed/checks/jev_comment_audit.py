@@ -7,31 +7,21 @@ most ``LOW_CONFIDENCE``: such a grade passes with a warning.
 
 from __future__ import annotations
 
-from contextlib import closing
 from functools import partial
 from typing import TYPE_CHECKING
 
 import pytest
 
-from pykissembed.baselines_engine import locked_envelope, save_envelope
 from pykissembed.config import get_config
-from pykissembed.jev import (
-    JEV_MODEL,
-    ask_jev,
-    extract_symbol_states,
-    grade_summary,
-    is_low_confidence,
-    load_api_key,
-    open_cache,
-    parse_grade,
-    read_threshold,
-    report_audit,
-)
 from pykissembed.jev import SymbolState as _SymbolState
+from pykissembed.jev import ask_jev, grade_summary, parse_grade, read_threshold
+from pykissembed.jev_audit import AuditSpec, run_audit
 
 if TYPE_CHECKING:
     from pathlib import Path
     from sqlite3 import Connection
+
+    from pykissembed.jev import Grade
 
 BASELINE_FILENAME = "jev_comment_audit.json"
 DEFAULT_MIN_SCORE = 2.25
@@ -134,17 +124,13 @@ _read_threshold = partial(
 _parse_grade = partial(parse_grade, question_id=_QUESTION_ID, n_levels=len(_SCORE_LEVELS))
 
 
-def _grade_comments(
-    states: list[_SymbolState], min_score: float, api_key: str | None, conn: Connection
-) -> tuple[list[str], list[str], int]:
-    """Grade function comments and collect failures and missing grades.
+def _grade_comment(state: _SymbolState, *, api_key: str | None, conn: Connection) -> Grade | None:
+    """Grade one function's comments, including one without a docstring.
 
     Parameters
     ----------
-    states : list[SymbolState]
-        Function and method source states to grade.
-    min_score : float
-        Strict lower bound for passing scores.
+    state : SymbolState
+        Function or method to grade.
     api_key : str | None
         OpenRouter key, or ``None`` for cached responses only.
     conn : Connection
@@ -152,26 +138,66 @@ def _grade_comments(
 
     Returns
     -------
-    tuple[list[str], list[str], int]
-        Failure lines, lines for at-or-below-the-bar grades excused by low
-        confidence, and the number of ungraded symbols.
+    Grade | None
+        ``(level, confidence)``, or ``None`` when no grade is available.
     """
-    failures: list[str] = []
-    uncertain: list[str] = []
-    ungraded = 0
-    for state in states:
-        grade = ask_jev(state, _QUESTIONS, parse=_parse_grade, api_key=api_key, conn=conn)
-        if grade is None:
-            # Transport or cache misses are unknown grades, not failures.
-            ungraded += 1
-            continue
-        score, confidence = grade
-        if score > min_score:
-            continue
-        summary = grade_summary(grade, _SCORE_LEVELS, f">{min_score:g}")
-        line = f"{state.file_key}:{state.lineno} {state.symbol} — {summary}"
-        (uncertain if is_low_confidence(confidence) else failures).append(line)
-    return failures, uncertain, ungraded
+    # A missing docstring is still sent: comments may explain intent for
+    # this audit, unlike the docstring audit's local level-zero rule.
+    return ask_jev(state, _QUESTIONS, parse=_parse_grade, api_key=api_key, conn=conn)
+
+
+def _comment_failure_line(state: _SymbolState, grade: Grade, baseline_data: object) -> str | None:
+    """Render a comment grade at or below the strict bar.
+
+    Parameters
+    ----------
+    state : SymbolState
+        Graded function or method.
+    grade : Grade
+        ``(level, confidence)`` from Jev.
+    baseline_data : object
+        Baseline payload holding ``min_score``.
+
+    Returns
+    -------
+    str | None
+        The report line, or ``None`` when the score exceeds the bar.
+    """
+    min_score = _read_threshold(baseline_data)
+    if grade[0] > min_score:
+        return None
+    summary = grade_summary(grade, _SCORE_LEVELS, f">{min_score:g}")
+    return f"{state.file_key}:{state.lineno} {state.symbol} — {summary}"
+
+
+def _comment_bar_text(baseline_data: object) -> tuple[str, str]:
+    """Describe a miss of the comment audit's single strict bar.
+
+    Parameters
+    ----------
+    baseline_data : object
+        Baseline payload holding ``min_score``.
+
+    Returns
+    -------
+    tuple[str, str]
+        The miss description and an empty note on the bars.
+    """
+    # The bar is strict (a score equal to it fails), hence "at or below".
+    return f"at or below level {_read_threshold(baseline_data):g}", ""
+
+
+_AUDIT = AuditSpec(
+    label="Jev comment audit",
+    baseline_filename=BASELINE_FILENAME,
+    baseline_kind="jev_comment_audit",
+    default_thresholds={"min_score": DEFAULT_MIN_SCORE},
+    symbol_kinds=frozenset({"function"}),
+    empty_message="No auditable functions or methods found",
+    grade=_grade_comment,
+    failure_line=_comment_failure_line,
+    bar_text=_comment_bar_text,
+)
 
 
 class TestJevCommentAudit:
@@ -201,42 +227,10 @@ class TestJevCommentAudit:
         cached_only : bool
             Use stored Jev decisions and count missing grades as ungraded.
         """
-        if not pykissembed_paths:
-            pytest.skip("No [tool.pykissembed] paths configured")
-        api_key = None if cached_only else load_api_key()
-        config = get_config()
-        baseline_file = config.baseline_path / BASELINE_FILENAME
-        with locked_envelope(baseline_file, kind="jev_comment_audit") as envelope:
-            _ = envelope.data.setdefault("min_score", DEFAULT_MIN_SCORE)
-            if update_baselines:
-                save_envelope(baseline_file, envelope)
-                pytest.skip("Updated Jev comment audit baselines")
-            min_score = _read_threshold(envelope.data)
-            states = [
-                state
-                for base_dir in pykissembed_paths
-                for state in extract_symbol_states(base_dir, root=config.root)
-                if state.kind == "function"
-            ]
-            # A missing docstring is still sent: comments may explain intent
-            # for this audit, unlike the docstring audit's local level-zero rule.
-            if not states:
-                pytest.skip("No auditable functions or methods found")
-            with closing(open_cache(config)) as conn:
-                failures, uncertain, ungraded = _grade_comments(states, min_score, api_key, conn)
-            # The bar is strict (a score equal to it fails), hence "at or below".
-            failure_header = (
-                "Jev comment audit: "
-                f"{len(failures)} symbol(s) at or below level {min_score:g} "
-                f"({ungraded} ungraded; model {JEV_MODEL})."
-            )
-            report_audit(
-                "Jev comment audit",
-                failures=failures,
-                uncertain=uncertain,
-                ungraded=ungraded,
-                graded=len(states) - ungraded,
-                api_key=api_key,
-                uncertain_detail=f"at or below level {min_score:g}",
-                failure_header=failure_header,
-            )
+        run_audit(
+            _AUDIT,
+            pykissembed_paths,
+            get_config,
+            update_baselines=update_baselines,
+            cached_only=cached_only,
+        )
